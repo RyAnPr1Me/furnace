@@ -1,0 +1,87 @@
+# Example configuration file for Furnace Terminal Emulator
+# Place this file at: ~/.furnace/config.yaml
+
+# Shell configuration
+shell:
+  # Default shell to use (auto-detected if not specified)
+  # Windows: pwsh.exe, powershell.exe, or cmd.exe
+  # Linux/Mac: $SHELL environment variable
+  default_shell: "powershell.exe"
+  
+  # Working directory (defaults to home directory)
+  working_dir: ~
+  
+  # Environment variables to set
+  env:
+    # EXAMPLE_VAR: "value"
+
+# Terminal behavior
+terminal:
+  # Maximum number of commands in history (circular buffer for efficiency)
+  max_history: 10000
+  
+  # Enable multiple tabs
+  enable_tabs: true
+  
+  # Enable split panes
+  enable_split_pane: true
+  
+  # Font size
+  font_size: 12
+  
+  # Cursor style: "block", "underline", or "bar"
+  cursor_style: "block"
+  
+  # Number of lines to keep in scrollback buffer
+  # Higher values use more memory but allow more history
+  scrollback_lines: 10000
+  
+  # Enable hardware acceleration for rendering (recommended)
+  hardware_acceleration: true
+
+# Theme and colors
+theme:
+  name: "default"
+  foreground: "#FFFFFF"
+  background: "#1E1E1E"
+  cursor: "#00FF00"
+  selection: "#264F78"
+  
+  # ANSI color palette
+  colors:
+    # Normal colors
+    black: "#000000"
+    red: "#FF0000"
+    green: "#00FF00"
+    yellow: "#FFFF00"
+    blue: "#0000FF"
+    magenta: "#FF00FF"
+    cyan: "#00FFFF"
+    white: "#FFFFFF"
+    
+    # Bright colors
+    bright_black: "#808080"
+    bright_red: "#FF8080"
+    bright_green: "#80FF80"
+    bright_yellow: "#FFFF80"
+    bright_blue: "#8080FF"
+    bright_magenta: "#FF80FF"
+    bright_cyan: "#80FFFF"
+    bright_white: "#FFFFFF"
+
+# Keyboard shortcuts
+keybindings:
+  new_tab: "Ctrl+T"
+  close_tab: "Ctrl+W"
+  next_tab: "Ctrl+Tab"
+  prev_tab: "Ctrl+Shift+Tab"
+  split_vertical: "Ctrl+Shift+V"
+  split_horizontal: "Ctrl+Shift+H"
+  copy: "Ctrl+Shift+C"
+  paste: "Ctrl+Shift+V"
+  search: "Ctrl+F"
+  clear: "Ctrl+L"
+
+# Plugins to load (optional)
+plugins: []
+  # - "~/.furnace/plugins/my_plugin.so"
