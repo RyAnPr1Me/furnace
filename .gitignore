@@ -1,0 +1,42 @@
+# Rust binaries
+furnace
+furnace.exe
+target/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# But allow releases folder binaries
+!releases/*.exe
+!releases/furnace-*
+
+# Cargo lock (for binaries, include it)
+# Cargo.lock
+
+# Test binary
+*.test
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+dist/
+build/
+bin/
+
+# Config files (user-specific)
+config.yaml
+.furnace/
+
+# Rust specific
+**/*.rs.bk
+*.pdb
