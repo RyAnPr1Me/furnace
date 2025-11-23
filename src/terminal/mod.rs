@@ -43,11 +43,16 @@ pub struct Terminal {
     should_quit: bool,
     command_palette: CommandPalette,
     resource_monitor: ResourceMonitor,
+    #[allow(dead_code)]
     autocomplete: Autocomplete,
     show_resources: bool,
+    #[allow(dead_code)]
     keybindings: KeybindingManager,
+    #[allow(dead_code)]
     session_manager: SessionManager,
+    #[allow(dead_code)]
     plugin_manager: PluginManager,
+    #[allow(dead_code)]
     color_palette: TrueColorPalette,
     // Performance optimization: track if redraw is needed
     dirty: bool,
@@ -150,7 +155,7 @@ impl Terminal {
                         self.frame_count += 1;
                         
                         // Log performance metrics every 1000 frames
-                        if self.frame_count % 1000 == 0 {
+                        if self.frame_count.is_multiple_of(1000) {
                             debug!("Rendered {} frames", self.frame_count);
                         }
                     }
