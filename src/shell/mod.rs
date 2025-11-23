@@ -54,13 +54,31 @@ impl ShellSession {
 
     /// Read output from shell (non-blocking, high-performance)
     pub async fn read_output(&self, buffer: &mut [u8]) -> Result<usize> {
-        let mut reader = self.reader.lock().await;
+        let reader = self.reader.clone();
+        let buffer_len = buffer.len();
         
-        match reader.read(buffer) {
-            Ok(n) => Ok(n),
-            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => Ok(0),
-            Err(e) => {
+        // Use spawn_blocking for the synchronous read operation
+        let result = tokio::task::spawn_blocking(move || {
+            let mut reader = reader.blocking_lock();
+            let mut temp_buf = vec![0u8; buffer_len];
+            match reader.read(&mut temp_buf) {
+                Ok(n) => Ok((n, temp_buf)),
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => Ok((0, temp_buf)),
+                Err(e) => Err(e),
+            }
+        }).await;
+        
+        match result {
+            Ok(Ok((n, temp_buf))) => {
+                buffer[..n].copy_from_slice(&temp_buf[..n]);
+                Ok(n)
+            }
+            Ok(Err(e)) => {
                 error!("Failed to read from shell: {}", e);
+                Err(e.into())
+            }
+            Err(e) => {
+                error!("Task join error: {}", e);
                 Err(e.into())
             }
         }

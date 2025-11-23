@@ -114,9 +114,9 @@ impl Terminal {
         while !self.should_quit {
             tokio::select! {
                 // Handle user input (higher priority)
-                _ = tokio::task::spawn_blocking(|| event::poll(Duration::from_millis(1))) => {
-                    if event::poll(Duration::from_millis(1))? {
-                        if let Event::Key(key) = event::read()? {
+                Ok(Ok(has_event)) = tokio::task::spawn_blocking(|| event::poll(Duration::from_millis(1))) => {
+                    if has_event {
+                        if let Ok(Event::Key(key)) = event::read() {
                             self.handle_key_event(key).await?;
                             self.dirty = true; // Mark for redraw after input
                         }
