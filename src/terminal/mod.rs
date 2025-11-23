@@ -13,14 +13,13 @@ use ratatui::{
     Terminal as RatatuiTerminal,
 };
 use std::io;
-use std::borrow::Cow;
 use tokio::time::{Duration, interval};
 use tracing::{debug, info};
 
 use crate::config::Config;
 use crate::shell::ShellSession;
 use crate::ui::{command_palette::CommandPalette, resource_monitor::ResourceMonitor, autocomplete::Autocomplete};
-use crate::keybindings::{KeybindingManager, Action};
+use crate::keybindings::KeybindingManager;
 use crate::session::SessionManager;
 use crate::plugins::PluginManager;
 use crate::colors::TrueColorPalette;
@@ -44,11 +43,16 @@ pub struct Terminal {
     should_quit: bool,
     command_palette: CommandPalette,
     resource_monitor: ResourceMonitor,
+    #[allow(dead_code)]
     autocomplete: Autocomplete,
     show_resources: bool,
+    #[allow(dead_code)]
     keybindings: KeybindingManager,
+    #[allow(dead_code)]
     session_manager: SessionManager,
+    #[allow(dead_code)]
     plugin_manager: PluginManager,
+    #[allow(dead_code)]
     color_palette: TrueColorPalette,
     // Performance optimization: track if redraw is needed
     dirty: bool,
@@ -114,9 +118,9 @@ impl Terminal {
         while !self.should_quit {
             tokio::select! {
                 // Handle user input (higher priority)
-                _ = tokio::task::spawn_blocking(|| event::poll(Duration::from_millis(1))) => {
-                    if event::poll(Duration::from_millis(1))? {
-                        if let Event::Key(key) = event::read()? {
+                Ok(Ok(has_event)) = tokio::task::spawn_blocking(|| event::poll(Duration::from_millis(1))) => {
+                    if has_event {
+                        if let Ok(Event::Key(key)) = event::read() {
                             self.handle_key_event(key).await?;
                             self.dirty = true; // Mark for redraw after input
                         }
@@ -151,7 +155,7 @@ impl Terminal {
                         self.frame_count += 1;
                         
                         // Log performance metrics every 1000 frames
-                        if self.frame_count % 1000 == 0 {
+                        if self.frame_count.is_multiple_of(1000) {
                             debug!("Rendered {} frames", self.frame_count);
                         }
                     }

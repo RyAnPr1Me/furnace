@@ -76,7 +76,7 @@ impl PluginApi for ExamplePlugin {
     
     fn execute(&self, command: &str, args: &[&str]) -> Result<String> {
         match command {
-            "hello" => Ok(format!("Hello, {}!", args.get(0).unwrap_or(&"World"))),
+            "hello" => Ok(format!("Hello, {}!", args.first().unwrap_or(&"World"))),
             _ => Ok("Unknown command".to_string()),
         }
     }
