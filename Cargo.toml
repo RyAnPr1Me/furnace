@@ -90,11 +90,17 @@ proptest = "1.4"
 tempfile = "3.8"
 
 [profile.release]
-opt-level = 3
-lto = true
-codegen-units = 1
-strip = true
-panic = "abort"
+opt-level = 3                    # Maximum optimization
+lto = "fat"                      # Full link-time optimization (fat LTO for best performance)
+codegen-units = 1                # Single codegen unit for better optimization
+strip = true                     # Strip debug symbols
+panic = "abort"                  # Smaller binary, faster panics
+overflow-checks = false          # Disable overflow checks in release for speed
+debug = false                    # No debug info in release
+
+# Optimize dependencies even in dev builds for better performance during development
+[profile.dev.package."*"]
+opt-level = 2
 
 # GPU acceleration feature
 [features]
@@ -102,8 +108,9 @@ default = []
 gpu = ["wgpu"]
 
 [profile.dev]
-opt-level = 0
+opt-level = 1                    # Slight optimization in dev for faster iteration
 debug = true
+incremental = true               # Enable incremental compilation for faster rebuilds
 
 [[bench]]
 name = "terminal_bench"

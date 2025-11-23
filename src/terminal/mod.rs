@@ -13,6 +13,7 @@ use ratatui::{
     Terminal as RatatuiTerminal,
 };
 use std::io;
+use std::borrow::Cow;
 use tokio::time::{Duration, interval};
 use tracing::{debug, info};
 
@@ -31,6 +32,9 @@ const TARGET_FPS: u64 = 170;
 const DEFAULT_ROWS: u16 = 40;
 const DEFAULT_COLS: u16 = 120;
 
+/// Read buffer size optimized for typical terminal output (reduced from 8KB to 4KB for better cache locality)
+const READ_BUFFER_SIZE: usize = 4096;
+
 /// High-performance terminal with GPU-accelerated rendering at 170 FPS
 pub struct Terminal {
     config: Config,
@@ -46,6 +50,12 @@ pub struct Terminal {
     session_manager: SessionManager,
     plugin_manager: PluginManager,
     color_palette: TrueColorPalette,
+    // Performance optimization: track if redraw is needed
+    dirty: bool,
+    // Reusable read buffer to reduce allocations
+    read_buffer: Vec<u8>,
+    // Frame counter for performance metrics
+    frame_count: u64,
 }
 
 impl Terminal {
@@ -67,6 +77,9 @@ impl Terminal {
             session_manager: SessionManager::new()?,
             plugin_manager: PluginManager::new(),
             color_palette: TrueColorPalette::default_dark(),
+            dirty: true, // Initial draw needed
+            read_buffer: vec![0u8; READ_BUFFER_SIZE], // Pre-allocated reusable buffer
+            frame_count: 0,
         })
     }
 
@@ -96,26 +109,30 @@ impl Terminal {
         // Event loop with optimized timing for TARGET_FPS
         let frame_duration = Duration::from_micros(1_000_000 / TARGET_FPS); // ~5.88ms per frame for 170 FPS
         let mut render_interval = interval(frame_duration);
+        render_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip); // Skip missed frames for consistent performance
 
         while !self.should_quit {
             tokio::select! {
-                // Handle user input
+                // Handle user input (higher priority)
                 _ = tokio::task::spawn_blocking(|| event::poll(Duration::from_millis(1))) => {
                     if event::poll(Duration::from_millis(1))? {
                         if let Event::Key(key) = event::read()? {
                             self.handle_key_event(key).await?;
+                            self.dirty = true; // Mark for redraw after input
                         }
                     }
                 }
                 
-                // Read shell output (non-blocking)
+                // Read shell output (non-blocking, optimized with reusable buffer)
                 _ = async {
                     if let Some(session) = self.sessions.get(self.active_session) {
-                        let mut buffer = vec![0u8; 8192]; // 8KB read buffer
-                        if let Ok(n) = session.read_output(&mut buffer).await {
+                        // Reuse pre-allocated buffer to avoid repeated allocations
+                        if let Ok(n) = session.read_output(&mut self.read_buffer).await {
                             if n > 0 {
-                                self.output_buffers[self.active_session].extend_from_slice(&buffer[..n]);
-                                // Keep buffer size manageable
+                                self.output_buffers[self.active_session].extend_from_slice(&self.read_buffer[..n]);
+                                self.dirty = true; // Mark for redraw
+                                
+                                // Keep buffer size manageable with efficient drain
                                 let max_buffer = self.config.terminal.scrollback_lines * 256;
                                 if self.output_buffers[self.active_session].len() > max_buffer {
                                     let excess = self.output_buffers[self.active_session].len() - max_buffer;
@@ -126,9 +143,18 @@ impl Terminal {
                     }
                 } => {}
                 
-                // Render at consistent frame rate
+                // Render at consistent frame rate (only if dirty flag is set)
                 _ = render_interval.tick() => {
-                    terminal.draw(|f| self.render(f))?;
+                    if self.dirty {
+                        terminal.draw(|f| self.render(f))?;
+                        self.dirty = false; // Clear dirty flag
+                        self.frame_count += 1;
+                        
+                        // Log performance metrics every 1000 frames
+                        if self.frame_count % 1000 == 0 {
+                            debug!("Rendered {} frames", self.frame_count);
+                        }
+                    }
                 }
             }
         }

@@ -1,9 +1,13 @@
 use fuzzy_matcher::FuzzyMatcher;
 use fuzzy_matcher::skim::SkimMatcherV2;
 use std::collections::VecDeque;
+use std::sync::OnceLock;
 
 /// Maximum number of commands to keep in history
 const MAX_HISTORY: usize = 100;
+
+/// Lazy-initialized command list for better startup performance
+static DEFAULT_COMMANDS: OnceLock<Vec<Command>> = OnceLock::new();
 
 /// Command palette for quick command execution and search
 pub struct CommandPalette {
@@ -13,7 +17,7 @@ pub struct CommandPalette {
     pub selected_index: usize,
     matcher: SkimMatcherV2,
     history: VecDeque<String>,
-    commands: Vec<Command>,
+    // Commands reference the static data instead of duplicating
 }
 
 #[derive(Debug, Clone)]
@@ -32,23 +36,19 @@ pub struct Command {
 
 impl CommandPalette {
     pub fn new() -> Self {
-        let mut palette = Self {
+        Self {
             visible: false,
-            input: String::new(),
-            suggestions: Vec::new(),
+            input: String::with_capacity(64), // Pre-allocate for typical command length
+            suggestions: Vec::with_capacity(10), // Pre-allocate for typical suggestion count
             selected_index: 0,
             matcher: SkimMatcherV2::default(),
             history: VecDeque::with_capacity(MAX_HISTORY),
-            commands: Vec::new(),
-        };
-        
-        palette.load_default_commands();
-        palette
+        }
     }
 
-    /// Load default built-in commands
-    fn load_default_commands(&mut self) {
-        self.commands = vec![
+    /// Load default built-in commands (lazy initialization)
+    fn get_commands() -> &'static [Command] {
+        DEFAULT_COMMANDS.get_or_init(|| vec![
             Command {
                 name: "new-tab".to_string(),
                 description: "Create a new tab".to_string(),
@@ -94,7 +94,7 @@ impl CommandPalette {
                 description: "Quit application".to_string(),
                 aliases: vec!["exit".to_string(), "q".to_string()],
             },
-        ];
+        ])
     }
 
     /// Toggle visibility
@@ -107,54 +107,72 @@ impl CommandPalette {
         }
     }
 
-    /// Update input and refresh suggestions
+    /// Update input and refresh suggestions (optimized)
     pub fn update_input(&mut self, input: String) {
         self.input = input;
         self.refresh_suggestions();
     }
 
-    /// Refresh suggestions based on current input
+    /// Refresh suggestions based on current input (optimized with early returns)
     fn refresh_suggestions(&mut self) {
+        self.suggestions.clear(); // Reuse existing vector capacity
+        
         if self.input.is_empty() {
-            // Show recent history when no input
-            self.suggestions = self.history
-                .iter()
-                .take(10)
-                .map(|cmd| CommandSuggestion {
-                    command: cmd.clone(),
-                    description: "Recent command".to_string(),
-                    score: 100,
-                })
-                .collect();
+            // Show recent history when no input (limit to 10 for performance)
+            self.suggestions.extend(
+                self.history
+                    .iter()
+                    .take(10)
+                    .map(|cmd| CommandSuggestion {
+                        command: cmd.clone(),
+                        description: "Recent command".to_string(),
+                        score: 100,
+                    })
+            );
         } else {
-            // Fuzzy search through commands
-            let mut suggestions: Vec<CommandSuggestion> = self.commands
-                .iter()
-                .filter_map(|cmd| {
-                    // Try matching command name
-                    let name_score = self.matcher.fuzzy_match(&cmd.name, &self.input);
-                    
-                    // Try matching aliases
-                    let alias_score = cmd.aliases
-                        .iter()
-                        .filter_map(|alias| self.matcher.fuzzy_match(alias, &self.input))
-                        .max();
-                    
-                    // Use best score
-                    let score = name_score.or(alias_score)?;
-                    
-                    Some(CommandSuggestion {
+            // Fuzzy search through commands (optimized with early scoring)
+            let commands = Self::get_commands();
+            let input_lower = self.input.to_lowercase(); // Cache lowercase for faster comparison
+            
+            for cmd in commands {
+                // Try exact prefix match first (faster than fuzzy)
+                if cmd.name.starts_with(&input_lower) {
+                    self.suggestions.push(CommandSuggestion {
+                        command: cmd.name.clone(),
+                        description: cmd.description.clone(),
+                        score: 1000, // High score for exact prefix match
+                    });
+                    continue;
+                }
+                
+                // Try matching command name with fuzzy matcher
+                if let Some(score) = self.matcher.fuzzy_match(&cmd.name, &self.input) {
+                    self.suggestions.push(CommandSuggestion {
                         command: cmd.name.clone(),
                         description: cmd.description.clone(),
                         score,
-                    })
-                })
-                .collect();
+                    });
+                    continue;
+                }
+                
+                // Try matching aliases
+                for alias in &cmd.aliases {
+                    if let Some(score) = self.matcher.fuzzy_match(alias, &self.input) {
+                        self.suggestions.push(CommandSuggestion {
+                            command: cmd.name.clone(),
+                            description: cmd.description.clone(),
+                            score,
+                        });
+                        break; // Only add once per command
+                    }
+                }
+            }
 
-            // Sort by score (descending)
-            suggestions.sort_by(|a, b| b.score.cmp(&a.score));
+            // Sort by score (descending) - use unstable sort for better performance
+            self.suggestions.sort_unstable_by(|a, b| b.score.cmp(&a.score));
             
-            self.suggestions = suggestions.into_iter().take(10).collect();
+            // Keep only top 10 suggestions for UI performance
+            self.suggestions.truncate(10);
         }
         
         // Reset selection

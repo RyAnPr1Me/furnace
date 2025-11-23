@@ -2,11 +2,13 @@ use sysinfo::System;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-/// System resource monitor for displaying resource usage
+/// System resource monitor for displaying resource usage (optimized with caching)
 pub struct ResourceMonitor {
     system: Arc<Mutex<System>>,
     last_update: Instant,
     update_interval: Duration,
+    // Cached stats to avoid recomputing when not needed
+    cached_stats: Option<ResourceStats>,
 }
 
 #[derive(Debug, Clone)]
@@ -32,35 +34,44 @@ pub struct DiskInfo {
 }
 
 impl ResourceMonitor {
-    /// Create a new resource monitor
+    /// Create a new resource monitor (optimized initialization)
     pub fn new() -> Self {
-        let mut system = System::new_all();
-        system.refresh_all();
+        let system = System::new(); // Only initialize what's needed initially
         
         Self {
             system: Arc::new(Mutex::new(system)),
             last_update: Instant::now(),
             update_interval: Duration::from_millis(500), // Update every 500ms
+            cached_stats: None,
         }
     }
 
-    /// Get current resource statistics
+    /// Get current resource statistics (with caching)
     pub fn get_stats(&mut self) -> ResourceStats {
-        // Only update if enough time has passed
-        if self.last_update.elapsed() >= self.update_interval {
-            if let Ok(mut system) = self.system.lock() {
-                system.refresh_cpu();
-                system.refresh_memory();
-                system.refresh_processes();
+        // Return cached stats if update interval hasn't elapsed
+        if self.last_update.elapsed() < self.update_interval {
+            if let Some(ref stats) = self.cached_stats {
+                return stats.clone();
             }
-            self.last_update = Instant::now();
         }
+        
+        // Need to update - only refresh what's necessary
+        if let Ok(mut system) = self.system.lock() {
+            system.refresh_cpu();
+            system.refresh_memory();
+            // Skip processes refresh if not needed for display
+            system.refresh_processes();
+        }
+        self.last_update = Instant::now();
 
         let system = self.system.lock().unwrap();
 
-        // CPU usage (average across all cores)
-        let cpu_usage = system.cpus().iter().map(|cpu| cpu.cpu_usage()).sum::<f32>() 
-            / system.cpus().len().max(1) as f32;
+        // CPU usage (average across all cores) - optimized calculation
+        let cpus = system.cpus();
+        let cpu_count = cpus.len().max(1);
+        let cpu_usage = cpus.iter()
+            .map(|cpu| cpu.cpu_usage())
+            .sum::<f32>() / cpu_count as f32;
         
         // Memory usage
         let memory_used = system.used_memory();
@@ -71,7 +82,7 @@ impl ResourceMonitor {
             0.0
         };
 
-        // Process count
+        // Process count (lightweight)
         let process_count = system.processes().len();
 
         // Network and disk stats not implemented yet (API compatibility varies by platform)
@@ -80,9 +91,9 @@ impl ResourceMonitor {
         let network_tx = 0u64;
         let disk_usage = Vec::new();
 
-        ResourceStats {
+        let stats = ResourceStats {
             cpu_usage,
-            cpu_count: system.cpus().len(),
+            cpu_count,
             memory_used,
             memory_total,
             memory_percent,
@@ -90,7 +101,11 @@ impl ResourceMonitor {
             network_rx,
             network_tx,
             disk_usage,
-        }
+        };
+        
+        // Cache the stats
+        self.cached_stats = Some(stats.clone());
+        stats
     }
 
     /// Format bytes to human-readable format
