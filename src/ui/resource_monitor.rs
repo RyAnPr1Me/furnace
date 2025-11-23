@@ -1,4 +1,4 @@
-use sysinfo::System;
+use sysinfo::{System, Disks};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -85,11 +85,12 @@ impl ResourceMonitor {
         // Process count (lightweight)
         let process_count = system.processes().len();
 
-        // Network and disk stats not implemented yet (API compatibility varies by platform)
-        // These fields are reserved for future implementation when stable cross-platform APIs are available
-        let network_rx = 0u64;
-        let network_tx = 0u64;
-        let disk_usage = Vec::new();
+        // Network and disk stats - Basic implementation
+        // Note: Advanced network/disk monitoring requires platform-specific APIs
+        // Current implementation provides basic disk info available cross-platform
+        let network_rx = self.get_network_stats().0;
+        let network_tx = self.get_network_stats().1;
+        let disk_usage = self.get_disk_info(&system);
 
         let stats = ResourceStats {
             cpu_usage,
@@ -106,6 +107,41 @@ impl ResourceMonitor {
         // Cache the stats
         self.cached_stats = Some(stats.clone());
         stats
+    }
+    
+    /// Get basic network statistics (placeholder for cross-platform implementation)
+    /// Returns (rx_bytes, tx_bytes)
+    fn get_network_stats(&self) -> (u64, u64) {
+        // Basic implementation - can be extended with platform-specific code
+        // For now, returns 0 to maintain API compatibility
+        (0, 0)
+    }
+    
+    /// Get disk usage information
+    fn get_disk_info(&self, _system: &System) -> Vec<DiskInfo> {
+        // Get disk information using sysinfo's Disks API
+        let disks = Disks::new_with_refreshed_list();
+        
+        disks.iter()
+            .map(|disk| {
+                let total = disk.total_space();
+                let available = disk.available_space();
+                let used = total.saturating_sub(available);
+                let percent = if total > 0 {
+                    (used as f32 / total as f32) * 100.0
+                } else {
+                    0.0
+                };
+                
+                DiskInfo {
+                    name: disk.name().to_string_lossy().to_string(),
+                    mount_point: disk.mount_point().to_string_lossy().to_string(),
+                    used,
+                    total,
+                    percent,
+                }
+            })
+            .collect()
     }
 
     /// Format bytes to human-readable format
