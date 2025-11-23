@@ -1,4 +1,3 @@
-use anyhow::{Context, Result};
 use crossterm::event::{KeyCode, KeyModifiers};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

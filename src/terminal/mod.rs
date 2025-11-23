@@ -13,14 +13,13 @@ use ratatui::{
     Terminal as RatatuiTerminal,
 };
 use std::io;
-use std::borrow::Cow;
 use tokio::time::{Duration, interval};
 use tracing::{debug, info};
 
 use crate::config::Config;
 use crate::shell::ShellSession;
 use crate::ui::{command_palette::CommandPalette, resource_monitor::ResourceMonitor, autocomplete::Autocomplete};
-use crate::keybindings::{KeybindingManager, Action};
+use crate::keybindings::KeybindingManager;
 use crate::session::SessionManager;
 use crate::plugins::PluginManager;
 use crate::colors::TrueColorPalette;
