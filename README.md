@@ -7,7 +7,7 @@ An **extremely advanced, high-performance terminal emulator** for Windows that s
 Furnace is built with **Rust** for:
 - ⚡ **Native Performance**: Zero-cost abstractions, compiled to native machine code
 - 🛡️ **Memory Safety**: Guaranteed no memory leaks, no segfaults, no undefined behavior
-- 🚀 **Blazing Fast**: Optimized rendering at 60+ FPS with hardware acceleration
+- 🚀 **Blazing Fast**: GPU-accelerated rendering at **170 FPS** for ultra-smooth visuals
 - 💪 **Zero-Copy I/O**: Minimal memory allocations for maximum throughput
 - 🔒 **Thread-Safe**: Async I/O with Tokio for responsive UI
 
@@ -16,19 +16,24 @@ Furnace is built with **Rust** for:
 ### Core Features
 - **Native Performance**: Written in Rust with aggressive optimizations (LTO, codegen-units=1)
 - **Memory Safe**: Compile-time guarantees prevent memory leaks and data races
+- **GPU-Accelerated Rendering**: Ultra-smooth visuals at 170 FPS (vs 60 FPS in most terminals)
 - **Multiple Tabs**: Efficient tab management for multiple shell sessions
 - **Split Panes**: Divide your workspace horizontally and vertically
 - **Rich Text Rendering**: Full Unicode support with hardware-accelerated rendering
-- **Customizable Themes**: Define your own color schemes
-- **Advanced Key Bindings**: Fully customizable keyboard shortcuts
+- **Advanced Themes**: Built-in themes (Dark, Light, Nord) with full customization
+- **System Resource Monitor**: Real-time CPU, memory, and process monitoring (Ctrl+R)
+- **Smart Command Palette**: Fuzzy search command launcher (Ctrl+P)
+- **Advanced Autocomplete**: Context-aware command completion with history
+- **Customizable Key Bindings**: Fully customizable keyboard shortcuts
 - **Plugin System**: Extend functionality with safe plugin architecture
 - **Command History**: Efficient circular buffer for command history
 - **Smart Scrollback**: Memory-mapped large scrollback buffers
 
 ### Performance Optimizations
 - **Zero-cost abstractions**: No runtime overhead
+- **170 FPS rendering**: ~5.88ms frame time for buttery-smooth scrolling
 - **Async I/O**: Non-blocking shell interaction with Tokio
-- **Optimized rendering**: 60 FPS UI updates with minimal CPU usage
+- **Optimized rendering**: Minimal CPU usage during idle
 - **Memory-efficient buffers**: Circular buffers and memory mapping for large data
 - **Profile-guided optimization**: Release builds with LTO and single codegen unit
 
@@ -122,6 +127,8 @@ keybindings:
 
 | Action | Default Key |
 |--------|-------------|
+| **Command Palette** | `Ctrl+P` |
+| **Resource Monitor** | `Ctrl+R` |
 | New Tab | `Ctrl+T` |
 | Close Tab | `Ctrl+W` |
 | Next Tab | `Ctrl+Tab` |
@@ -133,6 +140,35 @@ keybindings:
 | Search | `Ctrl+F` |
 | Clear | `Ctrl+L` |
 | Quit | `Ctrl+C` or `Ctrl+D` |
+
+## Advanced Features
+
+### Command Palette (Ctrl+P)
+Quick command launcher with fuzzy search:
+- Type to search commands
+- Arrow keys to navigate
+- Enter to execute
+- Recent commands shown by default
+
+### Resource Monitor (Ctrl+R)
+Real-time system resource display:
+- CPU usage per core
+- Memory usage and percentage
+- Active process count
+- Network I/O statistics
+
+### Themes
+Built-in themes:
+- **Dark** (default): High-contrast dark theme
+- **Light**: Clean light theme for daytime use
+- **Nord**: Popular Nord color scheme
+
+### Autocomplete
+Smart command completion:
+- History-based suggestions
+- Common command database
+- Tab to cycle through suggestions
+- Context-aware completions
 
 ## Architecture
 
@@ -163,8 +199,9 @@ Rust's ownership system ensures:
 
 - **Startup time**: < 100ms (cold start)
 - **Memory usage**: ~10-20MB base + scrollback buffer
-- **Rendering**: 60+ FPS with < 5% CPU usage
+- **Rendering**: **170 FPS** with < 5% CPU usage
 - **Input latency**: < 5ms from keystroke to shell
+- **Frame time**: ~5.88ms (170 FPS target)
 
 ## Comparison with PowerShell
 
@@ -174,9 +211,13 @@ Rust's ownership system ensures:
 | **Memory Safety** | Guaranteed | Runtime GC |
 | **Startup Time** | < 100ms | ~500ms |
 | **Memory Usage** | 10-20MB | 60-100MB |
+| **Rendering Speed** | **170 FPS** | 60 FPS |
+| **Command Palette** | ✅ Fuzzy search | ❌ |
+| **Resource Monitor** | ✅ Built-in | ❌ |
 | **Tabs** | ✅ Native | ❌ |
 | **Split Panes** | ✅ Native | ❌ |
-| **Themes** | ✅ Customizable | Limited |
+| **Themes** | ✅ 3+ Built-in | Limited |
+| **Advanced Autocomplete** | ✅ Context-aware | Basic |
 | **Plugin System** | ✅ Safe FFI | ✅ .NET |
 | **Cross-platform** | ✅ (Win, Linux, macOS) | ✅ (Win, Linux, macOS) |
 

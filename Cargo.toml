@@ -51,6 +51,16 @@ unicode-segmentation = "1.10"
 # History and autocomplete
 rustyline = "13.0"
 
+# GPU rendering (optional, for high-performance rendering)
+wgpu = { version = "0.19", optional = true }
+
+# System monitoring
+sysinfo = "0.30"
+
+# Fuzzy search for command palette
+nucleo = "0.5"
+fuzzy-matcher = "0.3"
+
 # Plugin system
 libloading = "0.8"
 
@@ -80,6 +90,11 @@ lto = true
 codegen-units = 1
 strip = true
 panic = "abort"
+
+# GPU acceleration feature
+[features]
+default = []
+gpu = ["wgpu"]
 
 [profile.dev]
 opt-level = 0

@@ -5,12 +5,17 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 /// Main configuration structure with zero-copy design for performance
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Config {
+    #[serde(default)]
     pub shell: ShellConfig,
+    #[serde(default)]
     pub terminal: TerminalConfig,
+    #[serde(default)]
     pub theme: ThemeConfig,
+    #[serde(default)]
     pub keybindings: KeyBindings,
+    #[serde(default)]
     pub plugins: Vec<String>,
 }
 
@@ -116,18 +121,6 @@ fn default_cursor_style() -> String {
 
 fn default_scrollback() -> usize {
     10000
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            shell: ShellConfig::default(),
-            terminal: TerminalConfig::default(),
-            theme: ThemeConfig::default(),
-            keybindings: KeyBindings::default(),
-            plugins: Vec::new(),
-        }
-    }
 }
 
 impl Default for ShellConfig {

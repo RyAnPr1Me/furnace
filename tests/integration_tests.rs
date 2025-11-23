@@ -1,7 +1,6 @@
 #[cfg(test)]
 mod config_tests {
     use furnace::config::Config;
-    use std::fs;
     use tempfile::tempdir;
 
     #[test]

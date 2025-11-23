@@ -1,5 +1,4 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
-use std::io::Write;
 
 /// Benchmark terminal output processing throughput
 fn bench_output_processing(c: &mut Criterion) {
