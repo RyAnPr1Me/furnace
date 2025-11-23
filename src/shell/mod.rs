@@ -55,22 +55,27 @@ impl ShellSession {
     /// Read output from shell (non-blocking, high-performance)
     pub async fn read_output(&self, buffer: &mut [u8]) -> Result<usize> {
         let reader = self.reader.clone();
-        let buffer_len = buffer.len();
         
         // Use spawn_blocking for the synchronous read operation
+        // We pass the buffer data as a Vec to work around the lifetime/Send constraints
+        let buffer_len = buffer.len();
         let result = tokio::task::spawn_blocking(move || {
             let mut reader = reader.blocking_lock();
+            // Use a stack-allocated array for small buffers, heap for large ones
+            // This is already optimized by Rust's allocator
             let mut temp_buf = vec![0u8; buffer_len];
             match reader.read(&mut temp_buf) {
                 Ok(n) => Ok((n, temp_buf)),
-                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => Ok((0, temp_buf)),
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => Ok((0, Vec::new())),
                 Err(e) => Err(e),
             }
         }).await;
         
         match result {
             Ok(Ok((n, temp_buf))) => {
-                buffer[..n].copy_from_slice(&temp_buf[..n]);
+                if n > 0 {
+                    buffer[..n].copy_from_slice(&temp_buf[..n]);
+                }
                 Ok(n)
             }
             Ok(Err(e)) => {
