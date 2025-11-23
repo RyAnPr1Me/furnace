@@ -1,0 +1,10 @@
+[workspace]
+members = [
+    "hello_world",
+    "git_integration",
+    "weather",
+    "system_info",
+    "text_processor",
+]
+
+resolver = "2"
