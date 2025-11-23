@@ -19,6 +19,10 @@ use tracing::{debug, info};
 use crate::config::Config;
 use crate::shell::ShellSession;
 use crate::ui::{command_palette::CommandPalette, resource_monitor::ResourceMonitor, autocomplete::Autocomplete};
+use crate::keybindings::{KeybindingManager, Action};
+use crate::session::SessionManager;
+use crate::plugins::PluginManager;
+use crate::colors::TrueColorPalette;
 
 /// Target FPS for GPU-accelerated rendering
 const TARGET_FPS: u64 = 170;
@@ -38,12 +42,16 @@ pub struct Terminal {
     resource_monitor: ResourceMonitor,
     autocomplete: Autocomplete,
     show_resources: bool,
+    keybindings: KeybindingManager,
+    session_manager: SessionManager,
+    plugin_manager: PluginManager,
+    color_palette: TrueColorPalette,
 }
 
 impl Terminal {
     /// Create a new terminal instance with optimal memory allocation
     pub fn new(config: Config) -> Result<Self> {
-        info!("Initializing Furnace terminal emulator with 170 FPS GPU rendering");
+        info!("Initializing Furnace terminal emulator with 170 FPS GPU rendering + 24-bit color");
         
         Ok(Self {
             config,
@@ -55,6 +63,10 @@ impl Terminal {
             resource_monitor: ResourceMonitor::new(),
             autocomplete: Autocomplete::new(),
             show_resources: false,
+            keybindings: KeybindingManager::new(),
+            session_manager: SessionManager::new()?,
+            plugin_manager: PluginManager::new(),
+            color_palette: TrueColorPalette::default_dark(),
         })
     }
 

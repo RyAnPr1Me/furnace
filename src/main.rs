@@ -8,6 +8,9 @@ mod shell;
 mod terminal;
 mod ui;
 mod plugins;
+mod session;
+mod keybindings;
+mod colors;
 
 use config::Config;
 use terminal::Terminal;

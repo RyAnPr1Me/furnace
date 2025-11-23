@@ -1,6 +1,9 @@
 // Plugin system for extensibility without memory leaks
-// pub mod loader;
-// pub mod api;
+pub mod loader;
+pub mod api;
+
+pub use loader::{PluginManager, LoadedPlugin};
+pub use api::{PluginApi, PluginMetadata, PluginCommand, ScriptingApi, ExamplePlugin};
 
 // Safe plugin system using Rust's type safety:
 // - Dynamic loading with libloading
