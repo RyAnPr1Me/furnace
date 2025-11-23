@@ -7,6 +7,10 @@ target/
 *.so
 *.dylib
 
+# But allow releases folder binaries
+!releases/*.exe
+!releases/furnace-*
+
 # Cargo lock (for binaries, include it)
 # Cargo.lock
 
