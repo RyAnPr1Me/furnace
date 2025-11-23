@@ -2,6 +2,9 @@ use fuzzy_matcher::FuzzyMatcher;
 use fuzzy_matcher::skim::SkimMatcherV2;
 use std::collections::VecDeque;
 
+/// Maximum number of commands to keep in history
+const MAX_HISTORY: usize = 100;
+
 /// Command palette for quick command execution and search
 pub struct CommandPalette {
     pub visible: bool,
@@ -35,7 +38,7 @@ impl CommandPalette {
             suggestions: Vec::new(),
             selected_index: 0,
             matcher: SkimMatcherV2::default(),
-            history: VecDeque::with_capacity(100),
+            history: VecDeque::with_capacity(MAX_HISTORY),
             commands: Vec::new(),
         };
         
@@ -202,7 +205,7 @@ impl CommandPalette {
         self.history.push_front(command);
         
         // Limit size
-        if self.history.len() > 100 {
+        if self.history.len() > MAX_HISTORY {
             self.history.pop_back();
         }
     }

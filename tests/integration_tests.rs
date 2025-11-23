@@ -28,8 +28,10 @@ mod config_tests {
     #[test]
     fn test_config_memory_efficiency() {
         // Ensure Config struct size is reasonable
+        // This limit prevents accidental bloat from large embedded data structures
+        const MAX_CONFIG_SIZE: usize = 10000;
         let size = std::mem::size_of::<Config>();
-        assert!(size < 10000, "Config struct is too large: {} bytes", size);
+        assert!(size < MAX_CONFIG_SIZE, "Config struct is too large: {} bytes", size);
     }
 }
 

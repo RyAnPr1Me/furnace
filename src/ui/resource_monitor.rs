@@ -74,7 +74,8 @@ impl ResourceMonitor {
         // Process count
         let process_count = system.processes().len();
 
-        // Network and disk stats simplified (not all versions support these)
+        // Network and disk stats not implemented yet (API compatibility varies by platform)
+        // These fields are reserved for future implementation when stable cross-platform APIs are available
         let network_rx = 0u64;
         let network_tx = 0u64;
         let disk_usage = Vec::new();

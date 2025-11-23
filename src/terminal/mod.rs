@@ -20,6 +20,13 @@ use crate::config::Config;
 use crate::shell::ShellSession;
 use crate::ui::{command_palette::CommandPalette, resource_monitor::ResourceMonitor, autocomplete::Autocomplete};
 
+/// Target FPS for GPU-accelerated rendering
+const TARGET_FPS: u64 = 170;
+
+/// Default terminal dimensions for new tabs
+const DEFAULT_ROWS: u16 = 40;
+const DEFAULT_COLS: u16 = 120;
+
 /// High-performance terminal with GPU-accelerated rendering at 170 FPS
 pub struct Terminal {
     config: Config,
@@ -74,8 +81,8 @@ impl Terminal {
 
         info!("Terminal started with {}x{} size", cols, rows);
 
-        // Event loop with optimized timing for 170 FPS
-        let frame_duration = Duration::from_micros(1_000_000 / 170); // ~5.88ms per frame for 170 FPS
+        // Event loop with optimized timing for TARGET_FPS
+        let frame_duration = Duration::from_micros(1_000_000 / TARGET_FPS); // ~5.88ms per frame for 170 FPS
         let mut render_interval = interval(frame_duration);
 
         while !self.should_quit {
@@ -286,7 +293,8 @@ impl Terminal {
         let session = ShellSession::new(
             &self.config.shell.default_shell,
             self.config.shell.working_dir.as_deref(),
-            40, 120, // Default size
+            DEFAULT_ROWS,
+            DEFAULT_COLS,
         )?;
         
         self.sessions.push(session);
