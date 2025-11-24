@@ -1,3 +1,19 @@
+//! Terminal module for the Furnace terminal emulator
+//!
+//! This module contains the main Terminal struct and its supporting modules:
+//! - `input`: Input handling for keyboard and mouse events
+//! - `renderer`: UI rendering components
+//!
+//! # Architecture
+//! The terminal is structured to separate concerns:
+//! - Event loop management (main run loop)
+//! - Input processing (keyboard/mouse handlers)
+//! - Rendering (UI drawing)
+//! - Tab/session management
+
+pub mod input;
+pub mod renderer;
+
 use anyhow::Result;
 use crossterm::{
     event::{self, Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind, MouseButton},
@@ -751,40 +767,40 @@ impl Terminal {
             }
         };
 
-        // Render connection list
+        // Render connection list - use filter_map to safely handle missing connections
         let items: Vec<ListItem> = self.ssh_manager.filtered_connections
             .iter()
             .enumerate()
-            .map(|(i, name)| {
-                // This should always succeed since filtered_connections only contains valid names
-                let conn = self.ssh_manager.get_connection(name)
-                    .expect("filtered connection not found in connections HashMap");
-                
-                let content = format!(
-                    "{} ({}@{}:{})",
-                    name,
-                    conn.username,
-                    conn.host,
-                    conn.port
-                );
-                
-                let style = if i == self.ssh_manager.selected_index {
-                    Style::default()
-                        .fg(Color::Black)
-                        .bg(Color::Yellow)
-                        .add_modifier(Modifier::BOLD)
-                } else {
-                    Style::default().fg(Color::White)
-                };
-                
-                ListItem::new(content).style(style)
+            .filter_map(|(i, name)| {
+                // Safely get connection - returns None if not found
+                self.ssh_manager.get_connection(name).map(|conn| {
+                    let content = format!(
+                        "{} ({}@{}:{})",
+                        name,
+                        conn.username,
+                        conn.host,
+                        conn.port
+                    );
+                    
+                    let style = if i == self.ssh_manager.selected_index {
+                        Style::default()
+                            .fg(Color::Black)
+                            .bg(Color::Yellow)
+                            .add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default().fg(Color::White)
+                    };
+                    
+                    ListItem::new(content).style(style)
+                })
             })
             .collect();
 
+        // Create title string - format! only when filter is not empty
         let title = if self.ssh_manager.filter_input.is_empty() {
-            "SSH Connections (Ctrl+Shift+S to close, Enter to connect, Del to remove)"
+            String::from("SSH Connections (Ctrl+Shift+S to close, Enter to connect, Del to remove)")
         } else {
-            &format!("SSH Connections - Filter: {}", self.ssh_manager.filter_input)
+            format!("SSH Connections - Filter: {}", self.ssh_manager.filter_input)
         };
 
         let list = List::new(items)
