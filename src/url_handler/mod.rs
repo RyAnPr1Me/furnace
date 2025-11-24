@@ -114,7 +114,7 @@ impl UrlHandler {
         if url.starts_with("http://") || url.starts_with("https://") {
             url.to_string()
         } else if url.starts_with("www.") {
-            format!("http://{}", url)
+            format!("http://{url}")
         } else {
             url.to_string()
         }
@@ -122,6 +122,7 @@ impl UrlHandler {
     
     /// Check if URL handler is enabled
     #[allow(dead_code)] // Public API
+    #[must_use]
     pub fn is_enabled(&self) -> bool {
         self.enabled
     }
@@ -130,6 +131,12 @@ impl UrlHandler {
     #[allow(dead_code)] // Public API
     pub fn set_enabled(&mut self, enabled: bool) {
         self.enabled = enabled;
+    }
+}
+
+impl Default for UrlHandler {
+    fn default() -> Self {
+        Self::new(true)
     }
 }
 

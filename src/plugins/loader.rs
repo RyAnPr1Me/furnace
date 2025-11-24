@@ -93,12 +93,14 @@ impl PluginManager {
 
     /// Get list of loaded plugins
     #[allow(dead_code)] // Public API
+    #[must_use]
     pub fn list_plugins(&self) -> Vec<&str> {
         self.plugins.keys().map(|s| s.as_str()).collect()
     }
 
     /// Check if plugin is loaded
     #[allow(dead_code)] // Public API
+    #[must_use]
     pub fn is_loaded(&self, name: &str) -> bool {
         self.plugins.contains_key(name)
     }
