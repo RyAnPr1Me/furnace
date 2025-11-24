@@ -210,7 +210,7 @@ impl SshManager {
         
         let mut username = String::new();
         let mut host = String::new();
-        let mut port = 22;
+        let mut ssh_port = 22;
         let mut identity_file = None;
         
         let mut i = 1;
@@ -218,27 +218,29 @@ impl SshManager {
             match parts[i] {
                 "-p" => {
                     if i + 1 < parts.len() {
-                        port = parts[i + 1].parse().unwrap_or(22);
+                        ssh_port = parts[i + 1].parse().unwrap_or(22);
                         i += 2;
-                        continue;
+                    } else {
+                        i += 1;
                     }
                 }
                 "-i" => {
                     if i + 1 < parts.len() {
                         identity_file = Some(parts[i + 1].to_string());
                         i += 2;
-                        continue;
+                    } else {
+                        i += 1;
                     }
                 }
-                part => {
-                    if part.contains('@') {
-                        let conn_parts: Vec<&str> = part.split('@').collect();
+                arg => {
+                    if arg.contains('@') {
+                        let conn_parts: Vec<&str> = arg.split('@').collect();
                         if conn_parts.len() == 2 {
                             username = conn_parts[0].to_string();
                             host = conn_parts[1].to_string();
                         }
                     } else if host.is_empty() {
-                        host = part.to_string();
+                        host = arg.to_string();
                     }
                     i += 1;
                 }
@@ -260,7 +262,7 @@ impl SshManager {
             Some(SshConnection {
                 name,
                 host,
-                port,
+                port: ssh_port,
                 username: if username.is_empty() { default_username } else { username },
                 identity_file,
                 last_used: Some(chrono::Utc::now().to_rfc3339()),

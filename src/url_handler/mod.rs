@@ -13,12 +13,12 @@
 //! passed to system commands.
 
 use regex::Regex;
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use anyhow::{Result, Context};
 use std::process::Command;
 
 /// URL pattern matcher - more robust pattern that avoids common false positives
-static URL_REGEX: Lazy<Regex> = Lazy::new(|| {
+static URL_REGEX: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"https?://[a-zA-Z0-9\-._~:/?#\[\]@!$&'()*+,;=]+|www\.[a-zA-Z0-9\-._~:/?#\[\]@!$&'()*+,;=]+").unwrap()
 });
 

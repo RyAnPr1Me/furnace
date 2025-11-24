@@ -137,16 +137,16 @@ pub struct UrlHandlerConfig {
     pub enabled: bool,
 }
 
-// Default value functions
-fn default_max_history() -> usize {
+// Default value functions for serde
+const fn default_max_history() -> usize {
     10000
 }
 
-fn default_true() -> bool {
+const fn default_true() -> bool {
     true
 }
 
-fn default_font_size() -> u16 {
+const fn default_font_size() -> u16 {
     12
 }
 
@@ -154,7 +154,7 @@ fn default_cursor_style() -> String {
     "block".to_string()
 }
 
-fn default_scrollback() -> usize {
+const fn default_scrollback() -> usize {
     10000
 }
 
@@ -284,7 +284,7 @@ impl Config {
         let contents = fs::read_to_string(path.as_ref())
             .context("Failed to read config file")?;
         
-        let config: Config = serde_yaml::from_str(&contents)
+        let config: Self = serde_yaml::from_str(&contents)
             .context("Failed to parse config file")?;
         
         Ok(config)

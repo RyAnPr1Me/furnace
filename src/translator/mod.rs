@@ -21,7 +21,7 @@
 //! ```
 
 use std::collections::HashMap;
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 
 /// Command translator for cross-platform command compatibility
 /// Translates Linux commands to Windows equivalents and vice versa
@@ -229,7 +229,7 @@ fn type_to_cat_args(args: &str) -> String {
 }
 
 // Static command mappings
-static LINUX_TO_WINDOWS_MAP: Lazy<HashMap<&'static str, CommandMapping>> = Lazy::new(|| {
+static LINUX_TO_WINDOWS_MAP: LazyLock<HashMap<&'static str, CommandMapping>> = LazyLock::new(|| {
     let mut m = HashMap::new();
     
     m.insert("ls", CommandMapping {
@@ -358,7 +358,7 @@ static LINUX_TO_WINDOWS_MAP: Lazy<HashMap<&'static str, CommandMapping>> = Lazy:
     m
 });
 
-static WINDOWS_TO_LINUX_MAP: Lazy<HashMap<&'static str, CommandMapping>> = Lazy::new(|| {
+static WINDOWS_TO_LINUX_MAP: LazyLock<HashMap<&'static str, CommandMapping>> = LazyLock::new(|| {
     let mut m = HashMap::new();
     
     m.insert("dir", CommandMapping {

@@ -340,7 +340,7 @@ impl Terminal {
             }
 
             // Quit (Ctrl+C or Ctrl+D)
-            (KeyCode::Char('c'), KeyModifiers::CONTROL) | (KeyCode::Char('d'), KeyModifiers::CONTROL) => {
+            (KeyCode::Char('c' | 'd'), KeyModifiers::CONTROL) => {
                 debug!("Quit signal received");
                 self.should_quit = true;
             }
@@ -752,7 +752,7 @@ impl Terminal {
     }
 
     /// Render SSH manager overlay
-    fn render_ssh_manager(&mut self, f: &mut ratatui::Frame, area: Rect) {
+    fn render_ssh_manager(&self, f: &mut ratatui::Frame, area: Rect) {
         // Create centered popup
         let popup_area = {
             let width = area.width.min(80);
@@ -816,7 +816,7 @@ impl Terminal {
     }
 
     /// Render command palette overlay
-    fn render_command_palette(&mut self, f: &mut ratatui::Frame, area: Rect) {
+    fn render_command_palette(&self, f: &mut ratatui::Frame, area: Rect) {
         // Create centered popup
         let popup_area = {
             let width = area.width.min(80);

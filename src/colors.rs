@@ -53,7 +53,8 @@ impl TrueColor {
 
     /// Blend with another color
     #[allow(dead_code)] // Public API
-    pub fn blend(&self, other: &TrueColor, factor: f32) -> Self {
+    #[must_use]
+    pub fn blend(self, other: Self, factor: f32) -> Self {
         let factor = factor.clamp(0.0, 1.0);
         Self {
             r: ((self.r as f32) * (1.0 - factor) + (other.r as f32) * factor) as u8,
@@ -64,27 +65,31 @@ impl TrueColor {
 
     /// Lighten color by factor
     #[allow(dead_code)] // Public API
-    pub fn lighten(&self, factor: f32) -> Self {
-        let white = TrueColor::new(255, 255, 255);
-        self.blend(&white, factor)
+    #[must_use]
+    pub fn lighten(self, factor: f32) -> Self {
+        let white = Self::new(255, 255, 255);
+        self.blend(white, factor)
     }
 
     /// Darken color by factor
     #[allow(dead_code)] // Public API
-    pub fn darken(&self, factor: f32) -> Self {
-        let black = TrueColor::new(0, 0, 0);
-        self.blend(&black, factor)
+    #[must_use]
+    pub fn darken(self, factor: f32) -> Self {
+        let black = Self::new(0, 0, 0);
+        self.blend(black, factor)
     }
 
     /// Get luminance (0.0 - 1.0)
     #[allow(dead_code)] // Public API
-    pub fn luminance(&self) -> f32 {
+    #[must_use]
+    pub fn luminance(self) -> f32 {
         (0.299 * self.r as f32 + 0.587 * self.g as f32 + 0.114 * self.b as f32) / 255.0
     }
 
     /// Check if color is light
     #[allow(dead_code)] // Public API
-    pub fn is_light(&self) -> bool {
+    #[must_use]
+    pub fn is_light(self) -> bool {
         self.luminance() > 0.5
     }
 }
@@ -233,7 +238,7 @@ mod tests {
     fn test_color_blending() {
         let red = TrueColor::new(255, 0, 0);
         let blue = TrueColor::new(0, 0, 255);
-        let purple = red.blend(&blue, 0.5);
+        let purple = red.blend(blue, 0.5);
         
         assert_eq!(purple.r, 127);
         assert_eq!(purple.b, 127);
