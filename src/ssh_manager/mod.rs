@@ -219,14 +219,12 @@ impl SshManager {
                     if i + 1 < parts.len() {
                         port = parts[i + 1].parse().unwrap_or(22);
                         i += 2;
-                        continue;
                     }
                 }
                 "-i" => {
                     if i + 1 < parts.len() {
                         identity_file = Some(parts[i + 1].to_string());
                         i += 2;
-                        continue;
                     }
                 }
                 part => {

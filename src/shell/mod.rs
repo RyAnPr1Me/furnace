@@ -15,6 +15,9 @@ pub struct ShellSession {
 
 impl ShellSession {
     /// Create a new shell session with optimal buffer sizes
+    ///
+    /// # Errors
+    /// Returns an error if PTY creation or shell process spawn fails
     pub fn new(shell_cmd: &str, working_dir: Option<&str>, rows: u16, cols: u16) -> Result<Self> {
         let pty_system = NativePtySystem::default();
         
@@ -54,6 +57,9 @@ impl ShellSession {
     }
 
     /// Read output from shell (non-blocking, high-performance)
+    ///
+    /// # Errors
+    /// Returns an error if the read operation fails or the task cannot be spawned
     pub async fn read_output(&self, buffer: &mut [u8]) -> Result<usize> {
         let reader = self.reader.clone();
         
@@ -91,6 +97,9 @@ impl ShellSession {
     }
 
     /// Write input to shell (optimized for minimal latency)
+    ///
+    /// # Errors
+    /// Returns an error if the write or flush operation fails
     pub async fn write_input(&self, data: &[u8]) -> Result<usize> {
         let mut writer = self.writer.lock().await;
         
@@ -104,6 +113,9 @@ impl ShellSession {
     }
 
     /// Resize the PTY (important for responsive terminal)
+    ///
+    /// # Errors
+    /// Returns an error if the PTY resize operation fails
     #[allow(dead_code)] // Public API for future use
     pub async fn resize(&self, rows: u16, cols: u16) -> Result<()> {
         let pty = self.pty.lock().await;

@@ -91,6 +91,9 @@ pub struct Terminal {
 
 impl Terminal {
     /// Create a new terminal instance with optimal memory allocation
+    ///
+    /// # Errors
+    /// Returns an error if SSH manager or session manager initialization fails
     pub fn new(config: Config) -> Result<Self> {
         info!("Initializing Furnace terminal emulator with 170 FPS GPU rendering + 24-bit color");
         
@@ -126,6 +129,9 @@ impl Terminal {
     }
 
     /// Main event loop with async I/O for maximum performance
+    ///
+    /// # Errors
+    /// Returns an error if terminal setup, shell session creation, or event handling fails
     pub async fn run(&mut self) -> Result<()> {
         // Set up terminal
         enable_raw_mode()?;
@@ -297,8 +303,8 @@ impl Terminal {
                 debug!("Resource monitor: {}", if self.show_resources { "ON" } else { "OFF" });
             }
 
-            // Quit
-            (KeyCode::Char('c'), KeyModifiers::CONTROL) | (KeyCode::Char('d'), KeyModifiers::CONTROL) => {
+            // Quit (Ctrl+C or Ctrl+D)
+            (KeyCode::Char('c' | 'd'), KeyModifiers::CONTROL) => {
                 debug!("Quit signal received");
                 self.should_quit = true;
             }

@@ -263,6 +263,9 @@ impl Default for UrlHandlerConfig {
 
 impl Config {
     /// Load configuration from default location
+    ///
+    /// # Errors
+    /// Returns an error if the config file exists but cannot be read or parsed
     pub fn load_default() -> Result<Self> {
         let config_path = Self::default_config_path()?;
         
@@ -274,6 +277,9 @@ impl Config {
     }
 
     /// Load configuration from a specific file
+    ///
+    /// # Errors
+    /// Returns an error if the file cannot be read or the YAML is invalid
     pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
         let contents = fs::read_to_string(path.as_ref())
             .context("Failed to read config file")?;
@@ -285,6 +291,9 @@ impl Config {
     }
 
     /// Save configuration to file
+    ///
+    /// # Errors
+    /// Returns an error if the file cannot be written or serialization fails
     #[allow(dead_code)] // Public API method
     pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> Result<()> {
         let contents = serde_yaml::to_string(self)
@@ -302,6 +311,9 @@ impl Config {
     }
 
     /// Get default configuration path
+    ///
+    /// # Errors
+    /// Returns an error if the home directory cannot be determined
     pub fn default_config_path() -> Result<PathBuf> {
         let home = dirs::home_dir()
             .context("Failed to get home directory")?;
@@ -354,11 +366,11 @@ mod tests {
     
     #[test]
     fn test_config_deserialization() {
-        let yaml = r#"
+        let yaml = r"
 command_translation:
   enabled: false
   show_notifications: false
-"#;
+";
         let config: Config = serde_yaml::from_str(yaml).unwrap();
         assert!(!config.command_translation.enabled);
         assert!(!config.command_translation.show_notifications);
