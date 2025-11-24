@@ -65,6 +65,7 @@ pub struct Themes;
 impl Themes {
     /// Dark theme (default)
     #[allow(dead_code)] // Public API
+    #[must_use]
     pub fn dark() -> Theme {
         Theme {
             name: "Dark".to_string(),
@@ -111,6 +112,7 @@ impl Themes {
 
     /// Light theme
     #[allow(dead_code)] // Public API
+    #[must_use]
     pub fn light() -> Theme {
         Theme {
             name: "Light".to_string(),
@@ -157,6 +159,7 @@ impl Themes {
 
     /// Nord theme
     #[allow(dead_code)] // Public API
+    #[must_use]
     pub fn nord() -> Theme {
         Theme {
             name: "Nord".to_string(),
@@ -203,6 +206,7 @@ impl Themes {
 
     /// Get all built-in themes
     #[allow(dead_code)] // Public API
+    #[must_use]
     pub fn all() -> HashMap<String, Theme> {
         let mut themes = HashMap::new();
         themes.insert("dark".to_string(), Self::dark());

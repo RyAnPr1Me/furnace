@@ -16,6 +16,7 @@ pub enum Split {
 
 impl PaneLayout {
     #[allow(dead_code)] // Public API
+    #[must_use]
     pub fn new() -> Self {
         Self { splits: Vec::new() }
     }
@@ -34,6 +35,7 @@ impl PaneLayout {
 
     /// Calculate layout rectangles for all panes
     #[allow(dead_code)] // Public API
+    #[must_use]
     pub fn calculate(&self, area: Rect) -> Vec<Rect> {
         if self.splits.is_empty() {
             return vec![area];

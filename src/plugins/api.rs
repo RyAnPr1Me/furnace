@@ -60,6 +60,7 @@ pub struct ExamplePlugin {
 
 impl ExamplePlugin {
     #[allow(dead_code)] // Public API
+    #[must_use]
     pub fn new() -> Self {
         Self { initialized: false }
     }

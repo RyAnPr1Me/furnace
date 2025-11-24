@@ -1,13 +1,32 @@
-// Library exports for testing
-pub mod config;
-pub mod shell;
-pub mod terminal;
-pub mod ui;
-pub mod plugins;
-pub mod session;
-pub mod keybindings;
+//! Furnace - A high-performance terminal emulator
+//!
+//! This library provides the core functionality for the Furnace terminal emulator,
+//! including terminal rendering, shell integration, and various UI components.
+//!
+//! # Modules
+//!
+//! - [`config`]: Configuration management and serialization
+//! - [`terminal`]: Main terminal logic and event loop
+//! - [`shell`]: PTY and shell session management
+//! - [`ui`]: UI components (command palette, resource monitor, themes)
+//! - [`plugins`]: Plugin system for extensibility
+//! - [`session`]: Session save/restore functionality
+//! - [`keybindings`]: Keyboard shortcut handling
+//! - [`colors`]: 24-bit true color support
+//! - [`translator`]: Cross-platform command translation
+//! - [`ssh_manager`]: SSH connection management
+//! - [`url_handler`]: URL detection and opening
+//! - [`progress_bar`]: Command execution progress tracking
+
 pub mod colors;
-pub mod translator;
-pub mod ssh_manager;
-pub mod url_handler;
+pub mod config;
+pub mod keybindings;
+pub mod plugins;
 pub mod progress_bar;
+pub mod session;
+pub mod shell;
+pub mod ssh_manager;
+pub mod terminal;
+pub mod translator;
+pub mod ui;
+pub mod url_handler;

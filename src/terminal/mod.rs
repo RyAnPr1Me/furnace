@@ -340,7 +340,7 @@ impl Terminal {
             }
 
             // Quit (Ctrl+C or Ctrl+D)
-            (KeyCode::Char('c'), KeyModifiers::CONTROL) | (KeyCode::Char('d'), KeyModifiers::CONTROL) => {
+            (KeyCode::Char('c' | 'd'), KeyModifiers::CONTROL) => {
                 debug!("Quit signal received");
                 self.should_quit = true;
             }
@@ -752,20 +752,8 @@ impl Terminal {
     }
 
     /// Render SSH manager overlay
-    fn render_ssh_manager(&mut self, f: &mut ratatui::Frame, area: Rect) {
-        // Create centered popup
-        let popup_area = {
-            let width = area.width.min(80);
-            let height = area.height.min(25);
-            let x = (area.width - width) / 2;
-            let y = (area.height - height) / 2;
-            Rect {
-                x: area.x + x,
-                y: area.y + y,
-                width,
-                height,
-            }
-        };
+    fn render_ssh_manager(&self, f: &mut ratatui::Frame, area: Rect) {
+        let popup_area = renderer::centered_popup(area, 80, 25);
 
         // Render connection list - use filter_map to safely handle missing connections
         let items: Vec<ListItem> = self.ssh_manager.filtered_connections
@@ -816,15 +804,8 @@ impl Terminal {
     }
 
     /// Render command palette overlay
-    fn render_command_palette(&mut self, f: &mut ratatui::Frame, area: Rect) {
-        // Create centered popup
-        let popup_area = {
-            let width = area.width.min(80);
-            let height = area.height.min(20);
-            let x = (area.width - width) / 2;
-            let y = (area.height - height) / 2;
-            Rect::new(x, y, width, height)
-        };
+    fn render_command_palette(&self, f: &mut ratatui::Frame, area: Rect) {
+        let popup_area = renderer::centered_popup(area, 80, 20);
 
         // Clear background
         let bg = Block::default()

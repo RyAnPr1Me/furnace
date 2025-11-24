@@ -87,6 +87,7 @@ pub struct ShellIntegration {
 
 impl KeybindingManager {
     /// Create new keybinding manager with defaults
+    #[must_use]
     pub fn new() -> Self {
         let mut manager = Self {
             bindings: HashMap::new(),
@@ -141,6 +142,7 @@ impl KeybindingManager {
 
     /// Get action for key event
     #[allow(dead_code)] // Public API
+    #[must_use]
     pub fn get_action(&self, code: KeyCode, modifiers: KeyModifiers) -> Option<Action> {
         let key_str = match code {
             KeyCode::Char(c) => c.to_string(),
@@ -198,6 +200,7 @@ impl KeybindingManager {
 
     /// Get shell integration status
     #[allow(dead_code)] // Public API
+    #[must_use]
     pub fn shell_integration(&self) -> &ShellIntegration {
         &self.shell_integration
     }

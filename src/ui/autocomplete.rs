@@ -10,6 +10,7 @@ pub struct Autocomplete {
 }
 
 impl Autocomplete {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             history: VecDeque::with_capacity(1000),
@@ -42,6 +43,7 @@ impl Autocomplete {
 
     /// Get suggestions for prefix
     #[allow(dead_code)] // Public API
+    #[must_use]
     pub fn get_suggestions(&mut self, prefix: &str) -> Vec<String> {
         self.prefix = prefix.to_string();
         self.current_index = 0;
@@ -128,6 +130,7 @@ impl Autocomplete {
 
     /// Get history (for up/down arrow navigation)
     #[allow(dead_code)] // Public API
+    #[must_use]
     pub fn get_history(&self) -> &VecDeque<String> {
         &self.history
     }

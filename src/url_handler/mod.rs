@@ -13,12 +13,12 @@
 //! passed to system commands.
 
 use regex::Regex;
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use anyhow::{Result, Context};
 use std::process::Command;
 
 /// URL pattern matcher - more robust pattern that avoids common false positives
-static URL_REGEX: Lazy<Regex> = Lazy::new(|| {
+static URL_REGEX: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"https?://[a-zA-Z0-9\-._~:/?#\[\]@!$&'()*+,;=]+|www\.[a-zA-Z0-9\-._~:/?#\[\]@!$&'()*+,;=]+").unwrap()
 });
 
@@ -41,11 +41,13 @@ pub struct UrlHandler {
 impl UrlHandler {
     #[allow(dead_code)] // Public API
     /// Create a new URL handler
+    #[must_use]
     pub fn new(enabled: bool) -> Self {
         Self { enabled }
     }
     
     /// Detect URLs in text
+    #[must_use]
     pub fn detect_urls(text: &str) -> Vec<DetectedUrl> {
         let mut urls = Vec::new();
         
@@ -112,7 +114,7 @@ impl UrlHandler {
         if url.starts_with("http://") || url.starts_with("https://") {
             url.to_string()
         } else if url.starts_with("www.") {
-            format!("http://{}", url)
+            format!("http://{url}")
         } else {
             url.to_string()
         }
@@ -120,6 +122,7 @@ impl UrlHandler {
     
     /// Check if URL handler is enabled
     #[allow(dead_code)] // Public API
+    #[must_use]
     pub fn is_enabled(&self) -> bool {
         self.enabled
     }
@@ -128,6 +131,12 @@ impl UrlHandler {
     #[allow(dead_code)] // Public API
     pub fn set_enabled(&mut self, enabled: bool) {
         self.enabled = enabled;
+    }
+}
+
+impl Default for UrlHandler {
+    fn default() -> Self {
+        Self::new(true)
     }
 }
 
