@@ -14,6 +14,7 @@ mod colors;
 mod translator;
 mod ssh_manager;
 mod url_handler;
+mod progress_bar;
 
 use config::Config;
 use terminal::Terminal;

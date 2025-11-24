@@ -26,6 +26,7 @@ use crate::colors::TrueColorPalette;
 use crate::translator::CommandTranslator;
 use crate::ssh_manager::SshManager;
 use crate::url_handler::UrlHandler;
+use crate::progress_bar::ProgressBar;
 
 /// Target FPS for GPU-accelerated rendering
 const TARGET_FPS: u64 = 170;
@@ -87,6 +88,8 @@ pub struct Terminal {
     url_cache_frame: u64,
     // Reusable backspace buffer to avoid allocations
     backspace_buffer: Vec<u8>,
+    // Progress bar for command execution
+    progress_bar: ProgressBar,
 }
 
 impl Terminal {
@@ -125,6 +128,7 @@ impl Terminal {
             cached_urls: Vec::new(),
             url_cache_frame: 0,
             backspace_buffer: Vec::with_capacity(BACKSPACE_BUFFER_CAPACITY),
+            progress_bar: ProgressBar::new(),
         })
     }
 
@@ -192,6 +196,16 @@ impl Terminal {
                                 self.output_buffers[self.active_session].extend_from_slice(&self.read_buffer[..n]);
                                 self.dirty = true; // Mark for redraw
                                 
+                                // Check if we got a prompt (command completion detection)
+                                if self.progress_bar.visible {
+                                    let recent_output = String::from_utf8_lossy(&self.read_buffer[..n]);
+                                    // Look for common shell prompt indicators
+                                    if recent_output.contains("$ ") || recent_output.contains("> ") 
+                                        || recent_output.contains("# ") || recent_output.contains("% ") {
+                                        self.progress_bar.stop();
+                                    }
+                                }
+                                
                                 // Keep buffer size manageable with efficient drain
                                 let max_buffer = self.config.terminal.scrollback_lines * 256;
                                 if self.output_buffers[self.active_session].len() > max_buffer {
@@ -205,6 +219,12 @@ impl Terminal {
                 
                 // Render at consistent frame rate (only if dirty flag is set)
                 _ = render_interval.tick() => {
+                    // Update progress bar spinner
+                    if self.progress_bar.visible {
+                        self.progress_bar.tick();
+                        self.dirty = true;
+                    }
+                    
                     // Decrement notification counter
                     if self.notification_frames > 0 {
                         self.notification_frames -= 1;
@@ -404,6 +424,18 @@ impl Terminal {
                     
                     // Send Enter
                     session.write_input(b"\r").await?;
+                    
+                    // Start progress bar for the command
+                    let command_to_track = if result.translated {
+                        result.final_command.clone()
+                    } else {
+                        command.to_string()
+                    };
+                    
+                    if !command_to_track.trim().is_empty() {
+                        self.progress_bar.start(command_to_track);
+                        self.dirty = true;
+                    }
                     
                     // Clear command buffer
                     if let Some(cmd_buf) = self.command_buffers.get_mut(self.active_session) {
@@ -615,6 +647,7 @@ impl Terminal {
             .constraints([
                 Constraint::Length(if self.config.terminal.enable_tabs && self.sessions.len() > 1 { 1 } else { 0 }),
                 Constraint::Length(if self.translation_notification.is_some() { 1 } else { 0 }),
+                Constraint::Length(if self.progress_bar.visible { 1 } else { 0 }),
                 Constraint::Min(0),
                 Constraint::Length(if self.show_resources { 3 } else { 0 }),
             ].as_ref())
@@ -622,8 +655,9 @@ impl Terminal {
 
         let tab_area = main_chunks[0];
         let notification_area = main_chunks[1];
-        let content_area = main_chunks[2];
-        let resource_area = main_chunks[3];
+        let progress_area = main_chunks[2];
+        let content_area = main_chunks[3];
+        let resource_area = main_chunks[4];
 
         // Render tabs if enabled
         if self.config.terminal.enable_tabs && self.sessions.len() > 1 {
@@ -659,6 +693,15 @@ impl Terminal {
                 .style(Style::default().fg(Color::Green).bg(Color::Black).add_modifier(Modifier::BOLD))
                 .block(Block::default().borders(Borders::NONE));
             f.render_widget(notification, notification_area);
+        }
+
+        // Render progress bar if visible
+        if self.progress_bar.visible {
+            let progress_text = self.progress_bar.display_text();
+            let progress_widget = Paragraph::new(progress_text)
+                .style(Style::default().fg(Color::Cyan).bg(Color::Black).add_modifier(Modifier::BOLD))
+                .block(Block::default().borders(Borders::NONE));
+            f.render_widget(progress_widget, progress_area);
         }
 
         // Render SSH manager if visible (takes priority over command palette)
