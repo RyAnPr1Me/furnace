@@ -293,3 +293,34 @@ fn detect_default_shell() -> String {
         std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".to_string())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn test_default_command_translation_config() {
+        let config = CommandTranslationConfig::default();
+        assert!(config.enabled);
+        assert!(config.show_notifications);
+    }
+    
+    #[test]
+    fn test_config_with_command_translation() {
+        let config = Config::default();
+        assert!(config.command_translation.enabled);
+        assert!(config.command_translation.show_notifications);
+    }
+    
+    #[test]
+    fn test_config_deserialization() {
+        let yaml = r#"
+command_translation:
+  enabled: false
+  show_notifications: false
+"#;
+        let config: Config = serde_yaml::from_str(yaml).unwrap();
+        assert!(!config.command_translation.enabled);
+        assert!(!config.command_translation.show_notifications);
+    }
+}
