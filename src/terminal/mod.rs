@@ -706,26 +706,27 @@ impl Terminal {
         let items: Vec<ListItem> = self.ssh_manager.filtered_connections
             .iter()
             .enumerate()
-            .map(|(i, name)| {
-                let conn = self.ssh_manager.get_connection(name).unwrap();
-                let content = format!(
-                    "{} ({}@{}:{})",
-                    name,
-                    conn.username,
-                    conn.host,
-                    conn.port
-                );
-                
-                let style = if i == self.ssh_manager.selected_index {
-                    Style::default()
-                        .fg(Color::Black)
-                        .bg(Color::Yellow)
-                        .add_modifier(Modifier::BOLD)
-                } else {
-                    Style::default().fg(Color::White)
-                };
-                
-                ListItem::new(content).style(style)
+            .filter_map(|(i, name)| {
+                self.ssh_manager.get_connection(name).map(|conn| {
+                    let content = format!(
+                        "{} ({}@{}:{})",
+                        name,
+                        conn.username,
+                        conn.host,
+                        conn.port
+                    );
+                    
+                    let style = if i == self.ssh_manager.selected_index {
+                        Style::default()
+                            .fg(Color::Black)
+                            .bg(Color::Yellow)
+                            .add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default().fg(Color::White)
+                    };
+                    
+                    ListItem::new(content).style(style)
+                })
             })
             .collect();
 

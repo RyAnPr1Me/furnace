@@ -69,6 +69,7 @@ impl Default for CommandMapping {
 // Argument translators for different command types
 
 /// Returns arguments unchanged (identity function)
+#[inline]
 fn identity_args(args: &str) -> String {
     args.to_string()
 }
@@ -76,6 +77,7 @@ fn identity_args(args: &str) -> String {
 /// Translates ls flags to Windows dir equivalents
 /// - `-a` -> `/A` (show hidden files)
 /// - Extracts file paths and passes them through
+#[inline]
 fn ls_to_dir_args(args: &str) -> String {
     let args = args.trim();
     
@@ -106,6 +108,7 @@ fn ls_to_dir_args(args: &str) -> String {
 /// Translates Windows dir flags to ls equivalents
 /// - `/W` -> `-l` (wide/detailed format)
 /// - `/A` -> `-a` (show hidden files)
+#[inline]
 fn dir_to_ls_args(args: &str) -> String {
     let args = args.trim();
     
@@ -550,7 +553,12 @@ impl CommandTranslator {
         
         if let Some(mapping) = mapping {
             let translated_args = (mapping.arg_translator)(args);
-            let final_cmd = format!("{}{}", mapping.target_cmd, translated_args);
+            // Use String::with_capacity for more efficient concatenation
+            let mut final_cmd = String::with_capacity(
+                mapping.target_cmd.len() + translated_args.len()
+            );
+            final_cmd.push_str(mapping.target_cmd);
+            final_cmd.push_str(&translated_args);
             
             TranslationResult {
                 translated: true,
