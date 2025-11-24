@@ -1143,8 +1143,8 @@ fn sort_windows_to_linux_args(args: &str) -> String {
 // Static Command Mappings
 // ============================================================================
 
-static LINUX_TO_WINDOWS_MAP: LazyLock<HashMap<&'static str, CommandMapping>> = LazyLock::new(
-    || {
+static LINUX_TO_WINDOWS_MAP: LazyLock<HashMap<&'static str, CommandMapping>> =
+    LazyLock::new(|| {
         let mut m = HashMap::new();
 
         // ========== File System Commands ==========
@@ -1318,11 +1318,16 @@ static LINUX_TO_WINDOWS_MAP: LazyLock<HashMap<&'static str, CommandMapping>> = L
             "cut",
             CommandMapping {
                 target_cmd: "powershell ForEach-Object",
-                description: "Extract columns",
+                description: "Extract columns (limited translation)",
                 arg_translator: |args| {
-                    // Basic cut -d',' -f1 translation
-                    // Full translation would require complex parsing
-                    format!(" {{ $_.Split(',')[0] }} # Original: cut {}", args)
+                    // Basic cut -d',' -f1 translation - extracts first comma-delimited field
+                    // Complex cut commands may need manual adjustment
+                    let paths = extract_paths(args);
+                    if paths.is_empty() {
+                        " { $_.Split(',')[0] }".to_string()
+                    } else {
+                        format!(" {{ $_.Split(',')[0] }} {}", paths.join(" "))
+                    }
                 },
             },
         );
@@ -1452,11 +1457,14 @@ static LINUX_TO_WINDOWS_MAP: LazyLock<HashMap<&'static str, CommandMapping>> = L
             },
         );
 
-        m.insert("uptime", CommandMapping {
-        target_cmd: "powershell (Get-Date) - (Get-CimInstance Win32_OperatingSystem).LastBootUpTime",
-        description: "Display system uptime",
-        arg_translator: |_| String::new(),
-    });
+        m.insert(
+            "uptime",
+            CommandMapping {
+                target_cmd: "net statistics workstation",
+                description: "Display system uptime (statistics since boot)",
+                arg_translator: |_| String::new(),
+            },
+        );
 
         m.insert(
             "date",
@@ -2053,8 +2061,7 @@ static LINUX_TO_WINDOWS_MAP: LazyLock<HashMap<&'static str, CommandMapping>> = L
         );
 
         m
-    },
-);
+    });
 
 static WINDOWS_TO_LINUX_MAP: LazyLock<HashMap<&'static str, CommandMapping>> =
     LazyLock::new(|| {
@@ -2357,14 +2364,15 @@ static WINDOWS_TO_LINUX_MAP: LazyLock<HashMap<&'static str, CommandMapping>> =
         m.insert(
             "set",
             CommandMapping {
-                target_cmd: "env",
-                description: "Display/set environment variables",
+                target_cmd: "printenv",
+                description: "Display environment variables",
                 arg_translator: |args| {
                     if args.trim().is_empty() {
                         String::new()
                     } else {
-                        // set VAR=value -> export VAR=value
-                        format!(" # Use: export {}", args)
+                        // For setting, this maps to env display only
+                        // Setting env vars has no direct equivalent
+                        format!(" {}", args.split('=').next().unwrap_or(""))
                     }
                 },
             },
@@ -2425,9 +2433,9 @@ static WINDOWS_TO_LINUX_MAP: LazyLock<HashMap<&'static str, CommandMapping>> =
         m.insert(
             "color",
             CommandMapping {
-                target_cmd: "# Color command",
-                description: "Set console colors",
-                arg_translator: |_| " (use ANSI escape codes or terminal settings)".to_string(),
+                target_cmd: "echo -e",
+                description: "Set console colors (via ANSI codes)",
+                arg_translator: |_| " '\\033[0m'".to_string(),
             },
         );
 
@@ -2448,9 +2456,18 @@ static WINDOWS_TO_LINUX_MAP: LazyLock<HashMap<&'static str, CommandMapping>> =
                         result.push_str(" -e");
                     }
 
-                    // Filter by image name
+                    // Filter by image name - tasklist /FI maps to ps aux | grep
+                    // We just return ps aux here, user can pipe to grep manually
                     if args_upper.contains("/FI") {
-                        result.push_str(" # Use: ps aux | grep <pattern>");
+                        // Extract filter pattern if possible
+                        if let Some(pos) = args.to_uppercase().find("IMAGENAME EQ") {
+                            let rest = &args[pos + 12..];
+                            if let Some(name) = rest.split_whitespace().next() {
+                                let name = name.trim_matches('"').trim_matches('*');
+                                result.push_str(" aux | grep ");
+                                result.push_str(name);
+                            }
+                        }
                     }
 
                     result
@@ -2502,9 +2519,9 @@ static WINDOWS_TO_LINUX_MAP: LazyLock<HashMap<&'static str, CommandMapping>> =
         m.insert(
             "diskpart",
             CommandMapping {
-                target_cmd: "fdisk",
-                description: "Disk partitioning",
-                arg_translator: |_| " # Interactive: use fdisk or parted".to_string(),
+                target_cmd: "fdisk -l",
+                description: "Disk partitioning (list mode)",
+                arg_translator: |_| String::new(),
             },
         );
 
@@ -2547,11 +2564,14 @@ static WINDOWS_TO_LINUX_MAP: LazyLock<HashMap<&'static str, CommandMapping>> =
                     if args_upper.contains("/ALL") {
                         " show".to_string()
                     } else if args_upper.contains("/RELEASE") {
-                        " # Use: sudo dhclient -r".to_string()
+                        // dhclient -r releases DHCP lease
+                        String::new() // Return empty, requires different command
                     } else if args_upper.contains("/RENEW") {
-                        " # Use: sudo dhclient".to_string()
+                        // dhclient renews DHCP lease
+                        String::new() // Return empty, requires different command
                     } else if args_upper.contains("/FLUSHDNS") {
-                        " # Use: sudo systemd-resolve --flush-caches".to_string()
+                        // DNS flush is handled differently
+                        String::new() // Return empty, requires different command
                     } else {
                         " show".to_string()
                     }
@@ -2612,7 +2632,18 @@ static WINDOWS_TO_LINUX_MAP: LazyLock<HashMap<&'static str, CommandMapping>> =
             CommandMapping {
                 target_cmd: "ip",
                 description: "Network shell",
-                arg_translator: |_| " # Complex command, check equivalent".to_string(),
+                arg_translator: |args| {
+                    // netsh has many subcommands - provide basic translation
+                    let args_lower = args.to_lowercase();
+                    if args_lower.contains("interface") && args_lower.contains("show") {
+                        " addr show".to_string()
+                    } else if args_lower.contains("firewall") {
+                        // Firewall commands map to iptables but need different syntax
+                        String::new()
+                    } else {
+                        String::new()
+                    }
+                },
             },
         );
 
@@ -2776,7 +2807,8 @@ static WINDOWS_TO_LINUX_MAP: LazyLock<HashMap<&'static str, CommandMapping>> =
                     if args_upper.contains("/T") {
                         String::new()
                     } else {
-                        " # Interactive date setting not directly equivalent".to_string()
+                        // Interactive date setting has no direct equivalent
+                        String::new()
                     }
                 },
             },
@@ -2792,7 +2824,8 @@ static WINDOWS_TO_LINUX_MAP: LazyLock<HashMap<&'static str, CommandMapping>> =
                     if args_upper.contains("/T") {
                         String::new()
                     } else {
-                        " # Interactive time setting not directly equivalent".to_string()
+                        // Interactive time setting has no direct equivalent
+                        String::new()
                     }
                 },
             },
@@ -2832,9 +2865,9 @@ static WINDOWS_TO_LINUX_MAP: LazyLock<HashMap<&'static str, CommandMapping>> =
         m.insert(
             "reg",
             CommandMapping {
-                target_cmd: "# No Linux equivalent",
-                description: "Registry operations",
-                arg_translator: |_| " (Linux doesn't use a registry)".to_string(),
+                target_cmd: "echo",
+                description: "Registry operations (no Linux equivalent)",
+                arg_translator: |_| " 'Registry is Windows-only'".to_string(),
             },
         );
 
@@ -2854,7 +2887,8 @@ static WINDOWS_TO_LINUX_MAP: LazyLock<HashMap<&'static str, CommandMapping>> =
                         "start" => format!(" start {}", parts.get(1).unwrap_or(&"")),
                         "stop" => format!(" stop {}", parts.get(1).unwrap_or(&"")),
                         "config" => {
-                            format!(" # Use: systemctl edit {}", parts.get(1).unwrap_or(&""))
+                            // systemctl edit allows editing service configuration
+                            format!(" show {}", parts.get(1).unwrap_or(&""))
                         }
                         _ => format!(" {}", args),
                     }
@@ -2876,9 +2910,18 @@ static WINDOWS_TO_LINUX_MAP: LazyLock<HashMap<&'static str, CommandMapping>> =
                     match parts[0].to_lowercase().as_str() {
                         "start" => format!(" start {}", parts.get(1).unwrap_or(&"")),
                         "stop" => format!(" stop {}", parts.get(1).unwrap_or(&"")),
-                        "user" => " # Use: useradd/usermod/userdel".to_string(),
-                        "use" => " # Use: mount -t cifs".to_string(),
-                        "view" => " # Use: smbclient -L".to_string(),
+                        "user" => {
+                            // net user -> getent passwd
+                            String::new()
+                        }
+                        "use" => {
+                            // net use -> mount (requires different syntax)
+                            String::new()
+                        }
+                        "view" => {
+                            // net view -> requires smbclient
+                            String::new()
+                        }
                         _ => format!(" {}", args),
                     }
                 },
