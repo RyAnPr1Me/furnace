@@ -31,6 +31,7 @@ Furnace is built with **Rust** for:
 - **Shell Integration**: Advanced shell integration with directory tracking and OSC sequences
 - **Command History**: Efficient circular buffer for command history
 - **Smart Scrollback**: Memory-mapped large scrollback buffers
+- **Cross-Platform Command Translation**: Automatic translation between Linux and Windows commands (ls ⟷ dir, cat ⟷ type, etc.)
 
 ### Performance Optimizations
 - **Zero-cost abstractions**: No runtime overhead
@@ -127,6 +128,10 @@ keybindings:
   paste: "Ctrl+Shift+V"
   search: "Ctrl+F"
   clear: "Ctrl+L"
+
+command_translation:
+  enabled: true                # Enable automatic command translation
+  show_notifications: true     # Show green notification when commands are translated
 ```
 
 ## Key Bindings
@@ -223,6 +228,31 @@ Smart command completion:
 - Tab to cycle through suggestions
 - Context-aware completions
 
+### Cross-Platform Command Translation
+Automatic translation between Linux and Windows commands:
+- **On Windows**: Translates Linux commands to Windows equivalents
+  - `ls` → `dir`
+  - `cat` → `type`
+  - `rm` → `del`
+  - `clear` → `cls`
+  - `pwd` → `cd`
+  - `grep` → `findstr`
+  - `ps` → `tasklist`
+  - `kill` → `taskkill`
+  - And 10+ more commands
+- **On Linux/Mac**: Translates Windows commands to Linux equivalents
+  - `dir` → `ls`
+  - `type` → `cat`
+  - `del` → `rm`
+  - `cls` → `clear`
+  - `findstr` → `grep`
+  - `tasklist` → `ps`
+  - `taskkill` → `kill`
+  - And more
+- **Smart Argument Translation**: Preserves arguments and flags where possible
+- **Visual Feedback**: Shows green notification when commands are translated
+- **Configurable**: Enable/disable translation and notifications in config.yaml
+
 ## Architecture
 
 Furnace is designed with performance and safety as top priorities:
@@ -236,6 +266,7 @@ furnace/
 │   ├── shell/            # PTY and shell session management
 │   ├── ui/               # UI rendering (hardware-accelerated)
 │   ├── plugins/          # Plugin system (safe FFI, dynamic loading)
+│   ├── translator/       # Cross-platform command translation
 │   ├── session.rs        # Session management (save/restore)
 │   ├── keybindings.rs    # Enhanced keybinding system with shell integration
 │   └── colors.rs         # 24-bit true color support

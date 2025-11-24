@@ -23,6 +23,7 @@ use crate::keybindings::KeybindingManager;
 use crate::session::SessionManager;
 use crate::plugins::PluginManager;
 use crate::colors::TrueColorPalette;
+use crate::translator::CommandTranslator;
 
 /// Target FPS for GPU-accelerated rendering
 const TARGET_FPS: u64 = 170;
@@ -60,12 +61,21 @@ pub struct Terminal {
     read_buffer: Vec<u8>,
     // Frame counter for performance metrics
     frame_count: u64,
+    // Command translator for cross-platform compatibility
+    command_translator: CommandTranslator,
+    // Current command buffer for each session
+    command_buffers: Vec<String>,
+    // Translation notification message and timeout
+    translation_notification: Option<String>,
+    notification_frames: u64,
 }
 
 impl Terminal {
     /// Create a new terminal instance with optimal memory allocation
     pub fn new(config: Config) -> Result<Self> {
         info!("Initializing Furnace terminal emulator with 170 FPS GPU rendering + 24-bit color");
+        
+        let command_translator = CommandTranslator::new(config.command_translation.enabled);
         
         Ok(Self {
             config,
@@ -84,6 +94,10 @@ impl Terminal {
             dirty: true, // Initial draw needed
             read_buffer: vec![0u8; READ_BUFFER_SIZE], // Pre-allocated reusable buffer
             frame_count: 0,
+            command_translator,
+            command_buffers: Vec::with_capacity(8),
+            translation_notification: None,
+            notification_frames: 0,
         })
     }
 
@@ -107,6 +121,7 @@ impl Terminal {
         
         self.sessions.push(session);
         self.output_buffers.push(Vec::with_capacity(1024 * 1024)); // 1MB buffer
+        self.command_buffers.push(String::new()); // Initialize command buffer
 
         info!("Terminal started with {}x{} size", cols, rows);
 
@@ -149,6 +164,15 @@ impl Terminal {
                 
                 // Render at consistent frame rate (only if dirty flag is set)
                 _ = render_interval.tick() => {
+                    // Decrement notification counter
+                    if self.notification_frames > 0 {
+                        self.notification_frames -= 1;
+                        if self.notification_frames == 0 {
+                            self.translation_notification = None;
+                        }
+                        self.dirty = true;
+                    }
+                    
                     if self.dirty {
                         terminal.draw(|f| self.render(f))?;
                         self.dirty = false; // Clear dirty flag
@@ -222,22 +246,69 @@ impl Terminal {
                         // Send control character
                         let ctrl_char = (c.to_ascii_uppercase() as u8) - b'A' + 1;
                         input = vec![ctrl_char];
+                    } else if !modifiers.contains(KeyModifiers::CONTROL) {
+                        // Track normal character input for command translation
+                        if let Some(cmd_buf) = self.command_buffers.get_mut(self.active_session) {
+                            cmd_buf.push(c);
+                        }
                     }
                     
                     session.write_input(&input).await?;
                 }
             }
             
-            // Enter
+            // Enter - translate command before sending
             (KeyCode::Enter, _) => {
                 if let Some(session) = self.sessions.get(self.active_session) {
+                    // Get the current command
+                    let command = self.command_buffers.get(self.active_session)
+                        .map(|s| s.as_str())
+                        .unwrap_or("");
+                    
+                    // Attempt translation
+                    let result = self.command_translator.translate(command);
+                    
+                    if result.translated {
+                        // Command was translated - send translated version
+                        info!("Translated '{}' to '{}'", result.original_command, result.final_command);
+                        
+                        // Show notification if enabled
+                        if self.config.command_translation.show_notifications {
+                            self.translation_notification = Some(format!(
+                                "Translated: {} → {}",
+                                result.original_command,
+                                result.final_command
+                            ));
+                            self.notification_frames = 170 * 2; // Show for 2 seconds at 170 FPS
+                            self.dirty = true;
+                        }
+                        
+                        // Clear the shell's input line and send the translated command
+                        // First, clear what was typed
+                        let backspaces = vec![127u8; command.len()];
+                        session.write_input(&backspaces).await?;
+                        
+                        // Then send the translated command
+                        session.write_input(result.final_command.as_bytes()).await?;
+                    }
+                    
+                    // Send Enter
                     session.write_input(b"\r").await?;
+                    
+                    // Clear command buffer
+                    if let Some(cmd_buf) = self.command_buffers.get_mut(self.active_session) {
+                        cmd_buf.clear();
+                    }
                 }
             }
             
             // Backspace
             (KeyCode::Backspace, _) => {
                 if let Some(session) = self.sessions.get(self.active_session) {
+                    // Remove last character from command buffer
+                    if let Some(cmd_buf) = self.command_buffers.get_mut(self.active_session) {
+                        cmd_buf.pop();
+                    }
                     session.write_input(&[127]).await?;
                 }
             }
@@ -245,11 +316,19 @@ impl Terminal {
             // Arrow keys
             (KeyCode::Up, _) => {
                 if let Some(session) = self.sessions.get(self.active_session) {
+                    // Clear command buffer when navigating history
+                    if let Some(cmd_buf) = self.command_buffers.get_mut(self.active_session) {
+                        cmd_buf.clear();
+                    }
                     session.write_input(b"\x1b[A").await?;
                 }
             }
             (KeyCode::Down, _) => {
                 if let Some(session) = self.sessions.get(self.active_session) {
+                    // Clear command buffer when navigating history
+                    if let Some(cmd_buf) = self.command_buffers.get_mut(self.active_session) {
+                        cmd_buf.clear();
+                    }
                     session.write_input(b"\x1b[B").await?;
                 }
             }
@@ -341,6 +420,7 @@ impl Terminal {
         
         self.sessions.push(session);
         self.output_buffers.push(Vec::with_capacity(1024 * 1024));
+        self.command_buffers.push(String::new()); // Initialize command buffer for new tab
         self.active_session = self.sessions.len() - 1;
         
         Ok(())
@@ -372,12 +452,16 @@ impl Terminal {
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Length(if self.config.terminal.enable_tabs && self.sessions.len() > 1 { 1 } else { 0 }),
+                Constraint::Length(if self.translation_notification.is_some() { 1 } else { 0 }),
                 Constraint::Min(0),
                 Constraint::Length(if self.show_resources { 3 } else { 0 }),
             ].as_ref())
             .split(f.size());
 
-        let mut content_area = main_chunks[1];
+        let tab_area = main_chunks[0];
+        let notification_area = main_chunks[1];
+        let content_area = main_chunks[2];
+        let resource_area = main_chunks[3];
 
         // Render tabs if enabled
         if self.config.terminal.enable_tabs && self.sessions.len() > 1 {
@@ -404,8 +488,15 @@ impl Terminal {
                         .add_modifier(Modifier::BOLD),
                 );
             
-            f.render_widget(tabs, main_chunks[0]);
-            content_area = main_chunks[1];
+            f.render_widget(tabs, tab_area);
+        }
+
+        // Render translation notification if present
+        if let Some(ref msg) = self.translation_notification {
+            let notification = Paragraph::new(msg.as_str())
+                .style(Style::default().fg(Color::Green).bg(Color::Black).add_modifier(Modifier::BOLD))
+                .block(Block::default().borders(Borders::NONE));
+            f.render_widget(notification, notification_area);
         }
 
         // Render command palette if visible
@@ -429,7 +520,7 @@ impl Terminal {
 
         // Render resource monitor if enabled
         if self.show_resources {
-            self.render_resource_monitor(f, main_chunks[2]);
+            self.render_resource_monitor(f, resource_area);
         }
     }
 

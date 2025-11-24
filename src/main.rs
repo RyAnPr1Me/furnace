@@ -11,6 +11,7 @@ mod plugins;
 mod session;
 mod keybindings;
 mod colors;
+mod translator;
 
 use config::Config;
 use terminal::Terminal;

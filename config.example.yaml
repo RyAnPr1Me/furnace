@@ -85,3 +85,14 @@ keybindings:
 # Plugins to load (optional)
 plugins: []
   # - "~/.furnace/plugins/my_plugin.so"
+
+# Command translation (cross-platform compatibility)
+command_translation:
+  # Enable automatic translation of commands between Linux and Windows
+  # When enabled on Windows: translates Linux commands (ls, cat, etc.) to Windows equivalents (dir, type, etc.)
+  # When enabled on Linux/Mac: translates Windows commands (dir, cls, etc.) to Linux equivalents (ls, clear, etc.)
+  enabled: true
+  
+  # Show visual notification when commands are translated
+  # Displays a green notification bar showing the translation that occurred
+  show_notifications: true

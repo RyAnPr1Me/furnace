@@ -7,3 +7,4 @@ pub mod plugins;
 pub mod session;
 pub mod keybindings;
 pub mod colors;
+pub mod translator;

@@ -17,6 +17,8 @@ pub struct Config {
     pub keybindings: KeyBindings,
     #[serde(default)]
     pub plugins: Vec<String>,
+    #[serde(default)]
+    pub command_translation: CommandTranslationConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -100,6 +102,17 @@ pub struct KeyBindings {
     pub paste: String,
     pub search: String,
     pub clear: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CommandTranslationConfig {
+    /// Enable automatic command translation between Linux and Windows
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    
+    /// Show visual notification when commands are translated
+    #[serde(default = "default_true")]
+    pub show_notifications: bool,
 }
 
 // Default value functions
@@ -196,6 +209,15 @@ impl Default for KeyBindings {
             paste: "Ctrl+Shift+V".to_string(),
             search: "Ctrl+F".to_string(),
             clear: "Ctrl+L".to_string(),
+        }
+    }
+}
+
+impl Default for CommandTranslationConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            show_notifications: true,
         }
     }
 }
