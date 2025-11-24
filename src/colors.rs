@@ -39,16 +39,19 @@ impl TrueColor {
     }
 
     /// Convert to ANSI escape sequence for foreground
+    #[allow(dead_code)] // Public API for color system
     pub fn to_ansi_fg(self) -> String {
         format!("\x1b[38;2;{};{};{}m", self.r, self.g, self.b)
     }
 
     /// Convert to ANSI escape sequence for background
+    #[allow(dead_code)] // Public API for color system
     pub fn to_ansi_bg(self) -> String {
         format!("\x1b[48;2;{};{};{}m", self.r, self.g, self.b)
     }
 
     /// Blend with another color
+    #[allow(dead_code)] // Public API for color system
     pub fn blend(&self, other: &TrueColor, factor: f32) -> Self {
         let factor = factor.clamp(0.0, 1.0);
         Self {
@@ -59,23 +62,27 @@ impl TrueColor {
     }
 
     /// Lighten color by factor
+    #[allow(dead_code)] // Public API for color system
     pub fn lighten(&self, factor: f32) -> Self {
         let white = TrueColor::new(255, 255, 255);
         self.blend(&white, factor)
     }
 
     /// Darken color by factor
+    #[allow(dead_code)] // Public API for color system
     pub fn darken(&self, factor: f32) -> Self {
         let black = TrueColor::new(0, 0, 0);
         self.blend(&black, factor)
     }
 
     /// Get luminance (0.0 - 1.0)
+    #[allow(dead_code)] // Public API for color system
     pub fn luminance(&self) -> f32 {
         (0.299 * self.r as f32 + 0.587 * self.g as f32 + 0.114 * self.b as f32) / 255.0
     }
 
     /// Check if color is light
+    #[allow(dead_code)] // Public API for color system
     pub fn is_light(&self) -> bool {
         self.luminance() > 0.5
     }
@@ -89,6 +96,7 @@ impl fmt::Display for TrueColor {
 
 /// Color palette with 24-bit color support
 #[derive(Debug, Clone)]
+#[allow(dead_code)] // Public API for color system
 pub struct TrueColorPalette {
     // ANSI colors (16 colors)
     pub black: TrueColor,
@@ -170,6 +178,7 @@ impl TrueColorPalette {
     }
 
     /// Get color by 256-color index
+    #[allow(dead_code)] // Public API for color system
     pub fn get_256(&self, index: u8) -> TrueColor {
         match index {
             0 => self.black,
