@@ -91,8 +91,7 @@ impl ResourceMonitor {
         // Network and disk stats - Basic implementation
         // Note: Advanced network/disk monitoring requires platform-specific APIs
         // Current implementation provides basic disk info available cross-platform
-        let network_rx = self.get_network_stats().0;
-        let network_tx = self.get_network_stats().1;
+        let (network_rx, network_tx) = self.get_network_stats();
         let disk_usage = self.get_disk_info(&system);
 
         let stats = ResourceStats {
