@@ -234,11 +234,16 @@ impl SshManager {
                 host.clone()
             };
             
+            // Use current system user if no username specified
+            let default_username = std::env::var("USER")
+                .or_else(|_| std::env::var("USERNAME"))
+                .unwrap_or_else(|_| "user".to_string());
+            
             Some(SshConnection {
                 name,
                 host,
                 port,
-                username: if username.is_empty() { "root".to_string() } else { username },
+                username: if username.is_empty() { default_username } else { username },
                 identity_file,
                 last_used: Some(chrono::Utc::now().to_rfc3339()),
             })
