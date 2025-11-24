@@ -279,13 +279,13 @@ impl Terminal {
                                 result.original_command,
                                 result.final_command
                             ));
-                            self.notification_frames = 170 * 2; // Show for 2 seconds at 170 FPS
+                            self.notification_frames = TARGET_FPS * 2; // Show for 2 seconds
                             self.dirty = true;
                         }
                         
                         // Clear the shell's input line and send the translated command
-                        // First, clear what was typed
-                        let backspaces = vec![127u8; command.len()];
+                        // Count Unicode characters properly
+                        let backspaces = vec![127u8; command.chars().count()];
                         session.write_input(&backspaces).await?;
                         
                         // Then send the translated command

@@ -7,8 +7,8 @@ use once_cell::sync::Lazy;
 pub struct CommandTranslator {
     enabled: bool,
     current_os: OsType,
-    linux_to_windows: HashMap<&'static str, CommandMapping>,
-    windows_to_linux: HashMap<&'static str, CommandMapping>,
+    // Use references to static maps instead of cloning
+    _phantom: std::marker::PhantomData<()>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -58,10 +58,11 @@ fn ls_to_dir_args(args: &str) -> String {
     }
     
     // Common ls flags to dir equivalents
+    // Note: dir without flags shows multiple columns (like ls), /W is not needed
     if args.contains("-l") || args.contains("-la") || args.contains("-al") {
-        result.push_str(" /W");
+        // -l shows detailed listing, but dir shows details by default, so no flag needed
     }
-    if args.contains("-a") && !args.contains("-l") {
+    if args.contains("-a") {
         result.push_str(" /A");
     }
     
@@ -111,11 +112,14 @@ fn rm_to_del_args(args: &str) -> String {
         return result;
     }
     
-    // Common rm flags to del equivalents
-    if args.contains("-r") || args.contains("-rf") {
+    // Handle combined flags like -rf
+    let has_recursive = args.contains("-r");
+    let has_force = args.contains("-f");
+    
+    if has_recursive {
         result.push_str(" /S");
     }
-    if args.contains("-f") {
+    if has_force {
         result.push_str(" /F /Q");
     }
     
@@ -226,9 +230,9 @@ static LINUX_TO_WINDOWS_MAP: Lazy<HashMap<&'static str, CommandMapping>> = Lazy:
     });
     
     m.insert("touch", CommandMapping {
-        target_cmd: "type nul >",
+        target_cmd: "echo.",
         description: "Create empty file",
-        arg_translator: identity_args,
+        arg_translator: |args| format!(" > {}", args.trim()),
     });
     
     m.insert("grep", CommandMapping {
@@ -254,12 +258,19 @@ static LINUX_TO_WINDOWS_MAP: Lazy<HashMap<&'static str, CommandMapping>> = Lazy:
         description: "Terminate process",
         arg_translator: |args| {
             // Convert kill -9 PID to taskkill /F /PID PID
+            let parts: Vec<&str> = args.split_whitespace().collect();
             if args.contains("-9") {
-                let pid = args.split_whitespace().last().unwrap_or("");
-                format!(" /F /PID {}", pid)
-            } else {
-                format!(" /PID {}", args.trim())
+                if let Some(pid) = parts.last() {
+                    if !pid.is_empty() && *pid != "-9" {
+                        return format!(" /F /PID {}", pid);
+                    }
+                }
+            } else if let Some(pid) = parts.last() {
+                if !pid.is_empty() {
+                    return format!(" /PID {}", pid);
+                }
             }
+            String::new()
         },
     });
     
@@ -403,8 +414,7 @@ impl CommandTranslator {
         Self {
             enabled,
             current_os,
-            linux_to_windows: LINUX_TO_WINDOWS_MAP.clone(),
-            windows_to_linux: WINDOWS_TO_LINUX_MAP.clone(),
+            _phantom: std::marker::PhantomData,
         }
     }
     
@@ -464,11 +474,11 @@ impl CommandTranslator {
         let (mapping, should_translate) = match self.current_os {
             OsType::Windows => {
                 // On Windows, translate Linux commands to Windows
-                (self.linux_to_windows.get(cmd), true)
+                (LINUX_TO_WINDOWS_MAP.get(cmd), true)
             },
             OsType::Linux | OsType::MacOs => {
                 // On Linux/Mac, translate Windows commands to Linux
-                (self.windows_to_linux.get(cmd), true)
+                (WINDOWS_TO_LINUX_MAP.get(cmd), true)
             },
             OsType::Unknown => (None, false),
         };
@@ -482,8 +492,19 @@ impl CommandTranslator {
             };
         }
         
-        // Special case: cd without arguments on Windows should not be translated to pwd
-        if cmd == "cd" && self.current_os == OsType::Windows && !args.is_empty() {
+        // Special case: cd without arguments should be translated to pwd
+        if cmd == "cd" && self.current_os != OsType::Windows && args.is_empty() {
+            // On Linux/Mac, bare "cd" changes directory, not pwd
+            return TranslationResult {
+                translated: false,
+                original_command: command.to_string(),
+                final_command: command.to_string(),
+                description: String::new(),
+            };
+        }
+        
+        // Don't translate cd with arguments on any platform
+        if cmd == "cd" && !args.is_empty() {
             return TranslationResult {
                 translated: false,
                 original_command: command.to_string(),
