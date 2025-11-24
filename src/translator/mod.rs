@@ -50,23 +50,22 @@ fn identity_args(args: &str) -> String {
 }
 
 fn ls_to_dir_args(args: &str) -> String {
-    let mut result = String::new();
     let args = args.trim();
     
     if args.is_empty() {
-        return result;
+        return String::new();
     }
+    
+    // Pre-allocate capacity based on input length
+    let mut result = String::with_capacity(args.len() + 10);
     
     // Common ls flags to dir equivalents
     // Note: dir without flags shows multiple columns (like ls), /W is not needed
-    if args.contains("-l") || args.contains("-la") || args.contains("-al") {
-        // -l shows detailed listing, but dir shows details by default, so no flag needed
-    }
     if args.contains("-a") {
         result.push_str(" /A");
     }
     
-    // Extract paths (non-flag arguments)
+    // Extract paths (non-flag arguments) - single pass
     for part in args.split_whitespace() {
         if !part.starts_with('-') {
             result.push(' ');
@@ -78,12 +77,14 @@ fn ls_to_dir_args(args: &str) -> String {
 }
 
 fn dir_to_ls_args(args: &str) -> String {
-    let mut result = String::new();
     let args = args.trim();
     
     if args.is_empty() {
-        return result;
+        return String::new();
     }
+    
+    // Pre-allocate capacity
+    let mut result = String::with_capacity(args.len() + 10);
     
     // Common dir flags to ls equivalents
     if args.contains("/W") || args.contains("/w") {
@@ -105,12 +106,14 @@ fn dir_to_ls_args(args: &str) -> String {
 }
 
 fn rm_to_del_args(args: &str) -> String {
-    let mut result = String::new();
     let args = args.trim();
     
     if args.is_empty() {
-        return result;
+        return String::new();
     }
+    
+    // Pre-allocate capacity
+    let mut result = String::with_capacity(args.len() + 15);
     
     // Handle combined flags like -rf
     let has_recursive = args.contains("-r");
@@ -135,12 +138,14 @@ fn rm_to_del_args(args: &str) -> String {
 }
 
 fn del_to_rm_args(args: &str) -> String {
-    let mut result = String::new();
     let args = args.trim();
     
     if args.is_empty() {
-        return result;
+        return String::new();
     }
+    
+    // Pre-allocate capacity
+    let mut result = String::with_capacity(args.len() + 10);
     
     // Common del flags to rm equivalents
     if args.contains("/S") || args.contains("/s") {
@@ -433,28 +438,10 @@ impl CommandTranslator {
     
     /// Translate a command if translation is enabled and applicable
     pub fn translate(&self, command: &str) -> TranslationResult {
-        if !self.enabled {
-            return TranslationResult {
-                translated: false,
-                original_command: command.to_string(),
-                final_command: command.to_string(),
-                description: String::new(),
-            };
-        }
-        
         let command = command.trim();
-        if command.is_empty() {
-            return TranslationResult {
-                translated: false,
-                original_command: String::new(),
-                final_command: String::new(),
-                description: String::new(),
-            };
-        }
         
-        // Parse command into parts
-        let parts: Vec<&str> = command.split_whitespace().collect();
-        if parts.is_empty() {
+        // Fast path: disabled or empty command
+        if !self.enabled || command.is_empty() {
             return TranslationResult {
                 translated: false,
                 original_command: command.to_string(),
@@ -463,12 +450,21 @@ impl CommandTranslator {
             };
         }
         
-        let cmd = parts[0];
-        let args = if parts.len() > 1 {
-            command.strip_prefix(cmd).unwrap_or("").trim()
-        } else {
-            ""
+        // Parse command into parts - avoid collecting into Vec
+        let mut parts = command.split_whitespace();
+        let cmd = match parts.next() {
+            Some(c) => c,
+            None => {
+                return TranslationResult {
+                    translated: false,
+                    original_command: command.to_string(),
+                    final_command: command.to_string(),
+                    description: String::new(),
+                };
+            }
         };
+        
+        let args = command.strip_prefix(cmd).unwrap_or("").trim();
         
         // Determine which direction to translate
         let (mapping, should_translate) = match self.current_os {

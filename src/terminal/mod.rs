@@ -74,6 +74,12 @@ pub struct Terminal {
     ssh_manager: SshManager,
     // URL handler for clickable links
     url_handler: UrlHandler,
+    // Cached URL positions to avoid re-parsing on every mouse event
+    cached_urls: Vec<crate::url_handler::DetectedUrl>,
+    // Track when URL cache was last updated (frame counter)
+    url_cache_frame: u64,
+    // Reusable backspace buffer to avoid allocations
+    backspace_buffer: Vec<u8>,
 }
 
 impl Terminal {
@@ -108,6 +114,9 @@ impl Terminal {
             notification_frames: 0,
             ssh_manager,
             url_handler,
+            cached_urls: Vec::new(),
+            url_cache_frame: 0,
+            backspace_buffer: Vec::with_capacity(256), // Pre-allocate for typical command length
         })
     }
 
@@ -223,21 +232,23 @@ impl Terminal {
         // Only handle Ctrl+Click for URLs
         if let MouseEventKind::Down(MouseButton::Left) = mouse.kind {
             if mouse.modifiers.contains(KeyModifiers::CONTROL) {
-                // Get terminal output at mouse position
-                if let Some(buffer) = self.output_buffers.get(self.active_session) {
-                    let text = String::from_utf8_lossy(buffer);
-                    let urls = UrlHandler::detect_urls(&text);
-                    
-                    // Simple check - if there are URLs, try to find one near the click
-                    // In a full implementation, you'd need to track line positions
-                    if !urls.is_empty() {
-                        // For now, just open the first URL found
-                        // A full implementation would map click coordinates to text positions
-                        if let Some(url) = urls.first() {
-                            info!("Opening URL: {}", url.url);
-                            if let Err(e) = UrlHandler::open_url(&url.url) {
-                                warn!("Failed to open URL: {}", e);
-                            }
+                // Update URL cache if output has changed (every 30 frames or ~176ms at 170fps)
+                if self.frame_count - self.url_cache_frame > 30 {
+                    if let Some(buffer) = self.output_buffers.get(self.active_session) {
+                        let text = String::from_utf8_lossy(buffer);
+                        self.cached_urls = UrlHandler::detect_urls(&text);
+                        self.url_cache_frame = self.frame_count;
+                    }
+                }
+                
+                // Use cached URLs instead of re-parsing
+                if !self.cached_urls.is_empty() {
+                    // For now, just open the first URL found
+                    // A full implementation would map click coordinates to text positions
+                    if let Some(url) = self.cached_urls.first() {
+                        info!("Opening URL: {}", url.url);
+                        if let Err(e) = UrlHandler::open_url(&url.url) {
+                            warn!("Failed to open URL: {}", e);
                         }
                     }
                 }
@@ -365,8 +376,12 @@ impl Terminal {
                         
                         // Clear the shell's input line and send the translated command
                         // Count Unicode characters properly
-                        let backspaces = vec![127u8; command.chars().count()];
-                        session.write_input(&backspaces).await?;
+                        let char_count = command.chars().count();
+                        
+                        // Reuse backspace buffer to avoid allocation
+                        self.backspace_buffer.clear();
+                        self.backspace_buffer.resize(char_count, 127);
+                        session.write_input(&self.backspace_buffer).await?;
                         
                         // Then send the translated command
                         session.write_input(result.final_command.as_bytes()).await?;

@@ -131,22 +131,26 @@ impl SshManager {
     
     /// Update filter based on input
     pub fn update_filter(&mut self) {
+        self.filtered_connections.clear();
+        
         if self.filter_input.is_empty() {
-            self.filtered_connections = self.connections.keys().cloned().collect();
+            // Fast path: no filtering needed
+            self.filtered_connections.extend(self.connections.keys().cloned());
         } else {
             let filter_lower = self.filter_input.to_lowercase();
-            self.filtered_connections = self.connections
-                .iter()
-                .filter(|(name, conn)| {
-                    name.to_lowercase().contains(&filter_lower) ||
-                    conn.host.to_lowercase().contains(&filter_lower) ||
-                    conn.username.to_lowercase().contains(&filter_lower)
-                })
-                .map(|(name, _)| name.clone())
-                .collect();
+            self.filtered_connections.extend(
+                self.connections
+                    .iter()
+                    .filter(|(name, conn)| {
+                        name.to_lowercase().contains(&filter_lower) ||
+                        conn.host.to_lowercase().contains(&filter_lower) ||
+                        conn.username.to_lowercase().contains(&filter_lower)
+                    })
+                    .map(|(name, _)| name.clone())
+            );
         }
         
-        self.filtered_connections.sort();
+        self.filtered_connections.sort_unstable(); // Faster for types that don't need stability
         
         // Reset selection if out of bounds
         if self.selected_index >= self.filtered_connections.len() && !self.filtered_connections.is_empty() {
