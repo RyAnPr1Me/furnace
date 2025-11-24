@@ -2,7 +2,9 @@
 pub mod loader;
 pub mod api;
 
+#[allow(unused_imports)] // Public API exports
 pub use loader::{PluginManager, LoadedPlugin};
+#[allow(unused_imports)] // Public API exports
 pub use api::{PluginApi, PluginMetadata, PluginCommand, ScriptingApi, ExamplePlugin};
 
 // Safe plugin system using Rust's type safety:

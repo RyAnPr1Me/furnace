@@ -285,6 +285,7 @@ impl Config {
     }
 
     /// Save configuration to file
+    #[allow(dead_code)] // Public API method
     pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> Result<()> {
         let contents = serde_yaml::to_string(self)
             .context("Failed to serialize config")?;

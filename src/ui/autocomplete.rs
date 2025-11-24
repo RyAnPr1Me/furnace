@@ -80,6 +80,7 @@ impl Autocomplete {
     }
 
     /// Get previous suggestion (for Shift+Tab)
+    #[allow(dead_code)] // Public API
     pub fn previous_suggestion(&mut self) -> Option<String> {
         if self.current_suggestions.is_empty() {
             return None;
@@ -122,11 +123,13 @@ impl Autocomplete {
 
     /// Get history (for up/down arrow navigation)
     pub fn get_history(&self) -> &VecDeque<String> {
+    #[allow(dead_code)] // Public API
         &self.history
     }
 
     /// Clear history
     pub fn clear_history(&mut self) {
+    #[allow(dead_code)] // Public API
         self.history.clear();
         self.current_suggestions.clear();
         self.current_index = 0;

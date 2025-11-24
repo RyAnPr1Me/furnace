@@ -3,7 +3,6 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use anyhow::{Context, Result};
-use dirs;
 
 /// SSH connection configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]

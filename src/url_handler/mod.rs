@@ -19,10 +19,12 @@ pub struct DetectedUrl {
 
 /// URL Handler for detecting and opening URLs
 pub struct UrlHandler {
+    #[allow(dead_code)] // Public API field
     enabled: bool,
 }
 
 impl UrlHandler {
+    #[allow(dead_code)] // Public API
     /// Create a new URL handler
     pub fn new(enabled: bool) -> Self {
         Self { enabled }
@@ -102,11 +104,13 @@ impl UrlHandler {
     }
     
     /// Check if URL handler is enabled
+    #[allow(dead_code)] // Public API
     pub fn is_enabled(&self) -> bool {
         self.enabled
     }
     
     /// Enable or disable URL handler
+    #[allow(dead_code)] // Public API
     pub fn set_enabled(&mut self, enabled: bool) {
         self.enabled = enabled;
     }

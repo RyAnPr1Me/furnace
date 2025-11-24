@@ -3,6 +3,7 @@ use std::collections::HashMap;
 
 /// Advanced theme system supporting multiple color schemes
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)] // Public API for theme system
 pub struct Theme {
     pub name: String,
     pub colors: ColorPalette,
@@ -11,6 +12,7 @@ pub struct Theme {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)] // Public API for theme system
 pub struct ColorPalette {
     // ANSI colors
     pub black: String,
@@ -62,6 +64,7 @@ pub struct Themes;
 
 impl Themes {
     /// Dark theme (default)
+    #[allow(dead_code)] // Public API
     pub fn dark() -> Theme {
         Theme {
             name: "Dark".to_string(),
@@ -108,6 +111,7 @@ impl Themes {
 
     /// Light theme
     pub fn light() -> Theme {
+    #[allow(dead_code)] // Public API
         Theme {
             name: "Light".to_string(),
             colors: ColorPalette {
@@ -154,6 +158,7 @@ impl Themes {
     /// Nord theme
     pub fn nord() -> Theme {
         Theme {
+    #[allow(dead_code)] // Public API
             name: "Nord".to_string(),
             colors: ColorPalette {
                 black: "#3B4252".to_string(),
@@ -200,6 +205,7 @@ impl Themes {
     pub fn all() -> HashMap<String, Theme> {
         let mut themes = HashMap::new();
         themes.insert("dark".to_string(), Self::dark());
+    #[allow(dead_code)] // Public API
         themes.insert("light".to_string(), Self::light());
         themes.insert("nord".to_string(), Self::nord());
         themes

@@ -72,8 +72,6 @@ pub struct Terminal {
     notification_frames: u64,
     // SSH connection manager
     ssh_manager: SshManager,
-    // URL handler for clickable links
-    url_handler: UrlHandler,
     // Cached URL positions to avoid re-parsing on every mouse event
     cached_urls: Vec<crate::url_handler::DetectedUrl>,
     // Track when URL cache was last updated (frame counter)
@@ -89,7 +87,6 @@ impl Terminal {
         
         let command_translator = CommandTranslator::new(config.command_translation.enabled);
         let ssh_manager = SshManager::new()?;
-        let url_handler = UrlHandler::new(config.url_handler.enabled);
         
         Ok(Self {
             config,
@@ -113,7 +110,6 @@ impl Terminal {
             translation_notification: None,
             notification_frames: 0,
             ssh_manager,
-            url_handler,
             cached_urls: Vec::new(),
             url_cache_frame: 0,
             backspace_buffer: Vec::with_capacity(256), // Pre-allocate for typical command length
@@ -229,7 +225,11 @@ impl Terminal {
 
     /// Handle mouse events for URL clicking
     async fn handle_mouse_event(&mut self, mouse: MouseEvent) -> Result<()> {
-        // Only handle Ctrl+Click for URLs
+        // Only handle Ctrl+Click for URLs if URL handler is enabled
+        if !self.config.url_handler.enabled {
+            return Ok(());
+        }
+        
         if let MouseEventKind::Down(MouseButton::Left) = mouse.kind {
             if mouse.modifiers.contains(KeyModifiers::CONTROL) {
                 // Update URL cache if output has changed (every 30 frames or ~176ms at 170fps)
