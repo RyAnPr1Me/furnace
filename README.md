@@ -147,6 +147,7 @@ url_handler:
 
 | Action | Default Key |
 |--------|-------------|
+| **SSH Manager** | `Ctrl+Shift+S` |
 | **Command Palette** | `Ctrl+P` |
 | **Resource Monitor** | `Ctrl+R` |
 | **Save Session** | `Ctrl+S` |

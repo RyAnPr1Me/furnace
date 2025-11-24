@@ -1,11 +1,11 @@
 use regex::Regex;
 use once_cell::sync::Lazy;
-use anyhow::Result;
+use anyhow::{Result, Context};
 use std::process::Command;
 
-/// URL pattern matcher
+/// URL pattern matcher - more robust pattern that avoids common false positives
 static URL_REGEX: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"https?://[^\s<>]+|www\.[^\s<>]+").unwrap()
+    Regex::new(r"https?://[a-zA-Z0-9\-._~:/?#\[\]@!$&'()*+,;=]+|www\.[a-zA-Z0-9\-._~:/?#\[\]@!$&'()*+,;=]+").unwrap()
 });
 
 /// Represents a detected URL in terminal output
@@ -34,7 +34,7 @@ impl UrlHandler {
         
         for (line_num, line) in text.lines().enumerate() {
             for m in URL_REGEX.find_iter(line) {
-                let url = m.as_str().to_string();
+                let url = m.as_str().trim_end_matches(&['.', ',', ')', ']', '>', ';'][..]).to_string();
                 urls.push(DetectedUrl {
                     url,
                     start_pos: m.start(),
@@ -47,29 +47,44 @@ impl UrlHandler {
         urls
     }
     
+    /// Validate URL before opening (basic validation)
+    fn is_safe_url(url: &str) -> bool {
+        // Basic sanity checks - reject URLs with shell metacharacters
+        let dangerous_chars = &['<', '>', '|', '&', ';', '`', '$', '\\', '"', '\''];
+        !url.chars().any(|c| dangerous_chars.contains(&c))
+    }
+    
     /// Open a URL in the default browser
     pub fn open_url(url: &str) -> Result<()> {
         let url = Self::normalize_url(url);
         
+        // Validate URL before opening
+        if !Self::is_safe_url(&url) {
+            return Err(anyhow::anyhow!("URL contains potentially dangerous characters"));
+        }
+        
         #[cfg(target_os = "windows")]
         {
             Command::new("cmd")
-                .args(&["/c", "start", &url])
-                .spawn()?;
+                .args(&["/c", "start", "", &url])  // Empty string after start prevents command injection
+                .spawn()
+                .context("Failed to open URL")?;
         }
         
         #[cfg(target_os = "macos")]
         {
             Command::new("open")
                 .arg(&url)
-                .spawn()?;
+                .spawn()
+                .context("Failed to open URL")?;
         }
         
         #[cfg(target_os = "linux")]
         {
             Command::new("xdg-open")
                 .arg(&url)
-                .spawn()?;
+                .spawn()
+                .context("Failed to open URL")?;
         }
         
         Ok(())

@@ -1,6 +1,6 @@
 use anyhow::Result;
 use crossterm::{
-    event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
+    event::{self, Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind, MouseButton},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -9,12 +9,12 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph, Tabs},
+    widgets::{Block, Borders, Paragraph, Tabs, List, ListItem},
     Terminal as RatatuiTerminal,
 };
 use std::io;
 use tokio::time::{Duration, interval};
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 use crate::config::Config;
 use crate::shell::ShellSession;
@@ -24,6 +24,8 @@ use crate::session::SessionManager;
 use crate::plugins::PluginManager;
 use crate::colors::TrueColorPalette;
 use crate::translator::CommandTranslator;
+use crate::ssh_manager::SshManager;
+use crate::url_handler::UrlHandler;
 
 /// Target FPS for GPU-accelerated rendering
 const TARGET_FPS: u64 = 170;
@@ -68,6 +70,10 @@ pub struct Terminal {
     // Translation notification message and timeout
     translation_notification: Option<String>,
     notification_frames: u64,
+    // SSH connection manager
+    ssh_manager: SshManager,
+    // URL handler for clickable links
+    url_handler: UrlHandler,
 }
 
 impl Terminal {
@@ -76,6 +82,8 @@ impl Terminal {
         info!("Initializing Furnace terminal emulator with 170 FPS GPU rendering + 24-bit color");
         
         let command_translator = CommandTranslator::new(config.command_translation.enabled);
+        let ssh_manager = SshManager::new()?;
+        let url_handler = UrlHandler::new(config.url_handler.enabled);
         
         Ok(Self {
             config,
@@ -98,6 +106,8 @@ impl Terminal {
             command_buffers: Vec::with_capacity(8),
             translation_notification: None,
             notification_frames: 0,
+            ssh_manager,
+            url_handler,
         })
     }
 
@@ -107,6 +117,10 @@ impl Terminal {
         enable_raw_mode()?;
         let mut stdout = io::stdout();
         execute!(stdout, EnterAlternateScreen)?;
+        
+        // Enable mouse capture
+        execute!(stdout, crossterm::event::EnableMouseCapture)?;
+        
         let backend = CrosstermBackend::new(stdout);
         let mut terminal = RatatuiTerminal::new(backend)?;
 
@@ -135,9 +149,16 @@ impl Terminal {
                 // Handle user input (higher priority)
                 Ok(Ok(has_event)) = tokio::task::spawn_blocking(|| event::poll(Duration::from_millis(1))) => {
                     if has_event {
-                        if let Ok(Event::Key(key)) = event::read() {
-                            self.handle_key_event(key).await?;
-                            self.dirty = true; // Mark for redraw after input
+                        match event::read() {
+                            Ok(Event::Key(key)) => {
+                                self.handle_key_event(key).await?;
+                                self.dirty = true;
+                            }
+                            Ok(Event::Mouse(mouse)) => {
+                                self.handle_mouse_event(mouse).await?;
+                                self.dirty = true;
+                            }
+                            _ => {}
                         }
                     }
                 }
@@ -188,6 +209,7 @@ impl Terminal {
         }
 
         // Cleanup
+        execute!(terminal.backend_mut(), crossterm::event::DisableMouseCapture)?;
         disable_raw_mode()?;
         execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
         terminal.show_cursor()?;
@@ -196,14 +218,54 @@ impl Terminal {
         Ok(())
     }
 
+    /// Handle mouse events for URL clicking
+    async fn handle_mouse_event(&mut self, mouse: MouseEvent) -> Result<()> {
+        // Only handle Ctrl+Click for URLs
+        if let MouseEventKind::Down(MouseButton::Left) = mouse.kind {
+            if mouse.modifiers.contains(KeyModifiers::CONTROL) {
+                // Get terminal output at mouse position
+                if let Some(buffer) = self.output_buffers.get(self.active_session) {
+                    let text = String::from_utf8_lossy(buffer);
+                    let urls = UrlHandler::detect_urls(&text);
+                    
+                    // Simple check - if there are URLs, try to find one near the click
+                    // In a full implementation, you'd need to track line positions
+                    if !urls.is_empty() {
+                        // For now, just open the first URL found
+                        // A full implementation would map click coordinates to text positions
+                        if let Some(url) = urls.first() {
+                            info!("Opening URL: {}", url.url);
+                            if let Err(e) = UrlHandler::open_url(&url.url) {
+                                warn!("Failed to open URL: {}", e);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
     /// Handle keyboard events with optimal input processing
     async fn handle_key_event(&mut self, key: KeyEvent) -> Result<()> {
+        // SSH manager takes priority when visible
+        if self.ssh_manager.visible {
+            return self.handle_ssh_manager_input(key).await;
+        }
+        
         // Command palette takes priority
         if self.command_palette.visible {
             return self.handle_command_palette_input(key).await;
         }
 
         match (key.code, key.modifiers) {
+            // SSH Manager (Ctrl+Shift+S)
+            (KeyCode::Char('s'), KeyModifiers::CONTROL | KeyModifiers::SHIFT) | 
+            (KeyCode::Char('S'), KeyModifiers::CONTROL) if self.config.ssh_manager.enabled => {
+                self.ssh_manager.toggle();
+                debug!("SSH manager: {}", if self.ssh_manager.visible { "ON" } else { "OFF" });
+            }
+            
             // Command palette (Ctrl+P)
             (KeyCode::Char('p'), KeyModifiers::CONTROL) => {
                 self.command_palette.toggle();
@@ -257,13 +319,31 @@ impl Terminal {
                 }
             }
             
-            // Enter - translate command before sending
+            // Enter - translate command before sending, check for SSH
             (KeyCode::Enter, _) => {
                 if let Some(session) = self.sessions.get(self.active_session) {
                     // Get the current command
                     let command = self.command_buffers.get(self.active_session)
                         .map(|s| s.as_str())
                         .unwrap_or("");
+                    
+                    // Check if it's an SSH command and auto-show manager if enabled
+                    if self.config.ssh_manager.enabled && self.config.ssh_manager.auto_show 
+                        && command.trim().starts_with("ssh ") {
+                        
+                        // Parse and optionally save the connection
+                        if let Some(conn) = crate::ssh_manager::SshManager::parse_ssh_command(command) {
+                            let name = conn.name.clone();
+                            self.ssh_manager.add_connection(name, conn);
+                            let _ = self.ssh_manager.save_connections();
+                        }
+                        
+                        // Show SSH manager for user to select/confirm
+                        self.ssh_manager.toggle();
+                        
+                        // Don't send the command yet - let user interact with SSH manager
+                        return Ok(());
+                    }
                     
                     // Attempt translation
                     let result = self.command_translator.translate(command);
@@ -349,6 +429,58 @@ impl Terminal {
         Ok(())
     }
 
+    /// Handle SSH manager input
+    async fn handle_ssh_manager_input(&mut self, key: KeyEvent) -> Result<()> {
+        match key.code {
+            KeyCode::Esc => {
+                self.ssh_manager.toggle();
+            }
+            KeyCode::Enter => {
+                // Connect to selected SSH host
+                if let Some(conn) = self.ssh_manager.get_selected() {
+                    let cmd = conn.to_command();
+                    info!("Connecting via SSH: {}", cmd);
+                    
+                    // Send the SSH command to the shell
+                    if let Some(session) = self.sessions.get(self.active_session) {
+                        session.write_input(cmd.as_bytes()).await?;
+                        session.write_input(b"\r").await?;
+                    }
+                    
+                    // Update last used time
+                    // (In a full implementation, you'd update the connection's last_used field)
+                    
+                    // Close SSH manager
+                    self.ssh_manager.toggle();
+                }
+            }
+            KeyCode::Up => {
+                self.ssh_manager.select_previous();
+            }
+            KeyCode::Down => {
+                self.ssh_manager.select_next();
+            }
+            KeyCode::Char(c) => {
+                self.ssh_manager.filter_input.push(c);
+                self.ssh_manager.update_filter();
+            }
+            KeyCode::Backspace => {
+                self.ssh_manager.filter_input.pop();
+                self.ssh_manager.update_filter();
+            }
+            KeyCode::Delete if !self.ssh_manager.filtered_connections.is_empty() => {
+                // Delete selected connection
+                if self.ssh_manager.selected_index < self.ssh_manager.filtered_connections.len() {
+                    let name = self.ssh_manager.filtered_connections[self.ssh_manager.selected_index].clone();
+                    self.ssh_manager.remove_connection(&name);
+                    let _ = self.ssh_manager.save_connections();
+                }
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+    
     /// Handle command palette input
     async fn handle_command_palette_input(&mut self, key: KeyEvent) -> Result<()> {
         match key.code {
@@ -499,6 +631,12 @@ impl Terminal {
             f.render_widget(notification, notification_area);
         }
 
+        // Render SSH manager if visible (takes priority over command palette)
+        if self.ssh_manager.visible {
+            self.render_ssh_manager(f, content_area);
+            return; // SSH manager takes full screen focus
+        }
+
         // Render command palette if visible
         if self.command_palette.visible {
             self.render_command_palette(f, content_area);
@@ -522,6 +660,67 @@ impl Terminal {
         if self.show_resources {
             self.render_resource_monitor(f, resource_area);
         }
+    }
+
+    /// Render SSH manager overlay
+    fn render_ssh_manager(&mut self, f: &mut ratatui::Frame, area: Rect) {
+        // Create centered popup
+        let popup_area = {
+            let width = area.width.min(80);
+            let height = area.height.min(25);
+            let x = (area.width - width) / 2;
+            let y = (area.height - height) / 2;
+            Rect {
+                x: area.x + x,
+                y: area.y + y,
+                width,
+                height,
+            }
+        };
+
+        // Render connection list
+        let items: Vec<ListItem> = self.ssh_manager.filtered_connections
+            .iter()
+            .enumerate()
+            .map(|(i, name)| {
+                let conn = self.ssh_manager.get_connection(name).unwrap();
+                let content = format!(
+                    "{} ({}@{}:{})",
+                    name,
+                    conn.username,
+                    conn.host,
+                    conn.port
+                );
+                
+                let style = if i == self.ssh_manager.selected_index {
+                    Style::default()
+                        .fg(Color::Black)
+                        .bg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default().fg(Color::White)
+                };
+                
+                ListItem::new(content).style(style)
+            })
+            .collect();
+
+        let title = if self.ssh_manager.filter_input.is_empty() {
+            "SSH Connections (Ctrl+Shift+S to close, Enter to connect, Del to remove)"
+        } else {
+            &format!("SSH Connections - Filter: {}", self.ssh_manager.filter_input)
+        };
+
+        let list = List::new(items)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(title)
+                    .style(Style::default().bg(Color::Black))
+            )
+            .style(Style::default().fg(Color::White));
+
+        f.render_widget(list, popup_area);
     }
 
     /// Render command palette overlay

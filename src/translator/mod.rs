@@ -230,7 +230,7 @@ static LINUX_TO_WINDOWS_MAP: Lazy<HashMap<&'static str, CommandMapping>> = Lazy:
     });
     
     m.insert("touch", CommandMapping {
-        target_cmd: "echo.",
+        target_cmd: "type nul",
         description: "Create empty file",
         arg_translator: |args| format!(" > {}", args.trim()),
     });
@@ -275,7 +275,7 @@ static LINUX_TO_WINDOWS_MAP: Lazy<HashMap<&'static str, CommandMapping>> = Lazy:
     });
     
     m.insert("df", CommandMapping {
-        target_cmd: "wmic logicaldisk get size,freespace,caption",
+        target_cmd: "powershell Get-PSDrive -PSProvider FileSystem",
         description: "Display disk space",
         arg_translator: |_| String::new(),
     });
@@ -492,9 +492,8 @@ impl CommandTranslator {
             };
         }
         
-        // Special case: cd without arguments should be translated to pwd
-        if cmd == "cd" && self.current_os != OsType::Windows && args.is_empty() {
-            // On Linux/Mac, bare "cd" changes directory, not pwd
+        // Don't translate cd command with arguments on any platform
+        if cmd == "cd" && !args.is_empty() {
             return TranslationResult {
                 translated: false,
                 original_command: command.to_string(),
@@ -503,8 +502,12 @@ impl CommandTranslator {
             };
         }
         
-        // Don't translate cd with arguments on any platform
-        if cmd == "cd" && !args.is_empty() {
+        // Special case: translate bare "cd" to "pwd" on Windows (shows current directory)
+        if cmd == "cd" && self.current_os == OsType::Windows && args.is_empty() {
+            // On Windows, bare "cd" shows current directory like pwd
+            // Let it through for translation
+        } else if cmd == "cd" && args.is_empty() {
+            // On Linux/Mac, bare "cd" changes to home directory, not pwd
             return TranslationResult {
                 translated: false,
                 original_command: command.to_string(),
