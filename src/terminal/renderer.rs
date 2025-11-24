@@ -115,8 +115,9 @@ pub fn render_ssh_manager(f: &mut Frame, area: Rect, ssh_manager: &SshManager) {
         })
         .collect();
 
+    // Create title string - format! only when filter is not empty
     let title = if ssh_manager.filter_input.is_empty() {
-        "SSH Connections (Ctrl+Shift+S to close, Enter to connect, Del to remove)".to_string()
+        String::from("SSH Connections (Ctrl+Shift+S to close, Enter to connect, Del to remove)")
     } else {
         format!("SSH Connections - Filter: {}", ssh_manager.filter_input)
     };

@@ -796,10 +796,11 @@ impl Terminal {
             })
             .collect();
 
+        // Create title string - format! only when filter is not empty
         let title = if self.ssh_manager.filter_input.is_empty() {
-            "SSH Connections (Ctrl+Shift+S to close, Enter to connect, Del to remove)"
+            String::from("SSH Connections (Ctrl+Shift+S to close, Enter to connect, Del to remove)")
         } else {
-            &format!("SSH Connections - Filter: {}", self.ssh_manager.filter_input)
+            format!("SSH Connections - Filter: {}", self.ssh_manager.filter_input)
         };
 
         let list = List::new(items)
