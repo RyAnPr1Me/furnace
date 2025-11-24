@@ -453,6 +453,7 @@ static WINDOWS_TO_LINUX_MAP: LazyLock<HashMap<&'static str, CommandMapping>> = L
 
 impl CommandTranslator {
     /// Create a new command translator
+    #[must_use]
     pub fn new(enabled: bool) -> Self {
         let current_os = Self::detect_os();
         

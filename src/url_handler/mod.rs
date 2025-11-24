@@ -41,11 +41,13 @@ pub struct UrlHandler {
 impl UrlHandler {
     #[allow(dead_code)] // Public API
     /// Create a new URL handler
+    #[must_use]
     pub fn new(enabled: bool) -> Self {
         Self { enabled }
     }
     
     /// Detect URLs in text
+    #[must_use]
     pub fn detect_urls(text: &str) -> Vec<DetectedUrl> {
         let mut urls = Vec::new();
         

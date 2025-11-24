@@ -17,6 +17,9 @@ impl TrueColor {
     }
 
     /// Create from hex string (#RRGGBB or RRGGBB)
+    ///
+    /// # Errors
+    /// Returns an error if the hex string is not exactly 6 characters or contains invalid hex digits
     pub fn from_hex(hex: &str) -> Result<Self> {
         let hex = hex.trim_start_matches('#');
         
@@ -35,18 +38,21 @@ impl TrueColor {
     }
 
     /// Convert to hex string
+    #[must_use]
     pub fn to_hex(self) -> String {
         format!("#{:02X}{:02X}{:02X}", self.r, self.g, self.b)
     }
 
     /// Convert to ANSI escape sequence for foreground
     #[allow(dead_code)] // Public API
+    #[must_use]
     pub fn to_ansi_fg(self) -> String {
         format!("\x1b[38;2;{};{};{}m", self.r, self.g, self.b)
     }
 
     /// Convert to ANSI escape sequence for background
     #[allow(dead_code)] // Public API
+    #[must_use]
     pub fn to_ansi_bg(self) -> String {
         format!("\x1b[48;2;{};{};{}m", self.r, self.g, self.b)
     }
@@ -129,6 +135,7 @@ pub struct TrueColorPalette {
 
 impl TrueColorPalette {
     /// Create default palette
+    #[must_use]
     pub fn default_dark() -> Self {
         Self {
             black: TrueColor::from_hex("#000000").unwrap(),

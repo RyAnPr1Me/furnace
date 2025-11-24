@@ -45,6 +45,7 @@ pub type PluginCreate = unsafe fn() -> *mut dyn Plugin;
 
 impl PluginManager {
     /// Create a new plugin manager
+    #[must_use]
     pub fn new() -> Self {
         Self {
             plugins: HashMap::new(),

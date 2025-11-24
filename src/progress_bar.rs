@@ -27,6 +27,7 @@ pub struct ProgressBar {
 
 impl ProgressBar {
     /// Create a new progress bar
+    #[must_use]
     pub fn new() -> Self {
         Self {
             visible: false,
@@ -61,11 +62,13 @@ impl ProgressBar {
     }
 
     /// Get current spinner character
+    #[must_use]
     pub fn spinner_char(&self) -> char {
         self.spinner_chars[self.spinner_frame]
     }
 
     /// Get elapsed time as formatted string
+    #[must_use]
     pub fn elapsed(&self) -> String {
         if let Some(start) = self.start_time {
             let elapsed = start.elapsed();
@@ -76,6 +79,7 @@ impl ProgressBar {
     }
 
     /// Get display text for progress bar
+    #[must_use]
     pub fn display_text(&self) -> String {
         if self.visible {
             format!(
