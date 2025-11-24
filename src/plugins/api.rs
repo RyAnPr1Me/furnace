@@ -2,6 +2,7 @@
 use anyhow::Result;
 
 /// Plugin API trait that all plugins must implement
+#[allow(dead_code)] // Public API for plugin system
 pub trait PluginApi {
     /// Get plugin metadata
     fn metadata(&self) -> PluginMetadata;
@@ -21,6 +22,7 @@ pub trait PluginApi {
 
 /// Plugin metadata
 #[derive(Debug, Clone)]
+#[allow(dead_code)] // Public API for plugin system
 pub struct PluginMetadata {
     pub name: String,
     pub version: String,
@@ -30,6 +32,7 @@ pub struct PluginMetadata {
 
 /// Plugin command definition
 #[derive(Debug, Clone)]
+#[allow(dead_code)] // Public API for plugin system
 pub struct PluginCommand {
     pub name: String,
     pub description: String,
@@ -37,6 +40,7 @@ pub struct PluginCommand {
 }
 
 /// Scripting API for plugins
+#[allow(dead_code)] // Public API for plugin system
 pub trait ScriptingApi {
     /// Evaluate a script
     fn eval(&self, script: &str) -> Result<String>;
@@ -49,11 +53,13 @@ pub trait ScriptingApi {
 }
 
 /// Example plugin implementation
+#[allow(dead_code)] // Public API example for plugin system
 pub struct ExamplePlugin {
     initialized: bool,
 }
 
 impl ExamplePlugin {
+    #[allow(dead_code)] // Public API for plugin system
     pub fn new() -> Self {
         Self { initialized: false }
     }

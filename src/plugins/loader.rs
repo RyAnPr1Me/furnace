@@ -51,6 +51,7 @@ impl PluginManager {
     }
 
     /// Load a plugin from a dynamic library
+    #[allow(dead_code)] // Public API for plugin system
     pub fn load_plugin<P: AsRef<Path>>(&mut self, path: P) -> Result<()> {
         let path = path.as_ref();
         
@@ -81,6 +82,7 @@ impl PluginManager {
     }
 
     /// Unload a plugin
+    #[allow(dead_code)] // Public API for plugin system
     pub fn unload_plugin(&mut self, name: &str) -> Result<()> {
         self.plugins.remove(name)
             .context("Plugin not found")?;
@@ -88,11 +90,13 @@ impl PluginManager {
     }
 
     /// Get list of loaded plugins
+    #[allow(dead_code)] // Public API for plugin system
     pub fn list_plugins(&self) -> Vec<&str> {
         self.plugins.keys().map(|s| s.as_str()).collect()
     }
 
     /// Check if plugin is loaded
+    #[allow(dead_code)] // Public API for plugin system
     pub fn is_loaded(&self, name: &str) -> bool {
         self.plugins.contains_key(name)
     }

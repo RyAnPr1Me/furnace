@@ -49,6 +49,7 @@ pub struct CommandMapping {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)] // Public API for command translation system
 pub struct TranslationResult {
     pub translated: bool,
     pub original_command: String,
@@ -577,16 +578,19 @@ impl CommandTranslator {
     }
     
     /// Enable or disable command translation
+    #[allow(dead_code)] // Public API for command translation system
     pub fn set_enabled(&mut self, enabled: bool) {
         self.enabled = enabled;
     }
     
     /// Check if translation is enabled
+    #[allow(dead_code)] // Public API for command translation system
     pub fn is_enabled(&self) -> bool {
         self.enabled
     }
     
     /// Get current OS type
+    #[allow(dead_code)] // Public API for command translation system
     pub fn current_os(&self) -> OsType {
         self.current_os
     }

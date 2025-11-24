@@ -63,6 +63,7 @@ pub enum Action {
 
 /// Shell integration features
 #[derive(Debug, Clone)]
+#[allow(dead_code)] // Public API for shell integration system
 pub struct ShellIntegration {
     /// OSC sequences support
     pub osc_sequences: bool,
@@ -138,6 +139,7 @@ impl KeybindingManager {
     }
 
     /// Get action for key event
+    #[allow(dead_code)] // Public API for keybinding system
     pub fn get_action(&self, code: KeyCode, modifiers: KeyModifiers) -> Option<Action> {
         let key_str = match code {
             KeyCode::Char(c) => c.to_string(),
@@ -171,6 +173,7 @@ impl KeybindingManager {
     }
 
     /// Enable shell integration features
+    #[allow(dead_code)] // Public API for shell integration system
     pub fn enable_shell_integration(&mut self, feature: ShellIntegrationFeature, enabled: bool) {
         match feature {
             ShellIntegrationFeature::OscSequences => self.shell_integration.osc_sequences = enabled,
@@ -181,22 +184,26 @@ impl KeybindingManager {
     }
 
     /// Update current directory from shell
+    #[allow(dead_code)] // Public API for shell integration system
     pub fn update_directory(&mut self, dir: String) {
         self.shell_integration.current_dir = Some(dir);
     }
 
     /// Update last command from shell
+    #[allow(dead_code)] // Public API for shell integration system
     pub fn update_last_command(&mut self, command: String) {
         self.shell_integration.last_command = Some(command);
     }
 
     /// Get shell integration status
+    #[allow(dead_code)] // Public API for shell integration system
     pub fn shell_integration(&self) -> &ShellIntegration {
         &self.shell_integration
     }
 }
 
 /// Shell integration features
+#[allow(dead_code)] // Public API for shell integration system
 pub enum ShellIntegrationFeature {
     OscSequences,
     PromptDetection,

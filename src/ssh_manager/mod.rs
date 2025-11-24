@@ -138,6 +138,7 @@ impl SshManager {
     }
     
     /// Get all connection names
+    #[allow(dead_code)] // Public API for SSH manager system
     pub fn connection_names(&self) -> Vec<String> {
         self.connections.keys().cloned().collect()
     }

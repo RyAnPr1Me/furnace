@@ -24,6 +24,7 @@ static URL_REGEX: Lazy<Regex> = Lazy::new(|| {
 
 /// Represents a detected URL in terminal output
 #[derive(Debug, Clone)]
+#[allow(dead_code)] // Public API struct with fields for URL location tracking
 pub struct DetectedUrl {
     pub url: String,
     pub start_pos: usize,
