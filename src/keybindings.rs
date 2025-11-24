@@ -27,37 +27,37 @@ pub enum Action {
     PrevTab,
     SplitHorizontal,
     SplitVertical,
-    
+
     // Navigation
     FocusNextPane,
     FocusPrevPane,
-    
+
     // Editing
     Copy,
     Paste,
     SelectAll,
     Clear,
-    
+
     // Search
     Search,
     SearchNext,
     SearchPrev,
-    
+
     // Command palette
     CommandPalette,
-    
+
     // Resource monitor
     ToggleResourceMonitor,
-    
+
     // Session management
     SaveSession,
     LoadSession,
     ListSessions,
-    
+
     // Shell integration
     SendToShell(String),
     ExecuteCommand(String),
-    
+
     // Custom
     Custom(String),
 }
@@ -68,19 +68,19 @@ pub enum Action {
 pub struct ShellIntegration {
     /// OSC sequences support
     pub osc_sequences: bool,
-    
+
     /// Shell prompt detection
     pub prompt_detection: bool,
-    
+
     /// Directory tracking
     pub directory_tracking: bool,
-    
+
     /// Command tracking
     pub command_tracking: bool,
-    
+
     /// Current working directory
     pub current_dir: Option<String>,
-    
+
     /// Last command
     pub last_command: Option<String>,
 }
@@ -93,7 +93,7 @@ impl KeybindingManager {
             bindings: HashMap::new(),
             shell_integration: ShellIntegration::default(),
         };
-        
+
         manager.load_defaults();
         manager
     }
@@ -105,27 +105,27 @@ impl KeybindingManager {
         self.add_binding("w", vec!["Ctrl"], Action::CloseTab);
         self.add_binding("Tab", vec!["Ctrl"], Action::NextTab);
         self.add_binding("Tab", vec!["Ctrl", "Shift"], Action::PrevTab);
-        
+
         // Pane management
         self.add_binding("h", vec!["Ctrl", "Shift"], Action::SplitHorizontal);
         self.add_binding("v", vec!["Ctrl", "Shift"], Action::SplitVertical);
         self.add_binding("o", vec!["Ctrl"], Action::FocusNextPane);
-        
+
         // Editing
         self.add_binding("c", vec!["Ctrl", "Shift"], Action::Copy);
         self.add_binding("v", vec!["Ctrl", "Shift"], Action::Paste);
         self.add_binding("a", vec!["Ctrl", "Shift"], Action::SelectAll);
         self.add_binding("l", vec!["Ctrl"], Action::Clear);
-        
+
         // Search
         self.add_binding("f", vec!["Ctrl"], Action::Search);
         self.add_binding("n", vec!["Ctrl"], Action::SearchNext);
         self.add_binding("N", vec!["Ctrl", "Shift"], Action::SearchPrev);
-        
+
         // Features
         self.add_binding("p", vec!["Ctrl"], Action::CommandPalette);
         self.add_binding("r", vec!["Ctrl"], Action::ToggleResourceMonitor);
-        
+
         // Session management
         self.add_binding("s", vec!["Ctrl"], Action::SaveSession);
         self.add_binding("o", vec!["Ctrl", "Shift"], Action::LoadSession);
@@ -155,7 +155,7 @@ impl KeybindingManager {
             KeyCode::Right => "Right".to_string(),
             _ => return None,
         };
-        
+
         let mut mod_vec = Vec::new();
         if modifiers.contains(KeyModifiers::CONTROL) {
             mod_vec.push("Ctrl".to_string());
@@ -166,12 +166,12 @@ impl KeybindingManager {
         if modifiers.contains(KeyModifiers::ALT) {
             mod_vec.push("Alt".to_string());
         }
-        
+
         let binding = KeyBinding {
             key: key_str,
             modifiers: mod_vec,
         };
-        
+
         self.bindings.get(&binding).cloned()
     }
 
@@ -180,9 +180,15 @@ impl KeybindingManager {
     pub fn enable_shell_integration(&mut self, feature: ShellIntegrationFeature, enabled: bool) {
         match feature {
             ShellIntegrationFeature::OscSequences => self.shell_integration.osc_sequences = enabled,
-            ShellIntegrationFeature::PromptDetection => self.shell_integration.prompt_detection = enabled,
-            ShellIntegrationFeature::DirectoryTracking => self.shell_integration.directory_tracking = enabled,
-            ShellIntegrationFeature::CommandTracking => self.shell_integration.command_tracking = enabled,
+            ShellIntegrationFeature::PromptDetection => {
+                self.shell_integration.prompt_detection = enabled
+            }
+            ShellIntegrationFeature::DirectoryTracking => {
+                self.shell_integration.directory_tracking = enabled
+            }
+            ShellIntegrationFeature::CommandTracking => {
+                self.shell_integration.command_tracking = enabled
+            }
         }
     }
 
@@ -241,12 +247,9 @@ mod tests {
     #[test]
     fn test_keybinding_manager() {
         let manager = KeybindingManager::new();
-        
-        let action = manager.get_action(
-            KeyCode::Char('t'),
-            KeyModifiers::CONTROL
-        );
-        
+
+        let action = manager.get_action(KeyCode::Char('t'), KeyModifiers::CONTROL);
+
         assert!(matches!(action, Some(Action::NewTab)));
     }
 
@@ -254,7 +257,7 @@ mod tests {
     fn test_shell_integration() {
         let mut manager = KeybindingManager::new();
         manager.update_directory("/home/user".to_string());
-        
+
         assert_eq!(
             manager.shell_integration().current_dir,
             Some("/home/user".to_string())

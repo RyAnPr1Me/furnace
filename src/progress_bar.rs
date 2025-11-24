@@ -140,11 +140,11 @@ mod tests {
     fn test_spinner_animation() {
         let mut pb = ProgressBar::new();
         pb.start("test".to_string());
-        
+
         let first_char = pb.spinner_char();
         pb.tick();
         let second_char = pb.spinner_char();
-        
+
         assert_ne!(first_char, second_char);
     }
 

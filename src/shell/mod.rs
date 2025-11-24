@@ -20,7 +20,7 @@ impl ShellSession {
     /// Returns an error if PTY creation or shell process spawn fails
     pub fn new(shell_cmd: &str, working_dir: Option<&str>, rows: u16, cols: u16) -> Result<Self> {
         let pty_system = NativePtySystem::default();
-        
+
         let pty_size = PtySize {
             rows,
             cols,
@@ -28,12 +28,10 @@ impl ShellSession {
             pixel_height: 0,
         };
 
-        let pair = pty_system
-            .openpty(pty_size)
-            .context("Failed to open PTY")?;
+        let pair = pty_system.openpty(pty_size).context("Failed to open PTY")?;
 
         let mut cmd = CommandBuilder::new(shell_cmd);
-        
+
         if let Some(dir) = working_dir {
             cmd.cwd(dir);
         }
@@ -46,7 +44,10 @@ impl ShellSession {
         info!("Shell session started: {}", shell_cmd);
         debug!("PTY size: {}x{}", rows, cols);
 
-        let reader = pair.master.try_clone_reader().context("Failed to clone reader")?;
+        let reader = pair
+            .master
+            .try_clone_reader()
+            .context("Failed to clone reader")?;
         let writer = pair.master.take_writer().context("Failed to take writer")?;
 
         Ok(Self {
@@ -62,7 +63,7 @@ impl ShellSession {
     /// Returns an error if the read operation fails or the task cannot be spawned
     pub async fn read_output(&self, buffer: &mut [u8]) -> Result<usize> {
         let reader = self.reader.clone();
-        
+
         // Use spawn_blocking for the synchronous read operation
         // We pass the buffer data as a Vec to work around the lifetime/Send constraints
         let buffer_len = buffer.len();
@@ -76,8 +77,9 @@ impl ShellSession {
                 Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => Ok((0, Vec::new())),
                 Err(e) => Err(e),
             }
-        }).await;
-        
+        })
+        .await;
+
         match result {
             Ok(Ok((n, temp_buf))) => {
                 if n > 0 {
@@ -102,13 +104,11 @@ impl ShellSession {
     /// Returns an error if the write or flush operation fails
     pub async fn write_input(&self, data: &[u8]) -> Result<usize> {
         let mut writer = self.writer.lock().await;
-        
-        writer.write_all(data)
-            .context("Failed to write to shell")?;
-        
-        writer.flush()
-            .context("Failed to flush shell input")?;
-        
+
+        writer.write_all(data).context("Failed to write to shell")?;
+
+        writer.flush().context("Failed to flush shell input")?;
+
         Ok(data.len())
     }
 
@@ -119,7 +119,7 @@ impl ShellSession {
     #[allow(dead_code)] // Public API for future use
     pub async fn resize(&self, rows: u16, cols: u16) -> Result<()> {
         let pty = self.pty.lock().await;
-        
+
         pty.resize(PtySize {
             rows,
             cols,

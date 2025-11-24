@@ -1,6 +1,6 @@
-use sysinfo::{System, Disks};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+use sysinfo::{Disks, System};
 
 /// System resource monitor for displaying resource usage (optimized with caching)
 pub struct ResourceMonitor {
@@ -40,7 +40,7 @@ impl ResourceMonitor {
     #[must_use]
     pub fn new() -> Self {
         let system = System::new(); // Only initialize what's needed initially
-        
+
         Self {
             system: Arc::new(Mutex::new(system)),
             last_update: Instant::now(),
@@ -57,7 +57,7 @@ impl ResourceMonitor {
                 return stats.clone();
             }
         }
-        
+
         // Need to update - only refresh what's necessary
         if let Ok(mut system) = self.system.lock() {
             system.refresh_cpu();
@@ -72,10 +72,8 @@ impl ResourceMonitor {
         // CPU usage (average across all cores) - optimized calculation
         let cpus = system.cpus();
         let cpu_count = cpus.len().max(1);
-        let cpu_usage = cpus.iter()
-            .map(|cpu| cpu.cpu_usage())
-            .sum::<f32>() / cpu_count as f32;
-        
+        let cpu_usage = cpus.iter().map(|cpu| cpu.cpu_usage()).sum::<f32>() / cpu_count as f32;
+
         // Memory usage
         let memory_used = system.used_memory();
         let memory_total = system.total_memory();
@@ -105,12 +103,12 @@ impl ResourceMonitor {
             network_tx,
             disk_usage,
         };
-        
+
         // Cache the stats
         self.cached_stats = Some(stats.clone());
         stats
     }
-    
+
     /// Get basic network statistics (placeholder for cross-platform implementation)
     /// Returns (rx_bytes, tx_bytes)
     fn get_network_stats(&self) -> (u64, u64) {
@@ -118,13 +116,14 @@ impl ResourceMonitor {
         // For now, returns 0 to maintain API compatibility
         (0, 0)
     }
-    
+
     /// Get disk usage information
     fn get_disk_info(&self, _system: &System) -> Vec<DiskInfo> {
         // Get disk information using sysinfo's Disks API
         let disks = Disks::new_with_refreshed_list();
-        
-        disks.iter()
+
+        disks
+            .iter()
             .map(|disk| {
                 let total = disk.total_space();
                 let available = disk.available_space();
@@ -134,7 +133,7 @@ impl ResourceMonitor {
                 } else {
                     0.0
                 };
-                
+
                 DiskInfo {
                     name: disk.name().to_string_lossy().to_string(),
                     mount_point: disk.mount_point().to_string_lossy().to_string(),
@@ -181,7 +180,7 @@ mod tests {
     fn test_get_stats() {
         let mut monitor = ResourceMonitor::new();
         let stats = monitor.get_stats();
-        
+
         assert!(stats.cpu_count > 0);
         assert!(stats.memory_total > 0);
         assert!(stats.cpu_usage >= 0.0 && stats.cpu_usage <= 100.0);

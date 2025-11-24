@@ -38,27 +38,27 @@ pub struct TerminalConfig {
     /// Maximum command history entries (memory-efficient circular buffer)
     #[serde(default = "default_max_history")]
     pub max_history: usize,
-    
+
     /// Enable tabs for multiple sessions
     #[serde(default = "default_true")]
     pub enable_tabs: bool,
-    
+
     /// Enable split panes
     #[serde(default = "default_true")]
     pub enable_split_pane: bool,
-    
+
     /// Font size
     #[serde(default = "default_font_size")]
     pub font_size: u16,
-    
+
     /// Cursor style: block, underline, bar
     #[serde(default = "default_cursor_style")]
     pub cursor_style: String,
-    
+
     /// Number of scrollback lines (memory-mapped for large buffers)
     #[serde(default = "default_scrollback")]
     pub scrollback_lines: usize,
-    
+
     /// Hardware acceleration for rendering
     #[serde(default = "default_true")]
     pub hardware_acceleration: bool,
@@ -113,7 +113,7 @@ pub struct CommandTranslationConfig {
     /// Enable automatic command translation between Linux and Windows
     #[serde(default = "default_true")]
     pub enabled: bool,
-    
+
     /// Show visual notification when commands are translated
     #[serde(default = "default_true")]
     pub show_notifications: bool,
@@ -124,7 +124,7 @@ pub struct SshManagerConfig {
     /// Enable SSH connection manager
     #[serde(default = "default_true")]
     pub enabled: bool,
-    
+
     /// Auto-show SSH manager when typing ssh command
     #[serde(default = "default_true")]
     pub auto_show: bool,
@@ -255,9 +255,7 @@ impl Default for SshManagerConfig {
 
 impl Default for UrlHandlerConfig {
     fn default() -> Self {
-        Self {
-            enabled: true,
-        }
+        Self { enabled: true }
     }
 }
 
@@ -268,7 +266,7 @@ impl Config {
     /// Returns an error if the config file exists but cannot be read or parsed
     pub fn load_default() -> Result<Self> {
         let config_path = Self::default_config_path()?;
-        
+
         if config_path.exists() {
             Self::load_from_file(&config_path)
         } else {
@@ -281,12 +279,11 @@ impl Config {
     /// # Errors
     /// Returns an error if the file cannot be read or the YAML is invalid
     pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let contents = fs::read_to_string(path.as_ref())
-            .context("Failed to read config file")?;
-        
-        let config: Self = serde_yaml::from_str(&contents)
-            .context("Failed to parse config file")?;
-        
+        let contents = fs::read_to_string(path.as_ref()).context("Failed to read config file")?;
+
+        let config: Self =
+            serde_yaml::from_str(&contents).context("Failed to parse config file")?;
+
         Ok(config)
     }
 
@@ -296,17 +293,14 @@ impl Config {
     /// Returns an error if the file cannot be written or serialization fails
     #[allow(dead_code)] // Public API method
     pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> Result<()> {
-        let contents = serde_yaml::to_string(self)
-            .context("Failed to serialize config")?;
-        
+        let contents = serde_yaml::to_string(self).context("Failed to serialize config")?;
+
         if let Some(parent) = path.as_ref().parent() {
-            fs::create_dir_all(parent)
-                .context("Failed to create config directory")?;
+            fs::create_dir_all(parent).context("Failed to create config directory")?;
         }
-        
-        fs::write(path.as_ref(), contents)
-            .context("Failed to write config file")?;
-        
+
+        fs::write(path.as_ref(), contents).context("Failed to write config file")?;
+
         Ok(())
     }
 
@@ -315,9 +309,8 @@ impl Config {
     /// # Errors
     /// Returns an error if the home directory cannot be determined
     pub fn default_config_path() -> Result<PathBuf> {
-        let home = dirs::home_dir()
-            .context("Failed to get home directory")?;
-        
+        let home = dirs::home_dir().context("Failed to get home directory")?;
+
         Ok(home.join(".furnace").join("config.yaml"))
     }
 }
@@ -330,16 +323,16 @@ fn detect_default_shell() -> String {
         if which::which("pwsh").is_ok() {
             return "pwsh.exe".to_string();
         }
-        
+
         // Try PowerShell 5.1
         if which::which("powershell").is_ok() {
             return "powershell.exe".to_string();
         }
-        
+
         // Fallback to cmd
         "cmd.exe".to_string()
     }
-    
+
     #[cfg(not(windows))]
     {
         std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".to_string())
@@ -349,21 +342,21 @@ fn detect_default_shell() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_default_command_translation_config() {
         let config = CommandTranslationConfig::default();
         assert!(config.enabled);
         assert!(config.show_notifications);
     }
-    
+
     #[test]
     fn test_config_with_command_translation() {
         let config = Config::default();
         assert!(config.command_translation.enabled);
         assert!(config.command_translation.show_notifications);
     }
-    
+
     #[test]
     fn test_config_deserialization() {
         let yaml = r"

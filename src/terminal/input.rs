@@ -8,14 +8,14 @@
 //! when further refactoring is performed.
 
 use anyhow::Result;
-use crossterm::event::{KeyModifiers, MouseEvent, MouseEventKind, MouseButton};
+use crossterm::event::{KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use tracing::{info, warn};
 
 use crate::config::Config;
+use crate::progress_bar::ProgressBar;
 use crate::shell::ShellSession;
 use crate::translator::CommandTranslator;
 use crate::url_handler::UrlHandler;
-use crate::progress_bar::ProgressBar;
 
 /// URL cache refresh interval in frames (at 170 FPS, 30 frames ≈ 176ms)
 const URL_CACHE_REFRESH_FRAMES: u64 = 30;
@@ -54,7 +54,7 @@ impl InputState {
             backspace_buffer: Vec::with_capacity(BACKSPACE_BUFFER_CAPACITY),
         }
     }
-    
+
     /// Add a command buffer for a new session
     #[allow(dead_code)] // Public API
     pub fn add_session(&mut self) {
@@ -69,7 +69,7 @@ impl Default for InputState {
 }
 
 /// Handle mouse events for URL clicking
-/// 
+///
 /// Returns true if the event was handled and the terminal should be marked dirty
 #[allow(dead_code)] // Public API for future refactoring
 pub async fn handle_mouse_event(
@@ -84,7 +84,7 @@ pub async fn handle_mouse_event(
     if !config.url_handler.enabled {
         return Ok(false);
     }
-    
+
     if let MouseEventKind::Down(MouseButton::Left) = mouse.kind {
         if mouse.modifiers.contains(KeyModifiers::CONTROL) {
             // Update URL cache if output has changed (every 30 frames or ~176ms at 170fps)
@@ -95,7 +95,7 @@ pub async fn handle_mouse_event(
                     input_state.url_cache_frame = frame_count;
                 }
             }
-            
+
             // Use cached URLs instead of re-parsing
             if !input_state.cached_urls.is_empty() {
                 // For now, just open the first URL found
@@ -122,7 +122,7 @@ pub async fn process_char_input(
     command_buffer: &mut String,
 ) -> Result<()> {
     let mut input = vec![c as u8];
-    
+
     // Handle modifiers
     if modifiers.contains(KeyModifiers::CONTROL) && c.is_ascii_alphabetic() {
         // Send control character
@@ -132,7 +132,7 @@ pub async fn process_char_input(
         // Track normal character input for command translation
         command_buffer.push(c);
     }
-    
+
     session.write_input(&input).await?;
     Ok(())
 }
@@ -148,53 +148,55 @@ pub async fn process_enter(
     progress_bar: &mut ProgressBar,
 ) -> Result<Option<String>> {
     let command = command_buffer.as_str();
-    
+
     // Attempt translation
     let result = translator.translate(command);
     let mut notification = None;
-    
+
     if result.translated {
         // Command was translated - send translated version
-        info!("Translated '{}' to '{}'", result.original_command, result.final_command);
-        
+        info!(
+            "Translated '{}' to '{}'",
+            result.original_command, result.final_command
+        );
+
         // Show notification if enabled
         if config.command_translation.show_notifications {
             notification = Some(format!(
                 "Translated: {} → {}",
-                result.original_command,
-                result.final_command
+                result.original_command, result.final_command
             ));
         }
-        
+
         // Clear the shell's input line and send the translated command
         // Count Unicode characters properly
         let char_count = command.chars().count();
-        
+
         // Reuse backspace buffer to avoid allocation
         backspace_buffer.clear();
         backspace_buffer.resize(char_count, 127);
         session.write_input(backspace_buffer).await?;
-        
+
         // Then send the translated command
         session.write_input(result.final_command.as_bytes()).await?;
     }
-    
+
     // Send Enter
     session.write_input(b"\r").await?;
-    
+
     // Start progress bar for the command
     let command_to_track = if result.translated {
         result.final_command.clone()
     } else {
         command.to_string()
     };
-    
+
     if !command_to_track.trim().is_empty() {
         progress_bar.start(command_to_track);
     }
-    
+
     // Clear command buffer
     command_buffer.clear();
-    
+
     Ok(notification)
 }

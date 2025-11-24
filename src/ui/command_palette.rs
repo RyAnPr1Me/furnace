@@ -1,5 +1,5 @@
-use fuzzy_matcher::FuzzyMatcher;
 use fuzzy_matcher::skim::SkimMatcherV2;
+use fuzzy_matcher::FuzzyMatcher;
 use std::collections::VecDeque;
 use std::sync::OnceLock;
 
@@ -49,53 +49,55 @@ impl CommandPalette {
 
     /// Load default built-in commands (lazy initialization)
     fn get_commands() -> &'static [Command] {
-        DEFAULT_COMMANDS.get_or_init(|| vec![
-            Command {
-                name: "new-tab".to_string(),
-                description: "Create a new tab".to_string(),
-                aliases: vec!["tab".to_string(), "nt".to_string()],
-            },
-            Command {
-                name: "close-tab".to_string(),
-                description: "Close current tab".to_string(),
-                aliases: vec!["ct".to_string()],
-            },
-            Command {
-                name: "split-horizontal".to_string(),
-                description: "Split pane horizontally".to_string(),
-                aliases: vec!["sh".to_string(), "hsplit".to_string()],
-            },
-            Command {
-                name: "split-vertical".to_string(),
-                description: "Split pane vertically".to_string(),
-                aliases: vec!["sv".to_string(), "vsplit".to_string()],
-            },
-            Command {
-                name: "theme".to_string(),
-                description: "Change theme".to_string(),
-                aliases: vec!["t".to_string()],
-            },
-            Command {
-                name: "clear".to_string(),
-                description: "Clear terminal".to_string(),
-                aliases: vec!["cls".to_string()],
-            },
-            Command {
-                name: "config".to_string(),
-                description: "Open configuration".to_string(),
-                aliases: vec!["settings".to_string()],
-            },
-            Command {
-                name: "help".to_string(),
-                description: "Show help".to_string(),
-                aliases: vec!["?".to_string()],
-            },
-            Command {
-                name: "quit".to_string(),
-                description: "Quit application".to_string(),
-                aliases: vec!["exit".to_string(), "q".to_string()],
-            },
-        ])
+        DEFAULT_COMMANDS.get_or_init(|| {
+            vec![
+                Command {
+                    name: "new-tab".to_string(),
+                    description: "Create a new tab".to_string(),
+                    aliases: vec!["tab".to_string(), "nt".to_string()],
+                },
+                Command {
+                    name: "close-tab".to_string(),
+                    description: "Close current tab".to_string(),
+                    aliases: vec!["ct".to_string()],
+                },
+                Command {
+                    name: "split-horizontal".to_string(),
+                    description: "Split pane horizontally".to_string(),
+                    aliases: vec!["sh".to_string(), "hsplit".to_string()],
+                },
+                Command {
+                    name: "split-vertical".to_string(),
+                    description: "Split pane vertically".to_string(),
+                    aliases: vec!["sv".to_string(), "vsplit".to_string()],
+                },
+                Command {
+                    name: "theme".to_string(),
+                    description: "Change theme".to_string(),
+                    aliases: vec!["t".to_string()],
+                },
+                Command {
+                    name: "clear".to_string(),
+                    description: "Clear terminal".to_string(),
+                    aliases: vec!["cls".to_string()],
+                },
+                Command {
+                    name: "config".to_string(),
+                    description: "Open configuration".to_string(),
+                    aliases: vec!["settings".to_string()],
+                },
+                Command {
+                    name: "help".to_string(),
+                    description: "Show help".to_string(),
+                    aliases: vec!["?".to_string()],
+                },
+                Command {
+                    name: "quit".to_string(),
+                    description: "Quit application".to_string(),
+                    aliases: vec!["exit".to_string(), "q".to_string()],
+                },
+            ]
+        })
     }
 
     /// Toggle visibility
@@ -117,24 +119,20 @@ impl CommandPalette {
     /// Refresh suggestions based on current input (optimized with early returns)
     fn refresh_suggestions(&mut self) {
         self.suggestions.clear(); // Reuse existing vector capacity
-        
+
         if self.input.is_empty() {
             // Show recent history when no input (limit to 10 for performance)
-            self.suggestions.extend(
-                self.history
-                    .iter()
-                    .take(10)
-                    .map(|cmd| CommandSuggestion {
-                        command: cmd.clone(),
-                        description: "Recent command".to_string(),
-                        score: 100,
-                    })
-            );
+            self.suggestions
+                .extend(self.history.iter().take(10).map(|cmd| CommandSuggestion {
+                    command: cmd.clone(),
+                    description: "Recent command".to_string(),
+                    score: 100,
+                }));
         } else {
             // Fuzzy search through commands (optimized with early scoring)
             let commands = Self::get_commands();
             let input_lower = self.input.to_lowercase(); // Cache lowercase for faster comparison
-            
+
             for cmd in commands {
                 // Try exact prefix match first (faster than fuzzy)
                 if cmd.name.starts_with(&input_lower) {
@@ -145,7 +143,7 @@ impl CommandPalette {
                     });
                     continue;
                 }
-                
+
                 // Try matching command name with fuzzy matcher
                 if let Some(score) = self.matcher.fuzzy_match(&cmd.name, &self.input) {
                     self.suggestions.push(CommandSuggestion {
@@ -155,7 +153,7 @@ impl CommandPalette {
                     });
                     continue;
                 }
-                
+
                 // Try matching aliases
                 for alias in &cmd.aliases {
                     if let Some(score) = self.matcher.fuzzy_match(alias, &self.input) {
@@ -170,12 +168,13 @@ impl CommandPalette {
             }
 
             // Sort by score (descending) - use unstable sort for better performance
-            self.suggestions.sort_unstable_by(|a, b| b.score.cmp(&a.score));
-            
+            self.suggestions
+                .sort_unstable_by(|a, b| b.score.cmp(&a.score));
+
             // Keep only top 10 suggestions for UI performance
             self.suggestions.truncate(10);
         }
-        
+
         // Reset selection
         if !self.suggestions.is_empty() {
             self.selected_index = 0;
@@ -220,10 +219,10 @@ impl CommandPalette {
         if let Some(pos) = self.history.iter().position(|x| x == &command) {
             self.history.remove(pos);
         }
-        
+
         // Add to front
         self.history.push_front(command);
-        
+
         // Limit size
         if self.history.len() > MAX_HISTORY {
             self.history.pop_back();
@@ -261,7 +260,7 @@ mod tests {
     fn test_fuzzy_search() {
         let mut palette = CommandPalette::new();
         palette.update_input("nt".to_string());
-        
+
         assert!(!palette.suggestions.is_empty());
         assert!(palette.suggestions[0].command.contains("new-tab"));
     }
@@ -270,7 +269,7 @@ mod tests {
     fn test_navigation() {
         let mut palette = CommandPalette::new();
         palette.update_input("t".to_string());
-        
+
         assert_eq!(palette.selected_index, 0);
         palette.select_next();
         assert_eq!(palette.selected_index, 1);

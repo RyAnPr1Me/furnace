@@ -3,18 +3,18 @@ use clap::Parser;
 use tracing::Level;
 use tracing_subscriber::FmtSubscriber;
 
-mod config;
-mod shell;
-mod terminal;
-mod ui;
-mod plugins;
-mod session;
-mod keybindings;
 mod colors;
-mod translator;
-mod ssh_manager;
-mod url_handler;
+mod config;
+mod keybindings;
+mod plugins;
 mod progress_bar;
+mod session;
+mod shell;
+mod ssh_manager;
+mod terminal;
+mod translator;
+mod ui;
+mod url_handler;
 
 use config::Config;
 use terminal::Terminal;
@@ -47,12 +47,9 @@ async fn main() -> Result<()> {
         Level::INFO
     };
 
-    let subscriber = FmtSubscriber::builder()
-        .with_max_level(log_level)
-        .finish();
+    let subscriber = FmtSubscriber::builder().with_max_level(log_level).finish();
 
-    tracing::subscriber::set_global_default(subscriber)
-        .expect("setting default subscriber failed");
+    tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
 
     // Load configuration
     let config = if let Some(config_path) = args.config {
