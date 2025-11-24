@@ -45,6 +45,7 @@ impl SessionManager {
     }
 
     /// Save a session
+    #[allow(dead_code)] // Public API
     pub fn save_session(&self, session: &SavedSession) -> Result<()> {
         let session_file = self.sessions_dir.join(format!("{}.json", session.id));
         let json = serde_json::to_string_pretty(session)
@@ -57,6 +58,7 @@ impl SessionManager {
     }
 
     /// Load a session by ID
+    #[allow(dead_code)] // Public API
     pub fn load_session(&self, id: &str) -> Result<SavedSession> {
         let session_file = self.sessions_dir.join(format!("{}.json", id));
         let json = fs::read_to_string(&session_file)
@@ -69,6 +71,7 @@ impl SessionManager {
     }
 
     /// List all saved sessions
+    #[allow(dead_code)] // Public API
     pub fn list_sessions(&self) -> Result<Vec<SavedSession>> {
         let mut sessions = Vec::new();
         
@@ -92,6 +95,7 @@ impl SessionManager {
     }
 
     /// Delete a session
+    #[allow(dead_code)] // Public API
     pub fn delete_session(&self, id: &str) -> Result<()> {
         let session_file = self.sessions_dir.join(format!("{}.json", id));
         fs::remove_file(&session_file)
@@ -101,6 +105,7 @@ impl SessionManager {
     }
 
     /// Get sessions directory path
+    #[allow(dead_code)] // Public API
     pub fn sessions_dir(&self) -> &Path {
         &self.sessions_dir
     }
