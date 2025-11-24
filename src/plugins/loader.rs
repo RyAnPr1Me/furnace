@@ -9,14 +9,18 @@ pub struct PluginManager {
 }
 
 /// A loaded plugin
+#[allow(dead_code)] // Public API for plugin system
 pub struct LoadedPlugin {
     #[allow(dead_code)]
     library: Library,
+    #[allow(dead_code)] // Public API field
     pub name: String,
+    #[allow(dead_code)] // Public API field
     pub version: String,
 }
 
 /// Plugin API trait that plugins must implement
+#[allow(dead_code)] // Public API trait
 pub trait Plugin {
     /// Get plugin name
     fn name(&self) -> &str;
@@ -35,6 +39,7 @@ pub trait Plugin {
 }
 
 /// Function signature for plugin entry point
+#[allow(dead_code)] // Public API type
 pub type PluginCreate = unsafe fn() -> *mut dyn Plugin;
 
 impl PluginManager {

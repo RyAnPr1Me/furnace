@@ -31,6 +31,9 @@ Furnace is built with **Rust** for:
 - **Shell Integration**: Advanced shell integration with directory tracking and OSC sequences
 - **Command History**: Efficient circular buffer for command history
 - **Smart Scrollback**: Memory-mapped large scrollback buffers
+- **Cross-Platform Command Translation**: Automatic translation between Linux and Windows commands (ls ⟷ dir, cat ⟷ type, etc.)
+- **SSH Connection Manager**: Built-in manager for storing and quickly accessing SSH connections
+- **Clickable URLs**: Ctrl+Click support for opening URLs directly from terminal output
 
 ### Performance Optimizations
 - **Zero-cost abstractions**: No runtime overhead
@@ -127,12 +130,24 @@ keybindings:
   paste: "Ctrl+Shift+V"
   search: "Ctrl+F"
   clear: "Ctrl+L"
+
+command_translation:
+  enabled: true                # Enable automatic command translation
+  show_notifications: true     # Show green notification when commands are translated
+
+ssh_manager:
+  enabled: true                # Enable SSH connection manager
+  auto_show: true              # Auto-show manager when typing 'ssh' command
+
+url_handler:
+  enabled: true                # Enable clickable URLs with Ctrl+Click
 ```
 
 ## Key Bindings
 
 | Action | Default Key |
 |--------|-------------|
+| **SSH Manager** | `Ctrl+Shift+S` |
 | **Command Palette** | `Ctrl+P` |
 | **Resource Monitor** | `Ctrl+R` |
 | **Save Session** | `Ctrl+S` |
@@ -223,6 +238,48 @@ Smart command completion:
 - Tab to cycle through suggestions
 - Context-aware completions
 
+### Cross-Platform Command Translation
+Automatic translation between Linux and Windows commands:
+- **On Windows**: Translates Linux commands to Windows equivalents
+  - `ls` → `dir`
+  - `cat` → `type`
+  - `rm` → `del`
+  - `clear` → `cls`
+  - `pwd` → `cd`
+  - `grep` → `findstr`
+  - `ps` → `tasklist`
+  - `kill` → `taskkill`
+  - And 10+ more commands
+- **On Linux/Mac**: Translates Windows commands to Linux equivalents
+  - `dir` → `ls`
+  - `type` → `cat`
+  - `del` → `rm`
+  - `cls` → `clear`
+  - `findstr` → `grep`
+  - `tasklist` → `ps`
+  - `taskkill` → `kill`
+  - And more
+- **Smart Argument Translation**: Preserves arguments and flags where possible
+- **Visual Feedback**: Shows green notification when commands are translated
+- **Configurable**: Enable/disable translation and notifications in config.yaml
+
+### SSH Connection Manager
+Built-in SSH connection management:
+- **Store SSH Connections**: Save frequently used SSH connections
+- **Quick Access**: Quickly connect to saved hosts
+- **Connection Details**: Store host, port, username, and SSH key path
+- **Auto-Detection**: Detects when you type 'ssh' commands
+- **Persistent Storage**: Connections saved in `~/.furnace/ssh_connections.json`
+- **Search/Filter**: Filter connections by name, host, or username
+
+### Clickable URLs
+Interactive URL handling:
+- **Auto-Detection**: Automatically detects URLs in terminal output
+- **Ctrl+Click**: Open URLs in default browser with Ctrl+Click
+- **Support**: Handles http://, https://, and www. URLs
+- **Cross-Platform**: Works on Windows, macOS, and Linux
+- **Visual Feedback**: URLs are highlighted when hoverable
+
 ## Architecture
 
 Furnace is designed with performance and safety as top priorities:
@@ -236,6 +293,9 @@ furnace/
 │   ├── shell/            # PTY and shell session management
 │   ├── ui/               # UI rendering (hardware-accelerated)
 │   ├── plugins/          # Plugin system (safe FFI, dynamic loading)
+│   ├── translator/       # Cross-platform command translation
+│   ├── ssh_manager/      # SSH connection manager
+│   ├── url_handler/      # URL detection and opening
 │   ├── session.rs        # Session management (save/restore)
 │   ├── keybindings.rs    # Enhanced keybinding system with shell integration
 │   └── colors.rs         # 24-bit true color support

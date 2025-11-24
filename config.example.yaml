@@ -85,3 +85,30 @@ keybindings:
 # Plugins to load (optional)
 plugins: []
   # - "~/.furnace/plugins/my_plugin.so"
+
+# Command translation (cross-platform compatibility)
+command_translation:
+  # Enable automatic translation of commands between Linux and Windows
+  # When enabled on Windows: translates Linux commands (ls, cat, etc.) to Windows equivalents (dir, type, etc.)
+  # When enabled on Linux/Mac: translates Windows commands (dir, cls, etc.) to Linux equivalents (ls, clear, etc.)
+  enabled: true
+  
+  # Show visual notification when commands are translated
+  # Displays a green notification bar showing the translation that occurred
+  show_notifications: true
+
+# SSH Connection Manager
+ssh_manager:
+  # Enable built-in SSH connection manager
+  # Stores SSH connections for quick access
+  enabled: true
+  
+  # Auto-show SSH manager when typing 'ssh' command
+  # Allows quick selection of saved connections
+  auto_show: true
+
+# URL Handler
+url_handler:
+  # Enable clickable URLs with Ctrl+Click
+  # Automatically detects URLs in terminal output
+  enabled: true

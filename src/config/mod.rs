@@ -17,6 +17,12 @@ pub struct Config {
     pub keybindings: KeyBindings,
     #[serde(default)]
     pub plugins: Vec<String>,
+    #[serde(default)]
+    pub command_translation: CommandTranslationConfig,
+    #[serde(default)]
+    pub ssh_manager: SshManagerConfig,
+    #[serde(default)]
+    pub url_handler: UrlHandlerConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -100,6 +106,35 @@ pub struct KeyBindings {
     pub paste: String,
     pub search: String,
     pub clear: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CommandTranslationConfig {
+    /// Enable automatic command translation between Linux and Windows
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    
+    /// Show visual notification when commands are translated
+    #[serde(default = "default_true")]
+    pub show_notifications: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SshManagerConfig {
+    /// Enable SSH connection manager
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    
+    /// Auto-show SSH manager when typing ssh command
+    #[serde(default = "default_true")]
+    pub auto_show: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UrlHandlerConfig {
+    /// Enable clickable URLs with Ctrl+Click
+    #[serde(default = "default_true")]
+    pub enabled: bool,
 }
 
 // Default value functions
@@ -200,8 +235,37 @@ impl Default for KeyBindings {
     }
 }
 
+impl Default for CommandTranslationConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            show_notifications: true,
+        }
+    }
+}
+
+impl Default for SshManagerConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            auto_show: true,
+        }
+    }
+}
+
+impl Default for UrlHandlerConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+        }
+    }
+}
+
 impl Config {
     /// Load configuration from default location
+    ///
+    /// # Errors
+    /// Returns an error if the config file exists but cannot be read or parsed
     pub fn load_default() -> Result<Self> {
         let config_path = Self::default_config_path()?;
         
@@ -213,6 +277,9 @@ impl Config {
     }
 
     /// Load configuration from a specific file
+    ///
+    /// # Errors
+    /// Returns an error if the file cannot be read or the YAML is invalid
     pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
         let contents = fs::read_to_string(path.as_ref())
             .context("Failed to read config file")?;
@@ -224,6 +291,10 @@ impl Config {
     }
 
     /// Save configuration to file
+    ///
+    /// # Errors
+    /// Returns an error if the file cannot be written or serialization fails
+    #[allow(dead_code)] // Public API method
     pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> Result<()> {
         let contents = serde_yaml::to_string(self)
             .context("Failed to serialize config")?;
@@ -240,6 +311,9 @@ impl Config {
     }
 
     /// Get default configuration path
+    ///
+    /// # Errors
+    /// Returns an error if the home directory cannot be determined
     pub fn default_config_path() -> Result<PathBuf> {
         let home = dirs::home_dir()
             .context("Failed to get home directory")?;
@@ -269,5 +343,36 @@ fn detect_default_shell() -> String {
     #[cfg(not(windows))]
     {
         std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn test_default_command_translation_config() {
+        let config = CommandTranslationConfig::default();
+        assert!(config.enabled);
+        assert!(config.show_notifications);
+    }
+    
+    #[test]
+    fn test_config_with_command_translation() {
+        let config = Config::default();
+        assert!(config.command_translation.enabled);
+        assert!(config.command_translation.show_notifications);
+    }
+    
+    #[test]
+    fn test_config_deserialization() {
+        let yaml = r"
+command_translation:
+  enabled: false
+  show_notifications: false
+";
+        let config: Config = serde_yaml::from_str(yaml).unwrap();
+        assert!(!config.command_translation.enabled);
+        assert!(!config.command_translation.show_notifications);
     }
 }

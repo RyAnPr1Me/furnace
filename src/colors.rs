@@ -11,7 +11,7 @@ pub struct TrueColor {
 
 impl TrueColor {
     /// Create a new true color from RGB values
-    pub fn new(r: u8, g: u8, b: u8) -> Self {
+    pub const fn new(r: u8, g: u8, b: u8) -> Self {
         Self { r, g, b }
     }
 
@@ -34,17 +34,17 @@ impl TrueColor {
     }
 
     /// Convert to hex string
-    pub fn to_hex(&self) -> String {
+    pub fn to_hex(self) -> String {
         format!("#{:02X}{:02X}{:02X}", self.r, self.g, self.b)
     }
 
     /// Convert to ANSI escape sequence for foreground
-    pub fn to_ansi_fg(&self) -> String {
+    pub fn to_ansi_fg(self) -> String {
         format!("\x1b[38;2;{};{};{}m", self.r, self.g, self.b)
     }
 
     /// Convert to ANSI escape sequence for background
-    pub fn to_ansi_bg(&self) -> String {
+    pub fn to_ansi_bg(self) -> String {
         format!("\x1b[48;2;{};{};{}m", self.r, self.g, self.b)
     }
 
