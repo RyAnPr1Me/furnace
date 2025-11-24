@@ -31,6 +31,7 @@ pub struct SshConnection {
 
 impl SshConnection {
     /// Format as SSH command string
+    #[must_use]
     pub fn to_command(&self) -> String {
         let mut cmd = format!("ssh {}@{}", self.username, self.host);
         
@@ -191,6 +192,7 @@ impl SshManager {
     }
     
     /// Get currently selected connection
+    #[must_use]
     pub fn get_selected(&self) -> Option<&SshConnection> {
         if self.selected_index < self.filtered_connections.len() {
             let name = &self.filtered_connections[self.selected_index];
@@ -201,6 +203,7 @@ impl SshManager {
     }
     
     /// Parse SSH command and create connection
+    #[must_use]
     pub fn parse_ssh_command(command: &str) -> Option<SshConnection> {
         let parts: Vec<&str> = command.split_whitespace().collect();
         

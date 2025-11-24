@@ -197,6 +197,7 @@ impl CommandPalette {
     }
 
     /// Get currently selected suggestion
+    #[must_use]
     pub fn get_selected(&self) -> Option<&CommandSuggestion> {
         self.suggestions.get(self.selected_index)
     }

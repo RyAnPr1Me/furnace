@@ -478,6 +478,7 @@ impl CommandTranslator {
     }
     
     /// Translate a command if translation is enabled and applicable
+    #[must_use]
     pub fn translate(&self, command: &str) -> TranslationResult {
         let command = command.trim();
         
@@ -586,12 +587,14 @@ impl CommandTranslator {
     
     /// Check if translation is enabled
     #[allow(dead_code)] // Public API
+    #[must_use]
     pub fn is_enabled(&self) -> bool {
         self.enabled
     }
     
     /// Get current OS type
     #[allow(dead_code)] // Public API
+    #[must_use]
     pub fn current_os(&self) -> OsType {
         self.current_os
     }
