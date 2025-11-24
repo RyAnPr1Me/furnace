@@ -106,6 +106,7 @@ impl SessionManager {
 
     /// Get sessions directory path
     #[allow(dead_code)] // Public API
+    #[must_use]
     pub fn sessions_dir(&self) -> &Path {
         &self.sessions_dir
     }
