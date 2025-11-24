@@ -1,6 +1,7 @@
 use std::collections::VecDeque;
 
 /// Advanced autocomplete system for shell commands
+#[allow(dead_code)] // Public API for autocomplete feature
 pub struct Autocomplete {
     history: VecDeque<String>,
     current_suggestions: Vec<String>,
@@ -19,6 +20,7 @@ impl Autocomplete {
     }
 
     /// Add command to history
+    #[allow(dead_code)] // Public API
     pub fn add_to_history(&mut self, command: String) {
         if command.trim().is_empty() {
             return;
@@ -39,6 +41,7 @@ impl Autocomplete {
     }
 
     /// Get suggestions for prefix
+    #[allow(dead_code)] // Public API
     pub fn get_suggestions(&mut self, prefix: &str) -> Vec<String> {
         self.prefix = prefix.to_string();
         self.current_index = 0;
@@ -69,6 +72,7 @@ impl Autocomplete {
     }
 
     /// Get next suggestion (for Tab completion)
+    #[allow(dead_code)] // Public API
     pub fn next_suggestion(&mut self) -> Option<String> {
         if self.current_suggestions.is_empty() {
             return None;
@@ -96,6 +100,7 @@ impl Autocomplete {
     }
 
     /// Common commands for different platforms
+    #[allow(dead_code)] // Used by get_suggestions
     fn common_commands() -> Vec<&'static str> {
         vec![
             // Unix/Linux/Mac
@@ -122,14 +127,14 @@ impl Autocomplete {
     }
 
     /// Get history (for up/down arrow navigation)
-    pub fn get_history(&self) -> &VecDeque<String> {
     #[allow(dead_code)] // Public API
+    pub fn get_history(&self) -> &VecDeque<String> {
         &self.history
     }
 
     /// Clear history
-    pub fn clear_history(&mut self) {
     #[allow(dead_code)] // Public API
+    pub fn clear_history(&mut self) {
         self.history.clear();
         self.current_suggestions.clear();
         self.current_index = 0;

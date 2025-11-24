@@ -110,8 +110,8 @@ impl Themes {
     }
 
     /// Light theme
-    pub fn light() -> Theme {
     #[allow(dead_code)] // Public API
+    pub fn light() -> Theme {
         Theme {
             name: "Light".to_string(),
             colors: ColorPalette {
@@ -156,9 +156,9 @@ impl Themes {
     }
 
     /// Nord theme
+    #[allow(dead_code)] // Public API
     pub fn nord() -> Theme {
         Theme {
-    #[allow(dead_code)] // Public API
             name: "Nord".to_string(),
             colors: ColorPalette {
                 black: "#3B4252".to_string(),
@@ -202,10 +202,10 @@ impl Themes {
     }
 
     /// Get all built-in themes
+    #[allow(dead_code)] // Public API
     pub fn all() -> HashMap<String, Theme> {
         let mut themes = HashMap::new();
         themes.insert("dark".to_string(), Self::dark());
-    #[allow(dead_code)] // Public API
         themes.insert("light".to_string(), Self::light());
         themes.insert("nord".to_string(), Self::nord());
         themes

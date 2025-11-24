@@ -6,11 +6,13 @@ use std::path::{Path, PathBuf};
 use chrono::{DateTime, Utc};
 
 /// Session manager for saving and restoring terminal sessions
+#[allow(dead_code)] // Public API for session management
 pub struct SessionManager {
     sessions_dir: PathBuf,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)] // Public API
 pub struct SavedSession {
     pub id: String,
     pub name: String,
@@ -22,6 +24,7 @@ pub struct SavedSession {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)] // Public API
 pub struct TabState {
     pub name: String,
     pub working_dir: String,
