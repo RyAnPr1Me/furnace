@@ -37,6 +37,7 @@ pub struct DiskInfo {
 
 impl ResourceMonitor {
     /// Create a new resource monitor (optimized initialization)
+    #[must_use]
     pub fn new() -> Self {
         let system = System::new(); // Only initialize what's needed initially
         
@@ -147,6 +148,7 @@ impl ResourceMonitor {
     }
 
     /// Format bytes to human-readable format
+    #[must_use]
     pub fn format_bytes(bytes: u64) -> String {
         const UNITS: &[&str] = &["B", "KB", "MB", "GB", "TB"];
         let mut size = bytes as f64;

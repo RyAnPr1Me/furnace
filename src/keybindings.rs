@@ -87,6 +87,7 @@ pub struct ShellIntegration {
 
 impl KeybindingManager {
     /// Create new keybinding manager with defaults
+    #[must_use]
     pub fn new() -> Self {
         let mut manager = Self {
             bindings: HashMap::new(),

@@ -10,6 +10,7 @@ pub struct Autocomplete {
 }
 
 impl Autocomplete {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             history: VecDeque::with_capacity(1000),

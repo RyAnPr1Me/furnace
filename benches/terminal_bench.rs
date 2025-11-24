@@ -4,14 +4,14 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion, Benchmark
 fn bench_output_processing(c: &mut Criterion) {
     let mut group = c.benchmark_group("output_processing");
     
-    for size in [1024, 4096, 8192, 16384].iter() {
+    for size in &[1024, 4096, 8192, 16384] {
         group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, &size| {
             let data = vec![b'A'; size];
-            let mut buffer = Vec::with_capacity(size * 2);
             
             b.iter(|| {
-                buffer.clear();
+                let mut buffer = Vec::with_capacity(size * 2);
                 buffer.extend_from_slice(black_box(&data));
+                buffer
             });
         });
     }

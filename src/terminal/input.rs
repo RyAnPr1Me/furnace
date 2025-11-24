@@ -43,6 +43,7 @@ pub struct InputState {
 impl InputState {
     /// Create a new input state
     #[allow(dead_code)] // Public API
+    #[must_use]
     pub fn new() -> Self {
         Self {
             command_buffers: Vec::with_capacity(8),

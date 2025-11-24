@@ -35,6 +35,7 @@ pub struct Command {
 }
 
 impl CommandPalette {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             visible: false,
