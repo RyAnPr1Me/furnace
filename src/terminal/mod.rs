@@ -304,7 +304,7 @@ impl Terminal {
             }
 
             // Quit (Ctrl+C or Ctrl+D)
-            (KeyCode::Char('c' | 'd'), KeyModifiers::CONTROL) => {
+            (KeyCode::Char('c'), KeyModifiers::CONTROL) | (KeyCode::Char('d'), KeyModifiers::CONTROL) => {
                 debug!("Quit signal received");
                 self.should_quit = true;
             }
