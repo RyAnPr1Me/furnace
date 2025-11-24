@@ -1,9 +1,9 @@
 // UI module for advanced rendering features
-pub mod panes;
-pub mod themes;
-pub mod resource_monitor;
-pub mod command_palette;
 pub mod autocomplete;
+pub mod command_palette;
+pub mod panes;
+pub mod resource_monitor;
+pub mod themes;
 
 // Advanced rendering features:
 // - Split panes (implemented in panes.rs)

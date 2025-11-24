@@ -12,14 +12,14 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph, Tabs, List, ListItem},
+    widgets::{Block, Borders, List, ListItem, Paragraph, Tabs},
     Frame,
 };
 
+use crate::progress_bar::ProgressBar;
 use crate::ssh_manager::SshManager;
 use crate::ui::command_palette::CommandPalette;
 use crate::ui::resource_monitor::ResourceMonitor;
-use crate::progress_bar::ProgressBar;
 
 /// Create a centered popup area within the given parent area
 ///
@@ -66,7 +66,7 @@ pub fn render_tabs(f: &mut Frame, area: Rect, sessions_count: usize, active_sess
                 .fg(Color::Yellow)
                 .add_modifier(Modifier::BOLD),
         );
-    
+
     f.render_widget(tabs, area);
 }
 
@@ -74,7 +74,12 @@ pub fn render_tabs(f: &mut Frame, area: Rect, sessions_count: usize, active_sess
 #[allow(dead_code)] // Public API for future refactoring
 pub fn render_notification(f: &mut Frame, area: Rect, msg: &str) {
     let notification = Paragraph::new(msg)
-        .style(Style::default().fg(Color::Green).bg(Color::Black).add_modifier(Modifier::BOLD))
+        .style(
+            Style::default()
+                .fg(Color::Green)
+                .bg(Color::Black)
+                .add_modifier(Modifier::BOLD),
+        )
         .block(Block::default().borders(Borders::NONE));
     f.render_widget(notification, area);
 }
@@ -84,7 +89,12 @@ pub fn render_notification(f: &mut Frame, area: Rect, msg: &str) {
 pub fn render_progress_bar(f: &mut Frame, area: Rect, progress_bar: &ProgressBar) {
     let progress_text = progress_bar.display_text();
     let progress_widget = Paragraph::new(progress_text)
-        .style(Style::default().fg(Color::Cyan).bg(Color::Black).add_modifier(Modifier::BOLD))
+        .style(
+            Style::default()
+                .fg(Color::Cyan)
+                .bg(Color::Black)
+                .add_modifier(Modifier::BOLD),
+        )
         .block(Block::default().borders(Borders::NONE));
     f.render_widget(progress_widget, area);
 }
@@ -95,20 +105,15 @@ pub fn render_ssh_manager(f: &mut Frame, area: Rect, ssh_manager: &SshManager) {
     let popup_area = centered_popup(area, 80, 25);
 
     // Render connection list - use filter_map to safely handle missing connections
-    let items: Vec<ListItem> = ssh_manager.filtered_connections
+    let items: Vec<ListItem> = ssh_manager
+        .filtered_connections
         .iter()
         .enumerate()
         .filter_map(|(i, name)| {
             // Safely get connection - returns None if not found
             ssh_manager.get_connection(name).map(|conn| {
-                let content = format!(
-                    "{} ({}@{}:{})",
-                    name,
-                    conn.username,
-                    conn.host,
-                    conn.port
-                );
-                
+                let content = format!("{} ({}@{}:{})", name, conn.username, conn.host, conn.port);
+
                 let style = if i == ssh_manager.selected_index {
                     Style::default()
                         .fg(Color::Black)
@@ -117,7 +122,7 @@ pub fn render_ssh_manager(f: &mut Frame, area: Rect, ssh_manager: &SshManager) {
                 } else {
                     Style::default().fg(Color::White)
                 };
-                
+
                 ListItem::new(content).style(style)
             })
         })
@@ -135,7 +140,7 @@ pub fn render_ssh_manager(f: &mut Frame, area: Rect, ssh_manager: &SshManager) {
             Block::default()
                 .borders(Borders::ALL)
                 .title(title)
-                .style(Style::default().bg(Color::Black))
+                .style(Style::default().bg(Color::Black)),
         )
         .style(Style::default().fg(Color::White));
 
@@ -148,8 +153,7 @@ pub fn render_command_palette(f: &mut Frame, area: Rect, command_palette: &Comma
     let popup_area = centered_popup(area, 80, 20);
 
     // Clear background
-    let bg = Block::default()
-        .style(Style::default().bg(Color::Black));
+    let bg = Block::default().style(Style::default().bg(Color::Black));
     f.render_widget(bg, area);
 
     // Render palette
@@ -161,37 +165,53 @@ pub fn render_command_palette(f: &mut Frame, area: Rect, command_palette: &Comma
     // Input box
     let input = Paragraph::new(format!("> {}", command_palette.input))
         .style(Style::default().fg(Color::Cyan))
-        .block(Block::default()
-            .borders(Borders::ALL)
-            .title("Command Palette (Esc to close)")
-            .border_style(Style::default().fg(Color::Cyan)));
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title("Command Palette (Esc to close)")
+                .border_style(Style::default().fg(Color::Cyan)),
+        );
     f.render_widget(input, palette_chunks[0]);
 
     // Suggestions
-    let suggestions: Vec<Line> = command_palette.suggestions
+    let suggestions: Vec<Line> = command_palette
+        .suggestions
         .iter()
         .enumerate()
         .map(|(i, s)| {
             let style = if i == command_palette.selected_index {
-                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD)
             } else {
                 Style::default().fg(Color::White)
             };
             Line::from(vec![
                 Span::styled(format!("  {} ", s.command), style),
-                Span::styled(format!("- {}", s.description), Style::default().fg(Color::Gray)),
+                Span::styled(
+                    format!("- {}", s.description),
+                    Style::default().fg(Color::Gray),
+                ),
             ])
         })
         .collect();
 
-    let suggestions_widget = Paragraph::new(suggestions)
-        .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::Cyan)));
+    let suggestions_widget = Paragraph::new(suggestions).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Cyan)),
+    );
     f.render_widget(suggestions_widget, palette_chunks[1]);
 }
 
 /// Render terminal output
 #[allow(dead_code)] // Public API for future refactoring
-pub fn render_terminal_output(f: &mut Frame, area: Rect, output_buffers: &[Vec<u8>], active_session: usize) {
+pub fn render_terminal_output(
+    f: &mut Frame,
+    area: Rect,
+    output_buffers: &[Vec<u8>],
+    active_session: usize,
+) {
     let output = if let Some(buffer) = output_buffers.get(active_session) {
         String::from_utf8_lossy(buffer).to_string()
     } else {
@@ -209,7 +229,7 @@ pub fn render_terminal_output(f: &mut Frame, area: Rect, output_buffers: &[Vec<u
 #[allow(dead_code)] // Public API for future refactoring
 pub fn render_resource_monitor(f: &mut Frame, area: Rect, resource_monitor: &mut ResourceMonitor) {
     let stats = resource_monitor.get_stats();
-    
+
     let text = format!(
         " CPU: {:.1}% ({} cores) | Memory: {} / {} ({:.1}%) | Processes: {} | Network: ↓{} ↑{} ",
         stats.cpu_usage,
@@ -225,6 +245,6 @@ pub fn render_resource_monitor(f: &mut Frame, area: Rect, resource_monitor: &mut
     let resource_widget = Paragraph::new(text)
         .style(Style::default().fg(Color::Green).bg(Color::Black))
         .block(Block::default().borders(Borders::TOP));
-    
+
     f.render_widget(resource_widget, area);
 }

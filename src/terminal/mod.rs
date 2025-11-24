@@ -16,7 +16,9 @@ pub mod renderer;
 
 use anyhow::Result;
 use crossterm::{
-    event::{self, Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind, MouseButton},
+    event::{
+        self, Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
+    },
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -25,24 +27,26 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph, Tabs, List, ListItem},
+    widgets::{Block, Borders, List, ListItem, Paragraph, Tabs},
     Terminal as RatatuiTerminal,
 };
 use std::io;
-use tokio::time::{Duration, interval};
+use tokio::time::{interval, Duration};
 use tracing::{debug, info, warn};
 
-use crate::config::Config;
-use crate::shell::ShellSession;
-use crate::ui::{command_palette::CommandPalette, resource_monitor::ResourceMonitor, autocomplete::Autocomplete};
-use crate::keybindings::KeybindingManager;
-use crate::session::SessionManager;
-use crate::plugins::PluginManager;
 use crate::colors::TrueColorPalette;
-use crate::translator::CommandTranslator;
-use crate::ssh_manager::SshManager;
-use crate::url_handler::UrlHandler;
+use crate::config::Config;
+use crate::keybindings::KeybindingManager;
+use crate::plugins::PluginManager;
 use crate::progress_bar::ProgressBar;
+use crate::session::SessionManager;
+use crate::shell::ShellSession;
+use crate::ssh_manager::SshManager;
+use crate::translator::CommandTranslator;
+use crate::ui::{
+    autocomplete::Autocomplete, command_palette::CommandPalette, resource_monitor::ResourceMonitor,
+};
+use crate::url_handler::UrlHandler;
 
 /// Target FPS for GPU-accelerated rendering
 const TARGET_FPS: u64 = 170;
@@ -115,10 +119,10 @@ impl Terminal {
     /// Returns an error if SSH manager or session manager initialization fails
     pub fn new(config: Config) -> Result<Self> {
         info!("Initializing Furnace terminal emulator with 170 FPS GPU rendering + 24-bit color");
-        
+
         let command_translator = CommandTranslator::new(config.command_translation.enabled);
         let ssh_manager = SshManager::new()?;
-        
+
         Ok(Self {
             config,
             sessions: Vec::with_capacity(8), // Pre-allocate for performance
@@ -133,7 +137,7 @@ impl Terminal {
             session_manager: SessionManager::new()?,
             plugin_manager: PluginManager::new(),
             color_palette: TrueColorPalette::default_dark(),
-            dirty: true, // Initial draw needed
+            dirty: true,                              // Initial draw needed
             read_buffer: vec![0u8; READ_BUFFER_SIZE], // Pre-allocated reusable buffer
             frame_count: 0,
             command_translator,
@@ -157,10 +161,10 @@ impl Terminal {
         enable_raw_mode()?;
         let mut stdout = io::stdout();
         execute!(stdout, EnterAlternateScreen)?;
-        
+
         // Enable mouse capture
         execute!(stdout, crossterm::event::EnableMouseCapture)?;
-        
+
         let backend = CrosstermBackend::new(stdout);
         let mut terminal = RatatuiTerminal::new(backend)?;
 
@@ -172,7 +176,7 @@ impl Terminal {
             rows,
             cols,
         )?;
-        
+
         self.sessions.push(session);
         self.output_buffers.push(Vec::with_capacity(1024 * 1024)); // 1MB buffer
         self.command_buffers.push(String::new()); // Initialize command buffer
@@ -202,7 +206,7 @@ impl Terminal {
                         }
                     }
                 }
-                
+
                 // Read shell output (non-blocking, optimized with reusable buffer)
                 _ = async {
                     if let Some(session) = self.sessions.get(self.active_session) {
@@ -211,17 +215,17 @@ impl Terminal {
                             if n > 0 {
                                 self.output_buffers[self.active_session].extend_from_slice(&self.read_buffer[..n]);
                                 self.dirty = true; // Mark for redraw
-                                
+
                                 // Check if we got a prompt (command completion detection)
                                 if self.progress_bar.visible {
                                     let recent_output = String::from_utf8_lossy(&self.read_buffer[..n]);
                                     // Look for common shell prompt indicators
-                                    if recent_output.contains("$ ") || recent_output.contains("> ") 
+                                    if recent_output.contains("$ ") || recent_output.contains("> ")
                                         || recent_output.contains("# ") || recent_output.contains("% ") {
                                         self.progress_bar.stop();
                                     }
                                 }
-                                
+
                                 // Keep buffer size manageable with efficient drain
                                 let max_buffer = self.config.terminal.scrollback_lines * 256;
                                 if self.output_buffers[self.active_session].len() > max_buffer {
@@ -232,7 +236,7 @@ impl Terminal {
                         }
                     }
                 } => {}
-                
+
                 // Render at consistent frame rate (only if dirty flag is set)
                 _ = render_interval.tick() => {
                     // Update progress bar spinner
@@ -240,7 +244,7 @@ impl Terminal {
                         self.progress_bar.tick();
                         self.dirty = true;
                     }
-                    
+
                     // Decrement notification counter
                     if self.notification_frames > 0 {
                         self.notification_frames -= 1;
@@ -249,12 +253,12 @@ impl Terminal {
                         }
                         self.dirty = true;
                     }
-                    
+
                     if self.dirty {
                         terminal.draw(|f| self.render(f))?;
                         self.dirty = false; // Clear dirty flag
                         self.frame_count += 1;
-                        
+
                         // Log performance metrics every 1000 frames
                         if self.frame_count.is_multiple_of(1000) {
                             debug!("Rendered {} frames", self.frame_count);
@@ -265,7 +269,10 @@ impl Terminal {
         }
 
         // Cleanup
-        execute!(terminal.backend_mut(), crossterm::event::DisableMouseCapture)?;
+        execute!(
+            terminal.backend_mut(),
+            crossterm::event::DisableMouseCapture
+        )?;
         disable_raw_mode()?;
         execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
         terminal.show_cursor()?;
@@ -280,7 +287,7 @@ impl Terminal {
         if !self.config.url_handler.enabled {
             return Ok(());
         }
-        
+
         if let MouseEventKind::Down(MouseButton::Left) = mouse.kind {
             if mouse.modifiers.contains(KeyModifiers::CONTROL) {
                 // Update URL cache if output has changed (every 30 frames or ~176ms at 170fps)
@@ -291,7 +298,7 @@ impl Terminal {
                         self.url_cache_frame = self.frame_count;
                     }
                 }
-                
+
                 // Use cached URLs instead of re-parsing
                 if !self.cached_urls.is_empty() {
                     // For now, just open the first URL found
@@ -314,7 +321,7 @@ impl Terminal {
         if self.ssh_manager.visible {
             return self.handle_ssh_manager_input(key).await;
         }
-        
+
         // Command palette takes priority
         if self.command_palette.visible {
             return self.handle_command_palette_input(key).await;
@@ -322,12 +329,21 @@ impl Terminal {
 
         match (key.code, key.modifiers) {
             // SSH Manager (Ctrl+Shift+S)
-            (KeyCode::Char('s'), KeyModifiers::CONTROL | KeyModifiers::SHIFT) | 
-            (KeyCode::Char('S'), KeyModifiers::CONTROL) if self.config.ssh_manager.enabled => {
+            (KeyCode::Char('s'), KeyModifiers::CONTROL | KeyModifiers::SHIFT)
+            | (KeyCode::Char('S'), KeyModifiers::CONTROL)
+                if self.config.ssh_manager.enabled =>
+            {
                 self.ssh_manager.toggle();
-                debug!("SSH manager: {}", if self.ssh_manager.visible { "ON" } else { "OFF" });
+                debug!(
+                    "SSH manager: {}",
+                    if self.ssh_manager.visible {
+                        "ON"
+                    } else {
+                        "OFF"
+                    }
+                );
             }
-            
+
             // Command palette (Ctrl+P)
             (KeyCode::Char('p'), KeyModifiers::CONTROL) => {
                 self.command_palette.toggle();
@@ -336,7 +352,10 @@ impl Terminal {
             // Toggle resource monitor (Ctrl+R)
             (KeyCode::Char('r'), KeyModifiers::CONTROL) => {
                 self.show_resources = !self.show_resources;
-                debug!("Resource monitor: {}", if self.show_resources { "ON" } else { "OFF" });
+                debug!(
+                    "Resource monitor: {}",
+                    if self.show_resources { "ON" } else { "OFF" }
+                );
             }
 
             // Quit (Ctrl+C or Ctrl+D)
@@ -344,27 +363,29 @@ impl Terminal {
                 debug!("Quit signal received");
                 self.should_quit = true;
             }
-            
+
             // New tab
             (KeyCode::Char('t'), KeyModifiers::CONTROL) if self.config.terminal.enable_tabs => {
                 self.create_new_tab().await?;
             }
-            
+
             // Next tab
             (KeyCode::Tab, KeyModifiers::CONTROL) if self.config.terminal.enable_tabs => {
                 self.next_tab();
             }
-            
+
             // Previous tab
-            (KeyCode::BackTab, KeyModifiers::SHIFT | KeyModifiers::CONTROL) if self.config.terminal.enable_tabs => {
+            (KeyCode::BackTab, KeyModifiers::SHIFT | KeyModifiers::CONTROL)
+                if self.config.terminal.enable_tabs =>
+            {
                 self.prev_tab();
             }
-            
+
             // Regular character input
             (KeyCode::Char(c), modifiers) => {
                 if let Some(session) = self.sessions.get(self.active_session) {
                     let mut input = vec![c as u8];
-                    
+
                     // Handle modifiers
                     if modifiers.contains(KeyModifiers::CONTROL) && c.is_ascii_alphabetic() {
                         // Send control character
@@ -376,90 +397,97 @@ impl Terminal {
                             cmd_buf.push(c);
                         }
                     }
-                    
+
                     session.write_input(&input).await?;
                 }
             }
-            
+
             // Enter - translate command before sending, check for SSH
             (KeyCode::Enter, _) => {
                 if let Some(session) = self.sessions.get(self.active_session) {
                     // Get the current command
-                    let command = self.command_buffers.get(self.active_session)
+                    let command = self
+                        .command_buffers
+                        .get(self.active_session)
                         .map(|s| s.as_str())
                         .unwrap_or("");
-                    
+
                     // Check if it's an SSH command and auto-show manager if enabled
-                    if self.config.ssh_manager.enabled && self.config.ssh_manager.auto_show 
-                        && command.trim().starts_with("ssh ") {
-                        
+                    if self.config.ssh_manager.enabled
+                        && self.config.ssh_manager.auto_show
+                        && command.trim().starts_with("ssh ")
+                    {
                         // Parse and optionally save the connection
-                        if let Some(conn) = crate::ssh_manager::SshManager::parse_ssh_command(command) {
+                        if let Some(conn) =
+                            crate::ssh_manager::SshManager::parse_ssh_command(command)
+                        {
                             let name = conn.name.clone();
                             self.ssh_manager.add_connection(name, conn);
                             let _ = self.ssh_manager.save_connections();
                         }
-                        
+
                         // Show SSH manager for user to select/confirm
                         self.ssh_manager.toggle();
-                        
+
                         // Don't send the command yet - let user interact with SSH manager
                         return Ok(());
                     }
-                    
+
                     // Attempt translation
                     let result = self.command_translator.translate(command);
-                    
+
                     if result.translated {
                         // Command was translated - send translated version
-                        info!("Translated '{}' to '{}'", result.original_command, result.final_command);
-                        
+                        info!(
+                            "Translated '{}' to '{}'",
+                            result.original_command, result.final_command
+                        );
+
                         // Show notification if enabled
                         if self.config.command_translation.show_notifications {
                             self.translation_notification = Some(format!(
                                 "Translated: {} → {}",
-                                result.original_command,
-                                result.final_command
+                                result.original_command, result.final_command
                             ));
                             self.notification_frames = TARGET_FPS * NOTIFICATION_DURATION_SECS;
                             self.dirty = true;
                         }
-                        
+
                         // Clear the shell's input line and send the translated command
                         // Count Unicode characters properly
                         let char_count = command.chars().count();
-                        
+
                         // Reuse backspace buffer to avoid allocation
                         self.backspace_buffer.clear();
                         self.backspace_buffer.resize(char_count, 127);
                         session.write_input(&self.backspace_buffer).await?;
-                        
+
                         // Then send the translated command
                         session.write_input(result.final_command.as_bytes()).await?;
                     }
-                    
+
                     // Send Enter
                     session.write_input(b"\r").await?;
-                    
+
                     // Start progress bar for the command
                     let command_to_track = if result.translated {
                         result.final_command.clone()
                     } else {
                         command.to_string()
                     };
-                    
+
                     if !command_to_track.trim().is_empty() {
                         self.progress_bar.start(command_to_track);
                         self.dirty = true;
                     }
-                    
+
                     // Clear command buffer
                     if let Some(cmd_buf) = self.command_buffers.get_mut(self.active_session) {
                         cmd_buf.clear();
                     }
                 }
             }
-            
+
             // Backspace
             (KeyCode::Backspace, _) => {
                 if let Some(session) = self.sessions.get(self.active_session) {
@@ -470,7 +498,7 @@ impl Terminal {
                     session.write_input(&[127]).await?;
                 }
             }
-            
+
             // Arrow keys
             (KeyCode::Up, _) => {
                 if let Some(session) = self.sessions.get(self.active_session) {
@@ -500,10 +528,10 @@ impl Terminal {
                     session.write_input(b"\x1b[D").await?;
                 }
             }
-            
+
             _ => {}
         }
-        
+
         Ok(())
     }
 
@@ -518,16 +546,16 @@ impl Terminal {
                 if let Some(conn) = self.ssh_manager.get_selected() {
                     let cmd = conn.to_command();
                     info!("Connecting via SSH: {}", cmd);
-                    
+
                     // Send the SSH command to the shell
                     if let Some(session) = self.sessions.get(self.active_session) {
                         session.write_input(cmd.as_bytes()).await?;
                         session.write_input(b"\r").await?;
                     }
-                    
+
                     // Update last used time
                     // (In a full implementation, you'd update the connection's last_used field)
-                    
+
                     // Close SSH manager
                     self.ssh_manager.toggle();
                 }
@@ -549,7 +577,9 @@ impl Terminal {
             KeyCode::Delete if !self.ssh_manager.filtered_connections.is_empty() => {
                 // Delete selected connection
                 if self.ssh_manager.selected_index < self.ssh_manager.filtered_connections.len() {
-                    let name = self.ssh_manager.filtered_connections[self.ssh_manager.selected_index].clone();
+                    let name = self.ssh_manager.filtered_connections
+                        [self.ssh_manager.selected_index]
+                        .clone();
                     self.ssh_manager.remove_connection(&name);
                     let _ = self.ssh_manager.save_connections();
                 }
@@ -558,7 +588,7 @@ impl Terminal {
         }
         Ok(())
     }
-    
+
     /// Handle command palette input
     async fn handle_command_palette_input(&mut self, key: KeyEvent) -> Result<()> {
         match key.code {
@@ -578,11 +608,13 @@ impl Terminal {
             }
             KeyCode::Char(c) => {
                 self.command_palette.input.push(c);
-                self.command_palette.update_input(self.command_palette.input.clone());
+                self.command_palette
+                    .update_input(self.command_palette.input.clone());
             }
             KeyCode::Backspace => {
                 self.command_palette.input.pop();
-                self.command_palette.update_input(self.command_palette.input.clone());
+                self.command_palette
+                    .update_input(self.command_palette.input.clone());
             }
             _ => {}
         }
@@ -620,19 +652,19 @@ impl Terminal {
     /// Create a new tab
     async fn create_new_tab(&mut self) -> Result<()> {
         info!("Creating new tab");
-        
+
         let session = ShellSession::new(
             &self.config.shell.default_shell,
             self.config.shell.working_dir.as_deref(),
             DEFAULT_ROWS,
             DEFAULT_COLS,
         )?;
-        
+
         self.sessions.push(session);
         self.output_buffers.push(Vec::with_capacity(1024 * 1024));
         self.command_buffers.push(String::new()); // Initialize command buffer for new tab
         self.active_session = self.sessions.len() - 1;
-        
+
         Ok(())
     }
 
@@ -660,13 +692,26 @@ impl Terminal {
     fn render(&mut self, f: &mut ratatui::Frame) {
         let main_chunks = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(if self.config.terminal.enable_tabs && self.sessions.len() > 1 { 1 } else { 0 }),
-                Constraint::Length(if self.translation_notification.is_some() { 1 } else { 0 }),
-                Constraint::Length(if self.progress_bar.visible { 1 } else { 0 }),
-                Constraint::Min(0),
-                Constraint::Length(if self.show_resources { 3 } else { 0 }),
-            ].as_ref())
+            .constraints(
+                [
+                    Constraint::Length(
+                        if self.config.terminal.enable_tabs && self.sessions.len() > 1 {
+                            1
+                        } else {
+                            0
+                        },
+                    ),
+                    Constraint::Length(if self.translation_notification.is_some() {
+                        1
+                    } else {
+                        0
+                    }),
+                    Constraint::Length(if self.progress_bar.visible { 1 } else { 0 }),
+                    Constraint::Min(0),
+                    Constraint::Length(if self.show_resources { 3 } else { 0 }),
+                ]
+                .as_ref(),
+            )
             .split(f.size());
 
         let tab_area = main_chunks[0];
@@ -699,14 +744,19 @@ impl Terminal {
                         .fg(Color::Yellow)
                         .add_modifier(Modifier::BOLD),
                 );
-            
+
             f.render_widget(tabs, tab_area);
         }
 
         // Render translation notification if present
         if let Some(ref msg) = self.translation_notification {
             let notification = Paragraph::new(msg.as_str())
-                .style(Style::default().fg(Color::Green).bg(Color::Black).add_modifier(Modifier::BOLD))
+                .style(
+                    Style::default()
+                        .fg(Color::Green)
+                        .bg(Color::Black)
+                        .add_modifier(Modifier::BOLD),
+                )
                 .block(Block::default().borders(Borders::NONE));
             f.render_widget(notification, notification_area);
         }
@@ -715,7 +765,12 @@ impl Terminal {
         if self.progress_bar.visible {
             let progress_text = self.progress_bar.display_text();
             let progress_widget = Paragraph::new(progress_text)
-                .style(Style::default().fg(Color::Cyan).bg(Color::Black).add_modifier(Modifier::BOLD))
+                .style(
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .bg(Color::Black)
+                        .add_modifier(Modifier::BOLD),
+                )
                 .block(Block::default().borders(Borders::NONE));
             f.render_widget(progress_widget, progress_area);
         }
@@ -756,20 +811,17 @@ impl Terminal {
         let popup_area = renderer::centered_popup(area, 80, 25);
 
         // Render connection list - use filter_map to safely handle missing connections
-        let items: Vec<ListItem> = self.ssh_manager.filtered_connections
+        let items: Vec<ListItem> = self
+            .ssh_manager
+            .filtered_connections
             .iter()
             .enumerate()
             .filter_map(|(i, name)| {
                 // Safely get connection - returns None if not found
                 self.ssh_manager.get_connection(name).map(|conn| {
-                    let content = format!(
-                        "{} ({}@{}:{})",
-                        name,
-                        conn.username,
-                        conn.host,
-                        conn.port
-                    );
-                    
+                    let content =
+                        format!("{} ({}@{}:{})", name, conn.username, conn.host, conn.port);
+
                     let style = if i == self.ssh_manager.selected_index {
                         Style::default()
                             .fg(Color::Black)
@@ -778,7 +830,7 @@ impl Terminal {
                     } else {
                         Style::default().fg(Color::White)
                     };
-                    
+
                     ListItem::new(content).style(style)
                 })
             })
@@ -788,7 +840,10 @@ impl Terminal {
         let title = if self.ssh_manager.filter_input.is_empty() {
             String::from("SSH Connections (Ctrl+Shift+S to close, Enter to connect, Del to remove)")
         } else {
-            format!("SSH Connections - Filter: {}", self.ssh_manager.filter_input)
+            format!(
+                "SSH Connections - Filter: {}",
+                self.ssh_manager.filter_input
+            )
         };
 
         let list = List::new(items)
@@ -796,7 +851,7 @@ impl Terminal {
                 Block::default()
                     .borders(Borders::ALL)
                     .title(title)
-                    .style(Style::default().bg(Color::Black))
+                    .style(Style::default().bg(Color::Black)),
             )
             .style(Style::default().fg(Color::White));
 
@@ -808,8 +863,7 @@ impl Terminal {
         let popup_area = renderer::centered_popup(area, 80, 20);
 
         // Clear background
-        let bg = Block::default()
-            .style(Style::default().bg(Color::Black));
+        let bg = Block::default().style(Style::default().bg(Color::Black));
         f.render_widget(bg, area);
 
         // Render palette
@@ -821,38 +875,50 @@ impl Terminal {
         // Input box
         let input = Paragraph::new(format!("> {}", self.command_palette.input))
             .style(Style::default().fg(Color::Cyan))
-            .block(Block::default()
-                .borders(Borders::ALL)
-                .title("Command Palette (Esc to close)")
-                .border_style(Style::default().fg(Color::Cyan)));
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("Command Palette (Esc to close)")
+                    .border_style(Style::default().fg(Color::Cyan)),
+            );
         f.render_widget(input, palette_chunks[0]);
 
         // Suggestions
-        let suggestions: Vec<Line> = self.command_palette.suggestions
+        let suggestions: Vec<Line> = self
+            .command_palette
+            .suggestions
             .iter()
             .enumerate()
             .map(|(i, s)| {
                 let style = if i == self.command_palette.selected_index {
-                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD)
                 } else {
                     Style::default().fg(Color::White)
                 };
                 Line::from(vec![
                     Span::styled(format!("  {} ", s.command), style),
-                    Span::styled(format!("- {}", s.description), Style::default().fg(Color::Gray)),
+                    Span::styled(
+                        format!("- {}", s.description),
+                        Style::default().fg(Color::Gray),
+                    ),
                 ])
             })
             .collect();
 
-        let suggestions_widget = Paragraph::new(suggestions)
-            .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::Cyan)));
+        let suggestions_widget = Paragraph::new(suggestions).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Cyan)),
+        );
         f.render_widget(suggestions_widget, palette_chunks[1]);
     }
 
     /// Render resource monitor
     fn render_resource_monitor(&mut self, f: &mut ratatui::Frame, area: Rect) {
         let stats = self.resource_monitor.get_stats();
-        
+
         let text = format!(
             " CPU: {:.1}% ({} cores) | Memory: {} / {} ({:.1}%) | Processes: {} | Network: ↓{} ↑{} ",
             stats.cpu_usage,
@@ -868,7 +934,7 @@ impl Terminal {
         let resource_widget = Paragraph::new(text)
             .style(Style::default().fg(Color::Green).bg(Color::Black))
             .block(Block::default().borders(Borders::TOP));
-        
+
         f.render_widget(resource_widget, area);
     }
 }

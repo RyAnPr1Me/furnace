@@ -1,9 +1,9 @@
 use anyhow::{Context, Result};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use chrono::{DateTime, Utc};
 
 /// Session manager for saving and restoring terminal sessions
 #[allow(dead_code)] // Public API for session management
@@ -34,13 +34,11 @@ pub struct TabState {
 impl SessionManager {
     /// Create a new session manager
     pub fn new() -> Result<Self> {
-        let home = dirs::home_dir()
-            .context("Failed to get home directory")?;
-        
+        let home = dirs::home_dir().context("Failed to get home directory")?;
+
         let sessions_dir = home.join(".furnace").join("sessions");
-        fs::create_dir_all(&sessions_dir)
-            .context("Failed to create sessions directory")?;
-        
+        fs::create_dir_all(&sessions_dir).context("Failed to create sessions directory")?;
+
         Ok(Self { sessions_dir })
     }
 
@@ -48,12 +46,10 @@ impl SessionManager {
     #[allow(dead_code)] // Public API
     pub fn save_session(&self, session: &SavedSession) -> Result<()> {
         let session_file = self.sessions_dir.join(format!("{}.json", session.id));
-        let json = serde_json::to_string_pretty(session)
-            .context("Failed to serialize session")?;
-        
-        fs::write(&session_file, json)
-            .context("Failed to write session file")?;
-        
+        let json = serde_json::to_string_pretty(session).context("Failed to serialize session")?;
+
+        fs::write(&session_file, json).context("Failed to write session file")?;
+
         Ok(())
     }
 
@@ -61,12 +57,11 @@ impl SessionManager {
     #[allow(dead_code)] // Public API
     pub fn load_session(&self, id: &str) -> Result<SavedSession> {
         let session_file = self.sessions_dir.join(format!("{}.json", id));
-        let json = fs::read_to_string(&session_file)
-            .context("Failed to read session file")?;
-        
-        let session: SavedSession = serde_json::from_str(&json)
-            .context("Failed to parse session file")?;
-        
+        let json = fs::read_to_string(&session_file).context("Failed to read session file")?;
+
+        let session: SavedSession =
+            serde_json::from_str(&json).context("Failed to parse session file")?;
+
         Ok(session)
     }
 
@@ -74,11 +69,11 @@ impl SessionManager {
     #[allow(dead_code)] // Public API
     pub fn list_sessions(&self) -> Result<Vec<SavedSession>> {
         let mut sessions = Vec::new();
-        
+
         for entry in fs::read_dir(&self.sessions_dir)? {
             let entry = entry?;
             let path = entry.path();
-            
+
             if path.extension().and_then(|s| s.to_str()) == Some("json") {
                 if let Ok(json) = fs::read_to_string(&path) {
                     if let Ok(session) = serde_json::from_str::<SavedSession>(&json) {
@@ -87,10 +82,10 @@ impl SessionManager {
                 }
             }
         }
-        
+
         // Sort by creation date (most recent first)
         sessions.sort_by(|a, b| b.created_at.cmp(&a.created_at));
-        
+
         Ok(sessions)
     }
 
@@ -98,9 +93,8 @@ impl SessionManager {
     #[allow(dead_code)] // Public API
     pub fn delete_session(&self, id: &str) -> Result<()> {
         let session_file = self.sessions_dir.join(format!("{}.json", id));
-        fs::remove_file(&session_file)
-            .context("Failed to delete session file")?;
-        
+        fs::remove_file(&session_file).context("Failed to delete session file")?;
+
         Ok(())
     }
 
@@ -131,7 +125,7 @@ mod tests {
     #[test]
     fn test_save_and_load_session() {
         let manager = SessionManager::new().unwrap();
-        
+
         let session = SavedSession {
             id: "test-session".to_string(),
             name: "Test Session".to_string(),
@@ -141,13 +135,13 @@ mod tests {
             env: HashMap::new(),
             tabs: vec![],
         };
-        
+
         manager.save_session(&session).unwrap();
         let loaded = manager.load_session("test-session").unwrap();
-        
+
         assert_eq!(loaded.id, session.id);
         assert_eq!(loaded.name, session.name);
-        
+
         // Cleanup
         manager.delete_session("test-session").ok();
     }

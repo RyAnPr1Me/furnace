@@ -49,7 +49,8 @@ impl Autocomplete {
         self.current_index = 0;
 
         // Get commands from history that start with prefix
-        let mut suggestions: Vec<String> = self.history
+        let mut suggestions: Vec<String> = self
+            .history
             .iter()
             .filter(|cmd| cmd.starts_with(prefix))
             .take(10)
@@ -62,7 +63,7 @@ impl Autocomplete {
                 .iter()
                 .filter(|cmd| cmd.starts_with(prefix))
                 .take(5)
-                .map(|s| s.to_string())
+                .map(|s| s.to_string()),
         );
 
         // Remove duplicates
@@ -106,25 +107,89 @@ impl Autocomplete {
     fn common_commands() -> Vec<&'static str> {
         vec![
             // Unix/Linux/Mac
-            "ls", "cd", "pwd", "mkdir", "rm", "cp", "mv", "cat", "grep", "find",
-            "chmod", "chown", "ps", "kill", "top", "df", "du", "tar", "zip", "unzip",
-            "git", "ssh", "curl", "wget", "vim", "nano", "echo", "export",
+            "ls",
+            "cd",
+            "pwd",
+            "mkdir",
+            "rm",
+            "cp",
+            "mv",
+            "cat",
+            "grep",
+            "find",
+            "chmod",
+            "chown",
+            "ps",
+            "kill",
+            "top",
+            "df",
+            "du",
+            "tar",
+            "zip",
+            "unzip",
+            "git",
+            "ssh",
+            "curl",
+            "wget",
+            "vim",
+            "nano",
+            "echo",
+            "export",
             // Windows
-            "dir", "cls", "type", "copy", "move", "del", "xcopy", "attrib",
-            "tasklist", "taskkill", "ipconfig", "ping", "netstat",
+            "dir",
+            "cls",
+            "type",
+            "copy",
+            "move",
+            "del",
+            "xcopy",
+            "attrib",
+            "tasklist",
+            "taskkill",
+            "ipconfig",
+            "ping",
+            "netstat",
             // PowerShell
-            "Get-Command", "Get-Help", "Get-Process", "Get-Service", "Set-Location",
-            "Get-ChildItem", "Remove-Item", "Copy-Item", "Move-Item",
+            "Get-Command",
+            "Get-Help",
+            "Get-Process",
+            "Get-Service",
+            "Set-Location",
+            "Get-ChildItem",
+            "Remove-Item",
+            "Copy-Item",
+            "Move-Item",
             // Git
-            "git status", "git add", "git commit", "git push", "git pull",
-            "git clone", "git branch", "git checkout", "git merge", "git log",
+            "git status",
+            "git add",
+            "git commit",
+            "git push",
+            "git pull",
+            "git clone",
+            "git branch",
+            "git checkout",
+            "git merge",
+            "git log",
             // Docker
-            "docker ps", "docker images", "docker run", "docker build", "docker exec",
-            "docker-compose up", "docker-compose down",
+            "docker ps",
+            "docker images",
+            "docker run",
+            "docker build",
+            "docker exec",
+            "docker-compose up",
+            "docker-compose down",
             // NPM/Node
-            "npm install", "npm start", "npm run", "npm test", "npx",
+            "npm install",
+            "npm start",
+            "npm run",
+            "npm test",
+            "npx",
             // Cargo/Rust
-            "cargo build", "cargo run", "cargo test", "cargo bench", "cargo check",
+            "cargo build",
+            "cargo run",
+            "cargo test",
+            "cargo bench",
+            "cargo check",
         ]
     }
 
@@ -165,7 +230,7 @@ mod tests {
         let mut autocomplete = Autocomplete::new();
         autocomplete.add_to_history("ls -la".to_string());
         autocomplete.add_to_history("cd /home".to_string());
-        
+
         assert_eq!(autocomplete.history.len(), 2);
         assert_eq!(autocomplete.history[0], "cd /home");
     }
@@ -175,7 +240,7 @@ mod tests {
         let mut autocomplete = Autocomplete::new();
         autocomplete.add_to_history("git status".to_string());
         autocomplete.add_to_history("git commit".to_string());
-        
+
         let suggestions = autocomplete.get_suggestions("git");
         assert!(!suggestions.is_empty());
         assert!(suggestions.iter().any(|s| s.contains("git")));
@@ -186,12 +251,12 @@ mod tests {
         let mut autocomplete = Autocomplete::new();
         autocomplete.add_to_history("cmd1".to_string());
         autocomplete.add_to_history("cmd2".to_string());
-        
+
         autocomplete.get_suggestions("cmd");
-        
+
         let first = autocomplete.next_suggestion();
         assert!(first.is_some());
-        
+
         let second = autocomplete.next_suggestion();
         assert!(second.is_some());
         assert_ne!(first, second);

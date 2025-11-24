@@ -23,7 +23,7 @@ pub struct ColorPalette {
     pub magenta: String,
     pub cyan: String,
     pub white: String,
-    
+
     // Bright colors
     pub bright_black: String,
     pub bright_red: String,

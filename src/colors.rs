@@ -22,18 +22,15 @@ impl TrueColor {
     /// Returns an error if the hex string is not exactly 6 characters or contains invalid hex digits
     pub fn from_hex(hex: &str) -> Result<Self> {
         let hex = hex.trim_start_matches('#');
-        
+
         if hex.len() != 6 {
             anyhow::bail!("Invalid hex color: must be 6 characters");
         }
-        
-        let r = u8::from_str_radix(&hex[0..2], 16)
-            .context("Invalid red component")?;
-        let g = u8::from_str_radix(&hex[2..4], 16)
-            .context("Invalid green component")?;
-        let b = u8::from_str_radix(&hex[4..6], 16)
-            .context("Invalid blue component")?;
-        
+
+        let r = u8::from_str_radix(&hex[0..2], 16).context("Invalid red component")?;
+        let g = u8::from_str_radix(&hex[2..4], 16).context("Invalid green component")?;
+        let b = u8::from_str_radix(&hex[4..6], 16).context("Invalid blue component")?;
+
         Ok(Self::new(r, g, b))
     }
 
@@ -119,7 +116,7 @@ pub struct TrueColorPalette {
     pub magenta: TrueColor,
     pub cyan: TrueColor,
     pub white: TrueColor,
-    
+
     pub bright_black: TrueColor,
     pub bright_red: TrueColor,
     pub bright_green: TrueColor,
@@ -128,7 +125,7 @@ pub struct TrueColorPalette {
     pub bright_magenta: TrueColor,
     pub bright_cyan: TrueColor,
     pub bright_white: TrueColor,
-    
+
     // Extended 256 color palette
     pub extended: Vec<TrueColor>,
 }
@@ -146,7 +143,7 @@ impl TrueColorPalette {
             magenta: TrueColor::from_hex("#FF79C6").unwrap(),
             cyan: TrueColor::from_hex("#8BE9FD").unwrap(),
             white: TrueColor::from_hex("#BFBFBF").unwrap(),
-            
+
             bright_black: TrueColor::from_hex("#4D4D4D").unwrap(),
             bright_red: TrueColor::from_hex("#FF6E67").unwrap(),
             bright_green: TrueColor::from_hex("#5AF78E").unwrap(),
@@ -155,7 +152,7 @@ impl TrueColorPalette {
             bright_magenta: TrueColor::from_hex("#FF92D0").unwrap(),
             bright_cyan: TrueColor::from_hex("#9AEDFE").unwrap(),
             bright_white: TrueColor::from_hex("#E6E6E6").unwrap(),
-            
+
             extended: Self::generate_256_palette(),
         }
     }
@@ -163,12 +160,12 @@ impl TrueColorPalette {
     /// Generate 256 color palette (for xterm compatibility)
     fn generate_256_palette() -> Vec<TrueColor> {
         let mut palette = Vec::with_capacity(256);
-        
+
         // First 16 colors are the standard ANSI colors (handled separately)
         for _ in 0..16 {
             palette.push(TrueColor::new(0, 0, 0));
         }
-        
+
         // 216 color cube (6x6x6)
         for r in 0..6 {
             for g in 0..6 {
@@ -180,13 +177,13 @@ impl TrueColorPalette {
                 }
             }
         }
-        
+
         // 24 grayscale colors
         for i in 0..24 {
             let gray = i * 10 + 8;
             palette.push(TrueColor::new(gray, gray, gray));
         }
-        
+
         palette
     }
 
@@ -210,7 +207,10 @@ impl TrueColorPalette {
             13 => self.bright_magenta,
             14 => self.bright_cyan,
             15 => self.bright_white,
-            i => self.extended.get(i as usize).copied()
+            i => self
+                .extended
+                .get(i as usize)
+                .copied()
                 .unwrap_or(TrueColor::new(0, 0, 0)),
         }
     }
@@ -246,7 +246,7 @@ mod tests {
         let red = TrueColor::new(255, 0, 0);
         let blue = TrueColor::new(0, 0, 255);
         let purple = red.blend(blue, 0.5);
-        
+
         assert_eq!(purple.r, 127);
         assert_eq!(purple.b, 127);
     }
@@ -255,7 +255,7 @@ mod tests {
     fn test_luminance() {
         let white = TrueColor::new(255, 255, 255);
         let black = TrueColor::new(0, 0, 0);
-        
+
         assert!(white.is_light());
         assert!(!black.is_light());
     }
