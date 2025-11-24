@@ -21,6 +21,26 @@ use crate::ui::command_palette::CommandPalette;
 use crate::ui::resource_monitor::ResourceMonitor;
 use crate::progress_bar::ProgressBar;
 
+/// Create a centered popup area within the given parent area
+///
+/// # Arguments
+/// * `parent` - The parent area to center the popup within
+/// * `max_width` - Maximum width of the popup
+/// * `max_height` - Maximum height of the popup
+#[must_use]
+pub fn centered_popup(parent: Rect, max_width: u16, max_height: u16) -> Rect {
+    let width = parent.width.min(max_width);
+    let height = parent.height.min(max_height);
+    let x = (parent.width.saturating_sub(width)) / 2;
+    let y = (parent.height.saturating_sub(height)) / 2;
+    Rect {
+        x: parent.x + x,
+        y: parent.y + y,
+        width,
+        height,
+    }
+}
+
 /// Render tab bar
 #[allow(dead_code)] // Public API for future refactoring
 pub fn render_tabs(f: &mut Frame, area: Rect, sessions_count: usize, active_session: usize) {
@@ -72,19 +92,7 @@ pub fn render_progress_bar(f: &mut Frame, area: Rect, progress_bar: &ProgressBar
 /// Render SSH manager overlay
 #[allow(dead_code)] // Public API for future refactoring
 pub fn render_ssh_manager(f: &mut Frame, area: Rect, ssh_manager: &SshManager) {
-    // Create centered popup
-    let popup_area = {
-        let width = area.width.min(80);
-        let height = area.height.min(25);
-        let x = (area.width - width) / 2;
-        let y = (area.height - height) / 2;
-        Rect {
-            x: area.x + x,
-            y: area.y + y,
-            width,
-            height,
-        }
-    };
+    let popup_area = centered_popup(area, 80, 25);
 
     // Render connection list - use filter_map to safely handle missing connections
     let items: Vec<ListItem> = ssh_manager.filtered_connections
@@ -137,14 +145,7 @@ pub fn render_ssh_manager(f: &mut Frame, area: Rect, ssh_manager: &SshManager) {
 /// Render command palette overlay
 #[allow(dead_code)] // Public API for future refactoring
 pub fn render_command_palette(f: &mut Frame, area: Rect, command_palette: &CommandPalette) {
-    // Create centered popup
-    let popup_area = {
-        let width = area.width.min(80);
-        let height = area.height.min(20);
-        let x = (area.width - width) / 2;
-        let y = (area.height - height) / 2;
-        Rect::new(x, y, width, height)
-    };
+    let popup_area = centered_popup(area, 80, 20);
 
     // Clear background
     let bg = Block::default()
