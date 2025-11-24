@@ -37,6 +37,15 @@ const DEFAULT_COLS: u16 = 120;
 /// Read buffer size optimized for typical terminal output (reduced from 8KB to 4KB for better cache locality)
 const READ_BUFFER_SIZE: usize = 4096;
 
+/// URL cache refresh interval in frames (at 170 FPS, 30 frames ≈ 176ms)
+const URL_CACHE_REFRESH_FRAMES: u64 = 30;
+
+/// Backspace buffer initial capacity for typical command lengths
+const BACKSPACE_BUFFER_CAPACITY: usize = 256;
+
+/// Notification display duration in seconds
+const NOTIFICATION_DURATION_SECS: u64 = 2;
+
 /// High-performance terminal with GPU-accelerated rendering at 170 FPS
 pub struct Terminal {
     config: Config,
@@ -112,7 +121,7 @@ impl Terminal {
             ssh_manager,
             cached_urls: Vec::new(),
             url_cache_frame: 0,
-            backspace_buffer: Vec::with_capacity(256), // Pre-allocate for typical command length
+            backspace_buffer: Vec::with_capacity(BACKSPACE_BUFFER_CAPACITY),
         })
     }
 
@@ -233,7 +242,7 @@ impl Terminal {
         if let MouseEventKind::Down(MouseButton::Left) = mouse.kind {
             if mouse.modifiers.contains(KeyModifiers::CONTROL) {
                 // Update URL cache if output has changed (every 30 frames or ~176ms at 170fps)
-                if self.frame_count - self.url_cache_frame > 30 {
+                if self.frame_count - self.url_cache_frame > URL_CACHE_REFRESH_FRAMES {
                     if let Some(buffer) = self.output_buffers.get(self.active_session) {
                         let text = String::from_utf8_lossy(buffer);
                         self.cached_urls = UrlHandler::detect_urls(&text);
@@ -370,7 +379,7 @@ impl Terminal {
                                 result.original_command,
                                 result.final_command
                             ));
-                            self.notification_frames = TARGET_FPS * 2; // Show for 2 seconds
+                            self.notification_frames = TARGET_FPS * NOTIFICATION_DURATION_SECS;
                             self.dirty = true;
                         }
                         

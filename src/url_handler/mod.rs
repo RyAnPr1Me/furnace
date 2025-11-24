@@ -1,3 +1,17 @@
+//! URL Detection and Opening Handler
+//!
+//! Provides URL detection in terminal output and browser opening capabilities.
+//!
+//! # Features
+//! - Regex-based URL detection (http://, https://, www.)
+//! - Security validation before opening
+//! - Cross-platform browser opening
+//! - Ctrl+Click support
+//!
+//! # Security
+//! All URLs are validated to prevent shell injection attacks before being
+//! passed to system commands.
+
 use regex::Regex;
 use once_cell::sync::Lazy;
 use anyhow::{Result, Context};

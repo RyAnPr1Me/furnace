@@ -1,3 +1,17 @@
+//! SSH Connection Manager
+//!
+//! Manages SSH connections with persistent storage and filtering capabilities.
+//!
+//! # Features
+//! - Store and retrieve SSH connection configurations
+//! - Parse SSH commands automatically
+//! - Filter connections by name, host, or username
+//! - Persistent JSON storage
+//! - Connection management (add/remove/select)
+//!
+//! # Storage
+//! Connections are stored in `~/.furnace/ssh_connections.json`
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;

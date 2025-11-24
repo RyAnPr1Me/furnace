@@ -1,3 +1,25 @@
+//! Cross-platform command translation module
+//!
+//! Provides automatic translation between Linux and Windows commands to enable
+//! seamless command-line usage across different operating systems.
+//!
+//! # Features
+//! - 20+ common command mappings (ls↔dir, cat↔type, etc.)
+//! - Smart argument and flag translation
+//! - Zero-copy design with static maps
+//! - Configurable enable/disable
+//!
+//! # Examples
+//! ```
+//! use furnace::translator::CommandTranslator;
+//!
+//! let translator = CommandTranslator::new(true);
+//! let result = translator.translate("ls -la /home");
+//! if result.translated {
+//!     println!("Translated to: {}", result.final_command);
+//! }
+//! ```
+
 use std::collections::HashMap;
 use once_cell::sync::Lazy;
 
@@ -45,10 +67,15 @@ impl Default for CommandMapping {
 }
 
 // Argument translators for different command types
+
+/// Returns arguments unchanged (identity function)
 fn identity_args(args: &str) -> String {
     args.to_string()
 }
 
+/// Translates ls flags to Windows dir equivalents
+/// - `-a` -> `/A` (show hidden files)
+/// - Extracts file paths and passes them through
 fn ls_to_dir_args(args: &str) -> String {
     let args = args.trim();
     
@@ -76,6 +103,9 @@ fn ls_to_dir_args(args: &str) -> String {
     result
 }
 
+/// Translates Windows dir flags to ls equivalents
+/// - `/W` -> `-l` (wide/detailed format)
+/// - `/A` -> `-a` (show hidden files)
 fn dir_to_ls_args(args: &str) -> String {
     let args = args.trim();
     
@@ -105,6 +135,9 @@ fn dir_to_ls_args(args: &str) -> String {
     result
 }
 
+/// Translates rm flags to Windows del equivalents
+/// - `-r` -> `/S` (recursive)
+/// - `-f` -> `/F /Q` (force, quiet)
 fn rm_to_del_args(args: &str) -> String {
     let args = args.trim();
     
@@ -137,6 +170,9 @@ fn rm_to_del_args(args: &str) -> String {
     result
 }
 
+/// Translates Windows del flags to rm equivalents
+/// - `/S` -> `-r` (recursive)
+/// - `/F` or `/Q` -> `-f` (force)
 fn del_to_rm_args(args: &str) -> String {
     let args = args.trim();
     
