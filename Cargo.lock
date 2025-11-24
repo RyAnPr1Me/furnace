@@ -652,6 +652,7 @@ dependencies = [
  "portable-pty",
  "proptest",
  "ratatui",
+ "regex",
  "rustyline",
  "serde",
  "serde_json",

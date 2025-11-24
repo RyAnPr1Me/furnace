@@ -12,6 +12,8 @@ mod session;
 mod keybindings;
 mod colors;
 mod translator;
+mod ssh_manager;
+mod url_handler;
 
 use config::Config;
 use terminal::Terminal;

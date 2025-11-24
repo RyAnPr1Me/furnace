@@ -19,6 +19,10 @@ pub struct Config {
     pub plugins: Vec<String>,
     #[serde(default)]
     pub command_translation: CommandTranslationConfig,
+    #[serde(default)]
+    pub ssh_manager: SshManagerConfig,
+    #[serde(default)]
+    pub url_handler: UrlHandlerConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -113,6 +117,24 @@ pub struct CommandTranslationConfig {
     /// Show visual notification when commands are translated
     #[serde(default = "default_true")]
     pub show_notifications: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SshManagerConfig {
+    /// Enable SSH connection manager
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    
+    /// Auto-show SSH manager when typing ssh command
+    #[serde(default = "default_true")]
+    pub auto_show: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UrlHandlerConfig {
+    /// Enable clickable URLs with Ctrl+Click
+    #[serde(default = "default_true")]
+    pub enabled: bool,
 }
 
 // Default value functions
@@ -218,6 +240,23 @@ impl Default for CommandTranslationConfig {
         Self {
             enabled: true,
             show_notifications: true,
+        }
+    }
+}
+
+impl Default for SshManagerConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            auto_show: true,
+        }
+    }
+}
+
+impl Default for UrlHandlerConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
         }
     }
 }

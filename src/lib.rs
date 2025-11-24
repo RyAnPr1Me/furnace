@@ -8,3 +8,5 @@ pub mod session;
 pub mod keybindings;
 pub mod colors;
 pub mod translator;
+pub mod ssh_manager;
+pub mod url_handler;

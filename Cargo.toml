@@ -73,6 +73,7 @@ uuid = { version = "1.6", features = ["v4", "serde"] }
 dirs = "5.0"
 which = "5.0"
 once_cell = "1.21"
+regex = "1.10"
 
 # Windows specific
 [target.'cfg(windows)'.dependencies]
