@@ -62,10 +62,11 @@ impl TrueColor {
         let factor = factor.clamp(0.0, 1.0);
         Self {
             // Use mul_add for more efficient and accurate calculation
-            // Use f32::from for infallible u8 to f32 conversion
-            r: f32::from(self.r).mul_add(1.0 - factor, f32::from(other.r) * factor).round() as u8,
-            g: f32::from(self.g).mul_add(1.0 - factor, f32::from(other.g) * factor).round() as u8,
-            b: f32::from(self.b).mul_add(1.0 - factor, f32::from(other.b) * factor).round() as u8,
+            // Formula: self * (1 - factor) + other * factor
+            // Restructured as: (other - self) * factor + self for proper FMA usage
+            r: (f32::from(other.r) - f32::from(self.r)).mul_add(factor, f32::from(self.r)).round() as u8,
+            g: (f32::from(other.g) - f32::from(self.g)).mul_add(factor, f32::from(self.g)).round() as u8,
+            b: (f32::from(other.b) - f32::from(self.b)).mul_add(factor, f32::from(self.b)).round() as u8,
         }
     }
 
@@ -89,12 +90,12 @@ impl TrueColor {
     #[allow(dead_code)] // Public API
     #[must_use]
     pub fn luminance(self) -> f32 {
-        // Use mul_add for more efficient and accurate calculation
+        // Use nested mul_add for more efficient and accurate calculation with FMA
         // Formula: (0.299*r + 0.587*g + 0.114*b) / 255.0
-        // Nested mul_add: 0.299*r + (0.587*g + 0.114*b)
+        // Nested as: 0.299*r + (0.587*g + (0.114*b))
         0.299f32.mul_add(
             f32::from(self.r), 
-            0.587f32.mul_add(f32::from(self.g), 0.114 * f32::from(self.b))
+            0.587f32.mul_add(f32::from(self.g), 0.114f32.mul_add(f32::from(self.b), 0.0))
         ) / 255.0
     }
 
