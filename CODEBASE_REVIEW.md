@@ -85,20 +85,26 @@ The code includes many tricks to run faster:
 
 While the code is generally good, there are some issues worth noting:
 
-### 1. Blank Terminal Display (FIXED)
+### 1. Blank Terminal Display (FIXED - Full ANSI Color Support Added)
 
 The terminal was displaying a completely blank screen because the shell output contains ANSI escape sequences (special codes for colors, cursor movement, etc.) that weren't being processed. The raw escape codes were invisible or caused display issues.
 
-**The Fix**: Added an ANSI escape code stripper using regex that cleans the output before displaying it. The fix also ensures only the visible portion of output (fitting the terminal height) is shown:
+**The Fix**: Implemented a full ANSI escape code parser using the VTE crate (`terminal/ansi_parser.rs`) that interprets escape codes and converts them to styled ratatui text. This provides:
+
+- **Standard 16 colors** (8 normal + 8 bright foreground/background)
+- **256-color palette support** (indexed colors)
+- **24-bit true color (RGB)** for modern terminals
+- **Text attributes**: bold, italic, underline, blink, reverse, strikethrough
+- **Proper reset handling** for color/style resets
 
 ```rust
-/// Strip ANSI escape sequences from text for display
-fn strip_ansi_codes(text: &str) -> String {
-    ANSI_ESCAPE_REGEX.replace_all(text, "").to_string()
-}
+// Example: Parse ANSI text into styled spans for display
+let styled_lines = AnsiParser::parse(&raw_output);
+let text = Text::from(styled_lines);
+let paragraph = Paragraph::new(text);
 ```
 
-This is a simplified approach - a full terminal emulator would interpret these codes to support colors and cursor positioning. For now, stripping them ensures text is visible.
+The parser uses the industry-standard VTE library which is the same parser used by terminal emulators like Alacritty.
 
 ### 2. Potential Panic in Session Manager Default
 
@@ -116,7 +122,7 @@ The `expect` function will crash the program if creating the session manager fai
 
 **Why this matters**: If someone calls `SessionManager::default()` and it can't find the home directory (rare, but possible on some systems), the entire program crashes instead of showing an error message.
 
-### 2. Unwraps in Color Palette Creation
+### 3. Unwraps in Color Palette Creation
 
 In `colors.rs`, the `default_dark()` function uses `.unwrap()` on hex color parsing:
 
@@ -131,7 +137,7 @@ While these specific hex values are valid (so they won't fail), using `unwrap` i
 
 The `const fn new()` function would be safer here since these are constant values.
 
-### 3. Plugin System Uses Unsafe Code
+### 4. Plugin System Uses Unsafe Code
 
 In `plugins/loader.rs`, there's `unsafe` code for loading plugins:
 
@@ -152,7 +158,7 @@ This unsafe code is necessary for loading external plugins (code that wasn't com
 - A malicious or buggy plugin could crash the entire program
 - Memory corruption is possible if the plugin doesn't follow the expected format
 
-### 4. Cast Truncation in Color Blending
+### 5. Cast Truncation in Color Blending
 
 In `colors.rs`, lines 60-67, the blend function has potential precision issues:
 
@@ -162,7 +168,7 @@ r: ((self.r as f32) * (1.0 - factor) + (other.r as f32) * factor) as u8,
 
 Converting a floating-point number to a `u8` (number 0-255) truncates rather than rounds. This means `254.9` becomes `254`, not `255`. For colors, this usually doesn't matter visually, but it's technically imprecise.
 
-### 5. Potential Thread Safety in Command Palette Navigation
+### 6. Potential Thread Safety in Command Palette Navigation
 
 In `command_palette.rs`, lines 192-196, when navigating suggestions:
 

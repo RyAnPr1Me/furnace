@@ -3,6 +3,7 @@
 //! This module contains the main Terminal struct and its supporting modules:
 //! - `input`: Input handling for keyboard and mouse events
 //! - `renderer`: UI rendering components
+//! - `ansi_parser`: ANSI escape code parser for colors and styling
 //!
 //! # Architecture
 //! The terminal is structured to separate concerns:
@@ -11,6 +12,7 @@
 //! - Rendering (UI drawing)
 //! - Tab/session management
 
+pub mod ansi_parser;
 pub mod input;
 pub mod renderer;
 
@@ -26,7 +28,7 @@ use ratatui::{
     backend::CrosstermBackend,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
-    text::{Line, Span},
+    text::{Line, Span, Text},
     widgets::{Block, Borders, List, ListItem, Paragraph, Tabs},
     Terminal as RatatuiTerminal,
 };
@@ -48,23 +50,7 @@ use crate::ui::{
 };
 use crate::url_handler::UrlHandler;
 
-use regex::Regex;
-use std::sync::LazyLock;
-
-/// Regex to match ANSI escape sequences for stripping from output
-/// Uses a standard CSI pattern plus OSC sequences
-static ANSI_ESCAPE_REGEX: LazyLock<Regex> = LazyLock::new(|| {
-    // Standard ANSI escape sequence pattern:
-    // - CSI sequences: ESC [ followed by parameters and a final byte
-    // - OSC sequences: ESC ] followed by text and BEL
-    // - Single-character escapes: ESC followed by specific characters
-    Regex::new(r"\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07]*\x07|\x1b[()][0-9A-Z]|\x1b[=>]").unwrap()
-});
-
-/// Strip ANSI escape sequences from text for display
-fn strip_ansi_codes(text: &str) -> String {
-    ANSI_ESCAPE_REGEX.replace_all(text, "").to_string()
-}
+use self::ansi_parser::AnsiParser;
 
 /// Target FPS for GPU-accelerated rendering
 const TARGET_FPS: u64 = 170;
@@ -805,21 +791,21 @@ impl Terminal {
             return; // Command palette takes full screen focus
         }
 
-        // Render terminal output
-        let output = if let Some(buffer) = self.output_buffers.get(self.active_session) {
+        // Render terminal output with full ANSI color support
+        let styled_lines = if let Some(buffer) = self.output_buffers.get(self.active_session) {
             let raw_output = String::from_utf8_lossy(buffer);
-            // Strip ANSI escape codes and get the last visible lines that fit in the area
-            let clean_output = strip_ansi_codes(&raw_output);
+            // Parse ANSI escape codes into styled text
+            let all_lines = AnsiParser::parse(&raw_output);
             let height = content_area.height as usize;
-            // Count total lines first, then skip to get only visible lines
-            let total_lines = clean_output.lines().count();
-            let skip_count = total_lines.saturating_sub(height);
-            clean_output.lines().skip(skip_count).collect::<Vec<_>>().join("\n")
+            // Get only the last N lines that fit in the terminal area
+            let skip_count = all_lines.len().saturating_sub(height);
+            all_lines.into_iter().skip(skip_count).collect::<Vec<_>>()
         } else {
-            String::new()
+            Vec::new()
         };
 
-        let paragraph = Paragraph::new(output)
+        let text = Text::from(styled_lines);
+        let paragraph = Paragraph::new(text)
             .style(Style::default().fg(Color::White).bg(Color::Black))
             .block(Block::default().borders(Borders::NONE));
 
