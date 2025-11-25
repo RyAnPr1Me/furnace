@@ -14,6 +14,7 @@ pub mod ansi_parser;
 
 use anyhow::Result;
 use crossterm::{
+    cursor::{Hide, Show},
     event::{
         self, Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
     },
@@ -172,10 +173,12 @@ impl Terminal {
         execute!(stdout, EnterAlternateScreen)?;
 
         // Enable mouse capture and bracketed paste mode (Bug #21)
+        // Hide cursor initially - ratatui manages its own cursor
         execute!(
             stdout,
             crossterm::event::EnableMouseCapture,
-            crossterm::event::EnableBracketedPaste
+            crossterm::event::EnableBracketedPaste,
+            Hide
         )?;
 
         let backend = CrosstermBackend::new(stdout);
@@ -309,7 +312,8 @@ impl Terminal {
         execute!(
             terminal.backend_mut(),
             crossterm::event::DisableMouseCapture,
-            crossterm::event::DisableBracketedPaste
+            crossterm::event::DisableBracketedPaste,
+            Show
         )?;
         disable_raw_mode()?;
         execute!(terminal.backend_mut(), LeaveAlternateScreen)?;

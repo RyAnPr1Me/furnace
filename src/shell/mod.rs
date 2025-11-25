@@ -57,7 +57,7 @@ impl ShellSession {
         })
     }
 
-    /// Read output from shell (non-blocking, high-performance)
+    /// Read output from shell (non-blocking with timeout for responsive UI)
     ///
     /// # Errors
     /// Returns an error if the read operation fails or the task cannot be spawned
@@ -67,7 +67,7 @@ impl ShellSession {
         // Use spawn_blocking for the synchronous read operation
         // We pass the buffer data as a Vec to work around the lifetime/Send constraints
         let buffer_len = buffer.len();
-        let result = tokio::task::spawn_blocking(move || {
+        let read_task = tokio::task::spawn_blocking(move || {
             let mut reader = reader.blocking_lock();
             // Use a stack-allocated array for small buffers, heap for large ones
             // This is already optimized by Rust's allocator
@@ -77,24 +77,35 @@ impl ShellSession {
                 Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => Ok((0, Vec::new())),
                 Err(e) => Err(e),
             }
-        })
-        .await;
+        });
+
+        // Apply a timeout to prevent blocking the event loop indefinitely
+        // This ensures the UI remains responsive even if the shell hasn't output anything
+        let result = tokio::time::timeout(
+            std::time::Duration::from_millis(10),
+            read_task
+        ).await;
 
         match result {
-            Ok(Ok((n, temp_buf))) => {
+            // Read completed within timeout
+            Ok(Ok(Ok((n, temp_buf)))) => {
                 if n > 0 {
                     buffer[..n].copy_from_slice(&temp_buf[..n]);
                 }
                 Ok(n)
             }
-            Ok(Err(e)) => {
+            // Read error
+            Ok(Ok(Err(e))) => {
                 error!("Failed to read from shell: {}", e);
                 Err(e.into())
             }
-            Err(e) => {
+            // Task join error
+            Ok(Err(e)) => {
                 error!("Task join error: {}", e);
                 Err(e.into())
             }
+            // Timeout - no data available yet, return 0 bytes
+            Err(_) => Ok(0),
         }
     }
 
