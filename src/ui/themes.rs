@@ -1,5 +1,8 @@
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 /// Advanced theme system supporting multiple color schemes
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -219,5 +222,260 @@ impl Themes {
 impl Default for Theme {
     fn default() -> Self {
         Themes::dark()
+    }
+}
+
+/// Theme manager for dynamic theme loading and switching at runtime
+#[derive(Debug)]
+pub struct ThemeManager {
+    /// Currently active theme
+    current_theme: Theme,
+    /// All available themes (built-in + custom)
+    available_themes: HashMap<String, Theme>,
+    /// Path to custom themes directory
+    themes_dir: Option<PathBuf>,
+}
+
+impl ThemeManager {
+    /// Create a new theme manager with built-in themes
+    #[must_use]
+    pub fn new() -> Self {
+        let available_themes = Themes::all();
+        let current_theme = Themes::dark();
+
+        Self {
+            current_theme,
+            available_themes,
+            themes_dir: None,
+        }
+    }
+
+    /// Create a theme manager with custom themes directory
+    ///
+    /// # Errors
+    /// Returns an error if the themes directory cannot be created or themes cannot be loaded
+    pub fn with_themes_dir<P: AsRef<Path>>(themes_dir: P) -> Result<Self> {
+        let themes_dir = themes_dir.as_ref().to_path_buf();
+        
+        // Create themes directory if it doesn't exist
+        if !themes_dir.exists() {
+            fs::create_dir_all(&themes_dir)
+                .context("Failed to create themes directory")?;
+        }
+
+        let mut manager = Self::new();
+        manager.themes_dir = Some(themes_dir);
+        manager.load_custom_themes()?;
+
+        Ok(manager)
+    }
+
+    /// Load custom themes from the themes directory
+    fn load_custom_themes(&mut self) -> Result<()> {
+        let Some(ref themes_dir) = self.themes_dir else {
+            return Ok(());
+        };
+
+        if !themes_dir.exists() {
+            return Ok(());
+        }
+
+        for entry in fs::read_dir(themes_dir)? {
+            let entry = entry?;
+            let path = entry.path();
+
+            // Only process .yaml or .yml files
+            if let Some(ext) = path.extension() {
+                if ext == "yaml" || ext == "yml" {
+                    match Self::load_theme_from_file(&path) {
+                        Ok(theme) => {
+                            let name = theme.name.to_lowercase();
+                            self.available_themes.insert(name, theme);
+                        }
+                        Err(e) => {
+                            // Log warning but continue loading other themes
+                            eprintln!("Warning: Failed to load theme from {:?}: {}", path, e);
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Load a theme from a YAML file
+    fn load_theme_from_file<P: AsRef<Path>>(path: P) -> Result<Theme> {
+        let contents = fs::read_to_string(path.as_ref())
+            .context("Failed to read theme file")?;
+        let theme: Theme = serde_yaml::from_str(&contents)
+            .context("Failed to parse theme file")?;
+        Ok(theme)
+    }
+
+    /// Get the current theme
+    #[must_use]
+    pub fn current(&self) -> &Theme {
+        &self.current_theme
+    }
+
+    /// Get a list of all available theme names
+    #[must_use]
+    pub fn available_theme_names(&self) -> Vec<String> {
+        let mut names: Vec<String> = self.available_themes.keys().cloned().collect();
+        names.sort();
+        names
+    }
+
+    /// Switch to a different theme by name
+    ///
+    /// Returns true if the theme was switched successfully, false if the theme was not found
+    pub fn switch_theme(&mut self, name: &str) -> bool {
+        let name_lower = name.to_lowercase();
+        if let Some(theme) = self.available_themes.get(&name_lower) {
+            self.current_theme = theme.clone();
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Cycle to the next theme in alphabetical order
+    pub fn next_theme(&mut self) {
+        let names = self.available_theme_names();
+        if names.is_empty() {
+            return;
+        }
+
+        let current_name = self.current_theme.name.to_lowercase();
+        // If current theme isn't in the list (e.g., custom theme was removed),
+        // start from the first theme
+        let current_idx = names
+            .iter()
+            .position(|n| n == &current_name)
+            .unwrap_or(names.len().saturating_sub(1));
+        let next_idx = (current_idx + 1) % names.len();
+
+        if let Some(theme) = self.available_themes.get(&names[next_idx]) {
+            self.current_theme = theme.clone();
+        }
+    }
+
+    /// Cycle to the previous theme in alphabetical order
+    #[allow(dead_code)] // Public API
+    pub fn prev_theme(&mut self) {
+        let names = self.available_theme_names();
+        if names.is_empty() {
+            return;
+        }
+
+        let current_name = self.current_theme.name.to_lowercase();
+        // If current theme isn't in the list, start from the first theme
+        let current_idx = names
+            .iter()
+            .position(|n| n == &current_name)
+            .unwrap_or(0);
+        let prev_idx = if current_idx == 0 {
+            names.len() - 1
+        } else {
+            current_idx - 1
+        };
+
+        if let Some(theme) = self.available_themes.get(&names[prev_idx]) {
+            self.current_theme = theme.clone();
+        }
+    }
+
+    /// Add a custom theme
+    #[allow(dead_code)] // Public API
+    pub fn add_theme(&mut self, theme: Theme) {
+        let name = theme.name.to_lowercase();
+        self.available_themes.insert(name, theme);
+    }
+
+    /// Save a theme to the custom themes directory
+    ///
+    /// # Errors
+    /// Returns an error if the themes directory is not set or the file cannot be written
+    #[allow(dead_code)] // Public API
+    pub fn save_theme(&self, theme: &Theme) -> Result<()> {
+        let themes_dir = self.themes_dir.as_ref()
+            .context("Themes directory not configured")?;
+
+        let filename = format!("{}.yaml", theme.name.to_lowercase().replace(' ', "_"));
+        let path = themes_dir.join(filename);
+
+        let contents = serde_yaml::to_string(theme)
+            .context("Failed to serialize theme")?;
+        fs::write(&path, contents)
+            .context("Failed to write theme file")?;
+
+        Ok(())
+    }
+
+    /// Get the default themes directory path
+    ///
+    /// # Errors
+    /// Returns an error if the home directory cannot be determined
+    pub fn default_themes_dir() -> Result<PathBuf> {
+        let home = dirs::home_dir().context("Failed to get home directory")?;
+        Ok(home.join(".furnace").join("themes"))
+    }
+}
+
+impl Default for ThemeManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_theme_manager_creation() {
+        let manager = ThemeManager::new();
+        assert_eq!(manager.current().name, "Dark");
+        assert!(!manager.available_theme_names().is_empty());
+    }
+
+    #[test]
+    fn test_theme_switching() {
+        let mut manager = ThemeManager::new();
+        
+        assert!(manager.switch_theme("light"));
+        assert_eq!(manager.current().name, "Light");
+        
+        assert!(manager.switch_theme("nord"));
+        assert_eq!(manager.current().name, "Nord");
+        
+        assert!(!manager.switch_theme("nonexistent"));
+    }
+
+    #[test]
+    fn test_theme_cycling() {
+        let mut manager = ThemeManager::new();
+        let initial_name = manager.current().name.clone();
+        
+        manager.next_theme();
+        let next_name = manager.current().name.clone();
+        
+        // Should have changed to a different theme
+        assert_ne!(initial_name, next_name);
+        
+        manager.prev_theme();
+        // Should be back to initial
+        assert_eq!(manager.current().name, initial_name);
+    }
+
+    #[test]
+    fn test_available_themes() {
+        let manager = ThemeManager::new();
+        let names = manager.available_theme_names();
+        
+        assert!(names.contains(&"dark".to_string()));
+        assert!(names.contains(&"light".to_string()));
+        assert!(names.contains(&"nord".to_string()));
     }
 }
