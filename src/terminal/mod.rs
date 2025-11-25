@@ -48,6 +48,20 @@ use crate::ui::{
 };
 use crate::url_handler::UrlHandler;
 
+use regex::Regex;
+use std::sync::LazyLock;
+
+/// Regex to match ANSI escape sequences for stripping from output
+static ANSI_ESCAPE_REGEX: LazyLock<Regex> = LazyLock::new(|| {
+    // Matches ANSI escape sequences: CSI sequences, OSC sequences, and simple escapes
+    Regex::new(r"\x1b\[[0-9;]*[a-zA-Z]|\x1b\][^\x07]*\x07|\x1b[()][0-9A-Z]|\x1b[=>]|\x1b\[[\?]?[0-9;]*[hlmnpsu]|\r").unwrap()
+});
+
+/// Strip ANSI escape sequences from text for display
+fn strip_ansi_codes(text: &str) -> String {
+    ANSI_ESCAPE_REGEX.replace_all(text, "").to_string()
+}
+
 /// Target FPS for GPU-accelerated rendering
 const TARGET_FPS: u64 = 170;
 
@@ -789,7 +803,14 @@ impl Terminal {
 
         // Render terminal output
         let output = if let Some(buffer) = self.output_buffers.get(self.active_session) {
-            String::from_utf8_lossy(buffer).to_string()
+            let raw_output = String::from_utf8_lossy(buffer);
+            // Strip ANSI escape codes and get the last visible lines that fit in the area
+            let clean_output = strip_ansi_codes(&raw_output);
+            // Get only the last N lines that fit in the terminal area
+            let visible_lines: Vec<&str> = clean_output.lines().collect();
+            let height = content_area.height as usize;
+            let start = visible_lines.len().saturating_sub(height);
+            visible_lines[start..].join("\n")
         } else {
             String::new()
         };

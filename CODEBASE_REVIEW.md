@@ -85,7 +85,22 @@ The code includes many tricks to run faster:
 
 While the code is generally good, there are some issues worth noting:
 
-### 1. Potential Panic in Session Manager Default
+### 1. Blank Terminal Display (FIXED)
+
+The terminal was displaying a completely blank screen because the shell output contains ANSI escape sequences (special codes for colors, cursor movement, etc.) that weren't being processed. The raw escape codes were invisible or caused display issues.
+
+**The Fix**: Added an ANSI escape code stripper using regex that cleans the output before displaying it. The fix also ensures only the visible portion of output (fitting the terminal height) is shown:
+
+```rust
+/// Strip ANSI escape sequences from text for display
+fn strip_ansi_codes(text: &str) -> String {
+    ANSI_ESCAPE_REGEX.replace_all(text, "").to_string()
+}
+```
+
+This is a simplified approach - a full terminal emulator would interpret these codes to support colors and cursor positioning. For now, stripping them ensures text is visible.
+
+### 2. Potential Panic in Session Manager Default
 
 In `session.rs`, lines 109-112, there's a `Default` implementation that could crash:
 
