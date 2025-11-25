@@ -20,6 +20,7 @@ impl TrueColor {
     ///
     /// # Errors
     /// Returns an error if the hex string is not exactly 6 characters or contains invalid hex digits
+    #[allow(dead_code)] // Public API for runtime color parsing
     pub fn from_hex(hex: &str) -> Result<Self> {
         let hex = hex.trim_start_matches('#');
 
@@ -54,15 +55,16 @@ impl TrueColor {
         format!("\x1b[48;2;{};{};{}m", self.r, self.g, self.b)
     }
 
-    /// Blend with another color
+    /// Blend with another color (uses rounding instead of truncation for accuracy)
     #[allow(dead_code)] // Public API
     #[must_use]
     pub fn blend(self, other: Self, factor: f32) -> Self {
         let factor = factor.clamp(0.0, 1.0);
         Self {
-            r: ((self.r as f32) * (1.0 - factor) + (other.r as f32) * factor) as u8,
-            g: ((self.g as f32) * (1.0 - factor) + (other.g as f32) * factor) as u8,
-            b: ((self.b as f32) * (1.0 - factor) + (other.b as f32) * factor) as u8,
+            // Use round() instead of truncation for more accurate color blending
+            r: ((self.r as f32) * (1.0 - factor) + (other.r as f32) * factor).round() as u8,
+            g: ((self.g as f32) * (1.0 - factor) + (other.g as f32) * factor).round() as u8,
+            b: ((self.b as f32) * (1.0 - factor) + (other.b as f32) * factor).round() as u8,
         }
     }
 
@@ -131,27 +133,28 @@ pub struct TrueColorPalette {
 }
 
 impl TrueColorPalette {
-    /// Create default palette
+    /// Create default palette using const colors (no runtime unwrap/panic)
     #[must_use]
     pub fn default_dark() -> Self {
+        // Use const values - these are compile-time verified, no runtime unwrap needed
         Self {
-            black: TrueColor::from_hex("#000000").unwrap(),
-            red: TrueColor::from_hex("#FF5555").unwrap(),
-            green: TrueColor::from_hex("#50FA7B").unwrap(),
-            yellow: TrueColor::from_hex("#F1FA8C").unwrap(),
-            blue: TrueColor::from_hex("#BD93F9").unwrap(),
-            magenta: TrueColor::from_hex("#FF79C6").unwrap(),
-            cyan: TrueColor::from_hex("#8BE9FD").unwrap(),
-            white: TrueColor::from_hex("#BFBFBF").unwrap(),
+            black: TrueColor::new(0x00, 0x00, 0x00),       // #000000
+            red: TrueColor::new(0xFF, 0x55, 0x55),         // #FF5555
+            green: TrueColor::new(0x50, 0xFA, 0x7B),       // #50FA7B
+            yellow: TrueColor::new(0xF1, 0xFA, 0x8C),      // #F1FA8C
+            blue: TrueColor::new(0xBD, 0x93, 0xF9),        // #BD93F9
+            magenta: TrueColor::new(0xFF, 0x79, 0xC6),     // #FF79C6
+            cyan: TrueColor::new(0x8B, 0xE9, 0xFD),        // #8BE9FD
+            white: TrueColor::new(0xBF, 0xBF, 0xBF),       // #BFBFBF
 
-            bright_black: TrueColor::from_hex("#4D4D4D").unwrap(),
-            bright_red: TrueColor::from_hex("#FF6E67").unwrap(),
-            bright_green: TrueColor::from_hex("#5AF78E").unwrap(),
-            bright_yellow: TrueColor::from_hex("#F4F99D").unwrap(),
-            bright_blue: TrueColor::from_hex("#CAA9FA").unwrap(),
-            bright_magenta: TrueColor::from_hex("#FF92D0").unwrap(),
-            bright_cyan: TrueColor::from_hex("#9AEDFE").unwrap(),
-            bright_white: TrueColor::from_hex("#E6E6E6").unwrap(),
+            bright_black: TrueColor::new(0x4D, 0x4D, 0x4D),     // #4D4D4D
+            bright_red: TrueColor::new(0xFF, 0x6E, 0x67),       // #FF6E67
+            bright_green: TrueColor::new(0x5A, 0xF7, 0x8E),     // #5AF78E
+            bright_yellow: TrueColor::new(0xF4, 0xF9, 0x9D),    // #F4F99D
+            bright_blue: TrueColor::new(0xCA, 0xA9, 0xFA),      // #CAA9FA
+            bright_magenta: TrueColor::new(0xFF, 0x92, 0xD0),   // #FF92D0
+            bright_cyan: TrueColor::new(0x9A, 0xED, 0xFE),      // #9AEDFE
+            bright_white: TrueColor::new(0xE6, 0xE6, 0xE6),     // #E6E6E6
 
             extended: Self::generate_256_palette(),
         }
@@ -247,8 +250,9 @@ mod tests {
         let blue = TrueColor::new(0, 0, 255);
         let purple = red.blend(blue, 0.5);
 
-        assert_eq!(purple.r, 127);
-        assert_eq!(purple.b, 127);
+        // With rounding: 255 * 0.5 = 127.5 -> rounds to 128
+        assert_eq!(purple.r, 128);
+        assert_eq!(purple.b, 128);
     }
 
     #[test]
