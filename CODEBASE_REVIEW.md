@@ -87,7 +87,7 @@ While the code is generally good, there are some issues worth noting:
 
 ### 1. Potential Panic in Session Manager Default
 
-In `session.rs`, line 111, there's a `Default` implementation that could crash:
+In `session.rs`, lines 109-112, there's a `Default` implementation that could crash:
 
 ```rust
 impl Default for SessionManager {
@@ -139,7 +139,7 @@ This unsafe code is necessary for loading external plugins (code that wasn't com
 
 ### 4. Cast Truncation in Color Blending
 
-In `colors.rs`, the blend function has potential precision issues:
+In `colors.rs`, lines 60-67, the blend function has potential precision issues:
 
 ```rust
 r: ((self.r as f32) * (1.0 - factor) + (other.r as f32) * factor) as u8,
@@ -147,9 +147,9 @@ r: ((self.r as f32) * (1.0 - factor) + (other.r as f32) * factor) as u8,
 
 Converting a floating-point number to a `u8` (number 0-255) truncates rather than rounds. This means `254.9` becomes `254`, not `255`. For colors, this usually doesn't matter visually, but it's technically imprecise.
 
-### 5. Index Out of Bounds Possible in Command Palette
+### 5. Potential Thread Safety in Command Palette Navigation
 
-In `command_palette.rs`, when navigating suggestions:
+In `command_palette.rs`, lines 192-196, when navigating suggestions:
 
 ```rust
 pub fn select_next(&mut self) {
@@ -159,7 +159,7 @@ pub fn select_next(&mut self) {
 }
 ```
 
-The check is correct, but the pattern of using `selected_index` to access `suggestions[self.selected_index]` elsewhere without re-checking could be risky if the suggestions list changes between the check and access.
+While this check is correct for single-threaded access, the pattern of using `selected_index` to access `suggestions[self.selected_index]` elsewhere (like in `get_selected()` at line 200) relies on the list not changing between operations. In a multi-threaded context, this could potentially lead to accessing an invalid index if suggestions are modified concurrently. However, since the command palette is typically only modified in response to user input on a single thread, this is unlikely to cause issues in practice.
 
 ---
 
