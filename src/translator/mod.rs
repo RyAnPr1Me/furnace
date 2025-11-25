@@ -766,15 +766,15 @@ fn grep_to_findstr_args(args: &str) -> String {
         }
 
         // First non-flag is the pattern (if no -e was used)
-        if !pattern_found {
+        if pattern_found {
+            // Rest are files
+            result.push(' ');
+            result.push_str(part);
+        } else {
             result.push_str(" \"");
             result.push_str(part);
             result.push('"');
             pattern_found = true;
-        } else {
-            // Rest are files
-            result.push(' ');
-            result.push_str(part);
         }
     }
 

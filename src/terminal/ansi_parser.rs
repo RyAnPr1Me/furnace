@@ -68,12 +68,12 @@ impl AnsiParser {
     /// Flush current line spans to a line
     fn flush_line(&mut self) {
         self.flush_text();
-        if !self.current_line_spans.is_empty() {
-            let spans = std::mem::take(&mut self.current_line_spans);
-            self.lines.push(Line::from(spans));
-        } else {
+        if self.current_line_spans.is_empty() {
             // Empty line
             self.lines.push(Line::from(""));
+        } else {
+            let spans = std::mem::take(&mut self.current_line_spans);
+            self.lines.push(Line::from(spans));
         }
     }
 

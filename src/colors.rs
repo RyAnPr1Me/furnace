@@ -62,9 +62,10 @@ impl TrueColor {
         let factor = factor.clamp(0.0, 1.0);
         Self {
             // Use round() instead of truncation for more accurate color blending
-            r: ((self.r as f32) * (1.0 - factor) + (other.r as f32) * factor).round() as u8,
-            g: ((self.g as f32) * (1.0 - factor) + (other.g as f32) * factor).round() as u8,
-            b: ((self.b as f32) * (1.0 - factor) + (other.b as f32) * factor).round() as u8,
+            // Use f32::from for infallible u8 to f32 conversion
+            r: ((f32::from(self.r)) * (1.0 - factor) + (f32::from(other.r)) * factor).round() as u8,
+            g: ((f32::from(self.g)) * (1.0 - factor) + (f32::from(other.g)) * factor).round() as u8,
+            b: ((f32::from(self.b)) * (1.0 - factor) + (f32::from(other.b)) * factor).round() as u8,
         }
     }
 
@@ -88,7 +89,7 @@ impl TrueColor {
     #[allow(dead_code)] // Public API
     #[must_use]
     pub fn luminance(self) -> f32 {
-        (0.299 * self.r as f32 + 0.587 * self.g as f32 + 0.114 * self.b as f32) / 255.0
+        (0.299 * f32::from(self.r) + 0.587 * f32::from(self.g) + 0.114 * f32::from(self.b)) / 255.0
     }
 
     /// Check if color is light

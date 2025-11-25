@@ -249,33 +249,33 @@ impl SshManager {
             }
         }
 
-        if !host.is_empty() {
-            let name = if !username.is_empty() {
-                format!("{}@{}", username, host)
-            } else {
-                host.clone()
-            };
-
-            // Use current system user if no username specified
-            let default_username = std::env::var("USER")
-                .or_else(|_| std::env::var("USERNAME"))
-                .unwrap_or_else(|_| "user".to_string());
-
-            Some(SshConnection {
-                name,
-                host,
-                port: ssh_port,
-                username: if username.is_empty() {
-                    default_username
-                } else {
-                    username
-                },
-                identity_file,
-                last_used: Some(chrono::Utc::now().to_rfc3339()),
-            })
-        } else {
-            None
+        if host.is_empty() {
+            return None;
         }
+        
+        let name = if username.is_empty() {
+            host.clone()
+        } else {
+            format!("{}@{}", username, host)
+        };
+
+        // Use current system user if no username specified
+        let default_username = std::env::var("USER")
+            .or_else(|_| std::env::var("USERNAME"))
+            .unwrap_or_else(|_| "user".to_string());
+
+        Some(SshConnection {
+            name,
+            host,
+            port: ssh_port,
+            username: if username.is_empty() {
+                default_username
+            } else {
+                username
+            },
+            identity_file,
+            last_used: Some(chrono::Utc::now().to_rfc3339()),
+        })
     }
 }
 

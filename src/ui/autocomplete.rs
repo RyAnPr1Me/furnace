@@ -256,7 +256,8 @@ mod tests {
         autocomplete.add_to_history("cmd1".to_string());
         autocomplete.add_to_history("cmd2".to_string());
 
-        autocomplete.get_suggestions("cmd");
+        let suggestions = autocomplete.get_suggestions("cmd");
+        assert!(!suggestions.is_empty());
 
         let first = autocomplete.next_suggestion().map(|s| s.to_string());
         assert!(first.is_some());
@@ -272,7 +273,8 @@ mod tests {
         autocomplete.add_to_history("cmd1".to_string());
         autocomplete.add_to_history("cmd2".to_string());
 
-        autocomplete.get_suggestions("cmd");
+        let suggestions = autocomplete.get_suggestions("cmd");
+        assert!(!suggestions.is_empty());
 
         // Go forward twice
         let _ = autocomplete.next_suggestion();
