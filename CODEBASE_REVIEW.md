@@ -128,7 +128,7 @@ impl Default for SessionManager {
         match Self::new() {
             Ok(manager) => manager,
             Err(_) => {
-                // Fallback: use temp directory
+                // Fallback: use temp directory (ignores create_dir_all error as a last resort)
                 let sessions_dir = std::env::temp_dir().join("furnace_sessions");
                 let _ = std::fs::create_dir_all(&sessions_dir);
                 Self { sessions_dir }
@@ -138,17 +138,19 @@ impl Default for SessionManager {
 }
 ```
 
-This ensures the terminal never crashes just because the home directory is unavailable.
+This ensures the terminal never crashes just because the home directory is unavailable. Note: In the fallback case, directory creation errors are silently ignored as a last-resort measure - sessions may not persist but the application won't crash.
 
 ### 3. Color Palette Creation (FIXED)
 
 In `colors.rs`, the `default_dark()` function previously used `.unwrap()` on hex color parsing:
 
 ```rust
-// BEFORE: Could potentially panic on hex parsing (though unlikely with valid literals)
+// BEFORE: Used runtime parsing with unwrap
 black: TrueColor::from_hex("#000000").unwrap(),
 red: TrueColor::from_hex("#FF5555").unwrap(),
 ```
+
+While these specific hex values would never fail, using `unwrap()` is discouraged as it makes the code harder to maintain and could fail if hex values are later changed to be dynamic.
 
 **The Fix**: Now uses const `TrueColor::new()` with direct RGB values:
 
