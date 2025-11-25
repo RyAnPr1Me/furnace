@@ -3,11 +3,7 @@ use portable_pty::{CommandBuilder, NativePtySystem, PtySize, PtySystem};
 use std::io::{Read, Write};
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tracing::{debug, error, info, trace};
-
-/// Timeout for shell read operations in milliseconds.
-/// This prevents blocking the UI event loop when no output is available.
-const SHELL_READ_TIMEOUT_MS: u64 = 10;
+use tracing::{debug, error, info};
 
 /// High-performance shell session with zero-copy I/O where possible
 pub struct ShellSession {
@@ -61,7 +57,7 @@ impl ShellSession {
         })
     }
 
-    /// Read output from shell (non-blocking with timeout for responsive UI)
+    /// Read output from shell (non-blocking, high-performance)
     ///
     /// # Errors
     /// Returns an error if the read operation fails or the task cannot be spawned
@@ -71,7 +67,7 @@ impl ShellSession {
         // Use spawn_blocking for the synchronous read operation
         // We pass the buffer data as a Vec to work around the lifetime/Send constraints
         let buffer_len = buffer.len();
-        let read_task = tokio::task::spawn_blocking(move || {
+        let result = tokio::task::spawn_blocking(move || {
             let mut reader = reader.blocking_lock();
             // Use a stack-allocated array for small buffers, heap for large ones
             // This is already optimized by Rust's allocator
@@ -81,38 +77,23 @@ impl ShellSession {
                 Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => Ok((0, Vec::new())),
                 Err(e) => Err(e),
             }
-        });
-
-        // Apply a timeout to prevent blocking the event loop indefinitely
-        // This ensures the UI remains responsive even if the shell hasn't output anything
-        let result = tokio::time::timeout(
-            std::time::Duration::from_millis(SHELL_READ_TIMEOUT_MS),
-            read_task
-        ).await;
+        })
+        .await;
 
         match result {
-            // Read completed within timeout
-            Ok(Ok(Ok((n, temp_buf)))) => {
+            Ok(Ok((n, temp_buf))) => {
                 if n > 0 {
                     buffer[..n].copy_from_slice(&temp_buf[..n]);
                 }
                 Ok(n)
             }
-            // Read error
-            Ok(Ok(Err(e))) => {
+            Ok(Err(e)) => {
                 error!("Failed to read from shell: {}", e);
                 Err(e.into())
             }
-            // Task join error
-            Ok(Err(e)) => {
+            Err(e) => {
                 error!("Task join error: {}", e);
                 Err(e.into())
-            }
-            // Timeout - no data available yet, return 0 bytes
-            // This is expected during normal operation when shell is idle
-            Err(_) => {
-                trace!("Shell read timed out after {}ms - no data available", SHELL_READ_TIMEOUT_MS);
-                Ok(0)
             }
         }
     }
