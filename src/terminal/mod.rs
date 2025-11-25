@@ -457,14 +457,14 @@ impl Terminal {
                         session.write_input(&[ctrl_char]).await?;
                     } else {
                         // Bug #1: Track the actual character (including uppercase/symbols)
-                        // Send the character as UTF-8 bytes
+                        // Send the character as UTF-8 bytes (encode_utf8 uses stack efficiently)
                         let mut buf = [0u8; 4];
-                        let bytes = c.encode_utf8(&mut buf).as_bytes();
-                        session.write_input(bytes).await?;
+                        let s = c.encode_utf8(&mut buf);
+                        session.write_input(s.as_bytes()).await?;
 
                         // Track bytes sent for backspace calculation (Bug #2)
                         if let Some(cmd_buf) = self.command_buffers.get_mut(self.active_session) {
-                            cmd_buf.extend_from_slice(bytes);
+                            cmd_buf.extend_from_slice(s.as_bytes());
                         }
                     }
                 }
@@ -480,13 +480,21 @@ impl Terminal {
                 if let Some(session) = self.sessions.get(self.active_session) {
                     // Remove last UTF-8 character from command buffer (Bug #2)
                     if let Some(cmd_buf) = self.command_buffers.get_mut(self.active_session) {
-                        // Find the start of the last UTF-8 character
+                        // Pop one complete UTF-8 character from the end
+                        // UTF-8 encoding: ASCII is 0xxxxxxx, lead bytes are 11xxxxxx, continuation bytes are 10xxxxxx
                         if !cmd_buf.is_empty() {
-                            let mut i = cmd_buf.len() - 1;
-                            while i > 0 && (cmd_buf[i] & 0xC0) == 0x80 {
-                                i -= 1;
+                            // First, pop any trailing continuation bytes (10xxxxxx pattern)
+                            while !cmd_buf.is_empty() {
+                                let last = *cmd_buf.last().unwrap();
+                                if (last & 0xC0) == 0x80 {
+                                    // This is a continuation byte, pop it
+                                    cmd_buf.pop();
+                                } else {
+                                    // This is either ASCII or a lead byte, pop it and we're done
+                                    cmd_buf.pop();
+                                    break;
+                                }
                             }
-                            cmd_buf.truncate(i);
                         }
                     }
                     session.write_input(&[127]).await?;

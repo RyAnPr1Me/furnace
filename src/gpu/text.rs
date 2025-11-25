@@ -66,6 +66,10 @@ pub fn parse_terminal_output(output: &str, cols: usize) -> Vec<GpuCell> {
     
     let mut col = 0;
     let mut chars = output.chars().peekable();
+    // Reusable buffer for parsing ANSI parameters (avoids allocation per sequence)
+    let mut param_buf = [0u8; 16]; // Max 16 parameters
+    let mut param_idx = 0;
+    let mut current_param: u16 = 0;
     
     while let Some(c) = chars.next() {
         match c {
@@ -73,35 +77,37 @@ pub fn parse_terminal_output(output: &str, cols: usize) -> Vec<GpuCell> {
                 // Parse ANSI escape sequence
                 if chars.peek() == Some(&'[') {
                     chars.next(); // consume '['
-                    let mut params = Vec::new();
-                    let mut current_param = String::new();
+                    param_idx = 0;
+                    current_param = 0;
                     
                     while let Some(&ch) = chars.peek() {
-                        if ch.is_ascii_digit() || ch == ';' {
+                        if ch.is_ascii_digit() {
                             chars.next();
-                            if ch == ';' {
-                                if !current_param.is_empty() {
-                                    params.push(current_param.parse::<u8>().unwrap_or(0));
-                                    current_param.clear();
-                                }
-                            } else {
-                                current_param.push(ch);
+                            current_param = current_param.saturating_mul(10).saturating_add((ch as u16) - b'0' as u16);
+                        } else if ch == ';' {
+                            chars.next();
+                            if param_idx < param_buf.len() {
+                                param_buf[param_idx] = current_param.min(255) as u8;
+                                param_idx += 1;
                             }
+                            current_param = 0;
                         } else {
                             break;
                         }
                     }
                     
-                    if !current_param.is_empty() {
-                        params.push(current_param.parse::<u8>().unwrap_or(0));
+                    // Store last parameter
+                    if param_idx < param_buf.len() && (param_idx > 0 || current_param > 0) {
+                        param_buf[param_idx] = current_param.min(255) as u8;
+                        param_idx += 1;
                     }
                     
                     // Get final character
                     if let Some(cmd) = chars.next() {
                         match cmd {
                             'm' => {
-                                // SGR (Select Graphic Rendition)
-                                for param in params {
+                                // SGR (Select Graphic Rendition) - iterate over fixed buffer
+                                for &param in &param_buf[..param_idx] {
                                     match param {
                                         0 => {
                                             current_fg = [1.0, 1.0, 1.0, 1.0];

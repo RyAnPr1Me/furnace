@@ -391,8 +391,9 @@ impl GpuRenderer {
             usage: wgpu::BufferUsages::INDEX,
         });
 
-        // Create instance buffer (pre-allocate for typical terminal size)
-        let max_cells = 200 * 80; // 80x200 cells
+        // Create instance buffer (pre-allocate for large terminal - 320 cols x 100 rows)
+        // This handles 4K monitors with typical font sizes. Buffer will be recreated if needed.
+        let max_cells = 320 * 100;
         let instance_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Instance Buffer"),
             size: (max_cells * std::mem::size_of::<CellInstance>()) as u64,

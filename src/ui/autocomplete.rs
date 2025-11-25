@@ -117,8 +117,10 @@ impl Autocomplete {
         }
 
         // Add common commands that aren't already in suggestions
+        // Note: For static strings, we create Arc<str> which is efficient since
+        // it's just a pointer + reference count for the static data
         for &cmd in &self.cached_common_filtered {
-            let shared: SharedString = cmd.into();
+            let shared: SharedString = Arc::from(cmd);
             if seen.insert(shared.clone()) {
                 self.current_suggestions.push(shared);
                 if self.current_suggestions.len() >= 15 {
