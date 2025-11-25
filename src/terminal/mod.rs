@@ -52,9 +52,13 @@ use regex::Regex;
 use std::sync::LazyLock;
 
 /// Regex to match ANSI escape sequences for stripping from output
+/// Uses a standard CSI pattern plus OSC sequences
 static ANSI_ESCAPE_REGEX: LazyLock<Regex> = LazyLock::new(|| {
-    // Matches ANSI escape sequences: CSI sequences, OSC sequences, and simple escapes
-    Regex::new(r"\x1b\[[0-9;]*[a-zA-Z]|\x1b\][^\x07]*\x07|\x1b[()][0-9A-Z]|\x1b[=>]|\x1b\[[\?]?[0-9;]*[hlmnpsu]|\r").unwrap()
+    // Standard ANSI escape sequence pattern:
+    // - CSI sequences: ESC [ followed by parameters and a final byte
+    // - OSC sequences: ESC ] followed by text and BEL
+    // - Single-character escapes: ESC followed by specific characters
+    Regex::new(r"\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07]*\x07|\x1b[()][0-9A-Z]|\x1b[=>]").unwrap()
 });
 
 /// Strip ANSI escape sequences from text for display
@@ -806,11 +810,11 @@ impl Terminal {
             let raw_output = String::from_utf8_lossy(buffer);
             // Strip ANSI escape codes and get the last visible lines that fit in the area
             let clean_output = strip_ansi_codes(&raw_output);
-            // Get only the last N lines that fit in the terminal area
-            let visible_lines: Vec<&str> = clean_output.lines().collect();
             let height = content_area.height as usize;
-            let start = visible_lines.len().saturating_sub(height);
-            visible_lines[start..].join("\n")
+            // Count total lines first, then skip to get only visible lines
+            let total_lines = clean_output.lines().count();
+            let skip_count = total_lines.saturating_sub(height);
+            clean_output.lines().skip(skip_count).collect::<Vec<_>>().join("\n")
         } else {
             String::new()
         };
