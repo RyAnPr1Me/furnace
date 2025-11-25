@@ -34,7 +34,7 @@ type SharedString = Arc<str>;
 pub struct Autocomplete {
     /// Bug #28: History uses Arc<str> for efficient sharing
     history: VecDeque<SharedString>,
-    /// Bug #22: HashSet for O(1) duplicate detection
+    /// Bug #22: `HashSet` for O(1) duplicate detection
     history_set: HashSet<SharedString>,
     /// Current suggestions (references to history or static commands)
     current_suggestions: Vec<SharedString>,

@@ -124,7 +124,7 @@ impl ResourceMonitor {
     }
 
     /// Get basic network statistics (placeholder for cross-platform implementation)
-    /// Returns (rx_bytes, tx_bytes)
+    /// Returns `(rx_bytes, tx_bytes)`
     fn get_network_stats(&self) -> (u64, u64) {
         // Basic implementation - can be extended with platform-specific code
         // For now, returns 0 to maintain API compatibility
