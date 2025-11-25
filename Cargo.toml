@@ -53,6 +53,12 @@ rustyline = "13.0"
 
 # GPU rendering (optional, for high-performance rendering)
 wgpu = { version = "0.19", optional = true }
+# GPU text rendering
+glyphon = { version = "0.5", optional = true }
+# Window creation for GPU context
+winit = { version = "0.29", optional = true }
+# Font handling
+fontdue = { version = "0.8", optional = true }
 
 # System monitoring
 sysinfo = "0.30"
@@ -77,6 +83,11 @@ regex = "1.10"
 
 # ANSI/VTE terminal parsing
 vte = "0.15"
+
+# For GPU feature
+bitflags = "2.4"
+pollster = "0.4"
+bytemuck = { version = "1.14", features = ["derive"] }
 
 # Windows specific
 [target.'cfg(windows)'.dependencies]
@@ -110,7 +121,7 @@ opt-level = 2
 # GPU acceleration feature
 [features]
 default = []
-gpu = ["wgpu"]
+gpu = ["wgpu", "glyphon", "winit", "fontdue"]
 
 [profile.dev]
 opt-level = 1                    # Slight optimization in dev for faster iteration

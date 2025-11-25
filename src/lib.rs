@@ -17,6 +17,7 @@
 //! - [`ssh_manager`]: SSH connection management
 //! - [`url_handler`]: URL detection and opening
 //! - [`progress_bar`]: Command execution progress tracking
+//! - [`gpu`]: GPU-accelerated rendering (optional, requires `gpu` feature)
 
 pub mod colors;
 pub mod config;
@@ -30,3 +31,9 @@ pub mod terminal;
 pub mod translator;
 pub mod ui;
 pub mod url_handler;
+
+/// GPU-accelerated rendering module
+/// 
+/// Enabled with the `gpu` feature flag. Provides hardware-accelerated
+/// text rendering using wgpu for 170+ FPS performance.
+pub mod gpu;

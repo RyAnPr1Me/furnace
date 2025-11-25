@@ -1,12 +1,49 @@
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
+use std::sync::Arc;
+
+/// Common commands - cached as &'static str (Bug #26: avoid re-allocation)
+static COMMON_COMMANDS: &[&str] = &[
+    // Unix/Linux/Mac
+    "ls", "cd", "pwd", "mkdir", "rm", "cp", "mv", "cat", "grep", "find",
+    "chmod", "chown", "ps", "kill", "top", "df", "du", "tar", "zip", "unzip",
+    "git", "ssh", "curl", "wget", "vim", "nano", "echo", "export",
+    // Windows
+    "dir", "cls", "type", "copy", "move", "del", "xcopy", "attrib",
+    "tasklist", "taskkill", "ipconfig", "ping", "netstat",
+    // PowerShell
+    "Get-Command", "Get-Help", "Get-Process", "Get-Service", "Set-Location",
+    "Get-ChildItem", "Remove-Item", "Copy-Item", "Move-Item",
+    // Git shortcuts
+    "git status", "git add", "git commit", "git push", "git pull",
+    "git clone", "git branch", "git checkout", "git merge", "git log",
+    // Docker
+    "docker ps", "docker images", "docker run", "docker build", "docker exec",
+    "docker-compose up", "docker-compose down",
+    // NPM/Node
+    "npm install", "npm start", "npm run", "npm test", "npx",
+    // Cargo/Rust
+    "cargo build", "cargo run", "cargo test", "cargo bench", "cargo check",
+];
+
+/// Bug #28: Use Arc<str> for shared strings to avoid cloning
+type SharedString = Arc<str>;
 
 /// Advanced autocomplete system for shell commands
-#[allow(dead_code)] // Public API for autocomplete feature
+/// Bug #6: Optimized for performance - O(1) dedup, minimal allocations
+#[allow(dead_code)]
 pub struct Autocomplete {
-    history: VecDeque<String>,
-    current_suggestions: Vec<String>,
+    /// Bug #28: History uses Arc<str> for efficient sharing
+    history: VecDeque<SharedString>,
+    /// Bug #22: HashSet for O(1) duplicate detection
+    history_set: HashSet<SharedString>,
+    /// Current suggestions (references to history or static commands)
+    current_suggestions: Vec<SharedString>,
+    /// Current index in suggestions
     current_index: usize,
+    /// Cached prefix for incremental filtering
     prefix: String,
+    /// Bug #26: Cached filtered common commands (reused across calls)
+    cached_common_filtered: Vec<&'static str>,
 }
 
 impl Autocomplete {
@@ -14,81 +51,110 @@ impl Autocomplete {
     pub fn new() -> Self {
         Self {
             history: VecDeque::with_capacity(1000),
-            current_suggestions: Vec::new(),
+            history_set: HashSet::with_capacity(1000),
+            current_suggestions: Vec::with_capacity(20),
             current_index: 0,
             prefix: String::new(),
+            cached_common_filtered: Vec::with_capacity(10),
         }
     }
 
-    /// Add command to history
-    #[allow(dead_code)] // Public API
+    /// Add command to history (Bug #22: O(1) duplicate detection)
+    #[allow(dead_code)]
     pub fn add_to_history(&mut self, command: String) {
         if command.trim().is_empty() {
             return;
         }
 
-        // Remove duplicates
-        if let Some(pos) = self.history.iter().position(|x| x == &command) {
-            self.history.remove(pos);
+        let shared: SharedString = command.into();
+
+        // Bug #22: O(1) duplicate check instead of linear scan
+        if self.history_set.contains(&shared) {
+            // Move existing entry to front (remove and re-add)
+            if let Some(pos) = self.history.iter().position(|x| *x == shared) {
+                self.history.remove(pos);
+            }
+        } else {
+            self.history_set.insert(shared.clone());
         }
 
         // Add to front
-        self.history.push_front(command);
+        self.history.push_front(shared);
 
         // Limit size
         if self.history.len() > 1000 {
-            self.history.pop_back();
+            if let Some(removed) = self.history.pop_back() {
+                self.history_set.remove(&removed);
+            }
         }
     }
 
-    /// Get suggestions for prefix
-    #[allow(dead_code)] // Public API
+    /// Get suggestions for prefix (Bug #6: optimized, minimal allocations)
+    #[allow(dead_code)]
     #[must_use]
     pub fn get_suggestions(&mut self, prefix: &str) -> Vec<String> {
-        self.prefix = prefix.to_string();
+        self.prefix.clear();
+        self.prefix.push_str(prefix);
         self.current_index = 0;
+        self.current_suggestions.clear();
 
-        // Get commands from history that start with prefix
-        let mut suggestions: Vec<String> = self
-            .history
+        // Bug #6: Use HashSet to deduplicate without sort
+        let mut seen = HashSet::with_capacity(20);
+
+        // Add matching history entries (already deduplicated)
+        for cmd in self.history.iter().take(10) {
+            if cmd.starts_with(prefix) && seen.insert(cmd.clone()) {
+                self.current_suggestions.push(cmd.clone());
+            }
+        }
+
+        // Bug #26: Filter common commands without allocation
+        self.cached_common_filtered.clear();
+        for cmd in COMMON_COMMANDS.iter().copied() {
+            if cmd.starts_with(prefix) {
+                self.cached_common_filtered.push(cmd);
+            }
+        }
+
+        // Add common commands that aren't already in suggestions
+        for &cmd in &self.cached_common_filtered {
+            let shared: SharedString = cmd.into();
+            if seen.insert(shared.clone()) {
+                self.current_suggestions.push(shared);
+                if self.current_suggestions.len() >= 15 {
+                    break;
+                }
+            }
+        }
+
+        // Return cloned strings (required by API)
+        self.current_suggestions
             .iter()
-            .filter(|cmd| cmd.starts_with(prefix))
-            .take(10)
-            .cloned()
-            .collect();
-
-        // Add common commands if prefix matches
-        suggestions.extend(
-            Self::common_commands()
-                .iter()
-                .filter(|cmd| cmd.starts_with(prefix))
-                .take(5)
-                .map(|s| s.to_string()),
-        );
-
-        // Remove duplicates
-        suggestions.sort();
-        suggestions.dedup();
-
-        self.current_suggestions = suggestions.clone();
-        suggestions
+            .map(|s| s.to_string())
+            .collect()
     }
 
-    /// Get next suggestion (for Tab completion)
-    #[allow(dead_code)] // Public API
-    pub fn next_suggestion(&mut self) -> Option<String> {
+    /// Get next suggestion (Bug #27: return reference, avoid clone)
+    #[allow(dead_code)]
+    pub fn next_suggestion(&mut self) -> Option<&str> {
         if self.current_suggestions.is_empty() {
             return None;
         }
 
-        let suggestion = self.current_suggestions[self.current_index].clone();
+        let suggestion = &self.current_suggestions[self.current_index];
         self.current_index = (self.current_index + 1) % self.current_suggestions.len();
         Some(suggestion)
     }
 
-    /// Get previous suggestion (for Shift+Tab)
-    #[allow(dead_code)] // Public API
-    pub fn previous_suggestion(&mut self) -> Option<String> {
+    /// Get next suggestion as owned String (legacy API)
+    #[allow(dead_code)]
+    pub fn next_suggestion_owned(&mut self) -> Option<String> {
+        self.next_suggestion().map(|s| s.to_string())
+    }
+
+    /// Get previous suggestion (Bug #27: return reference, avoid clone)
+    #[allow(dead_code)]
+    pub fn previous_suggestion(&mut self) -> Option<&str> {
         if self.current_suggestions.is_empty() {
             return None;
         }
@@ -99,111 +165,33 @@ impl Autocomplete {
             self.current_index -= 1;
         }
 
-        Some(self.current_suggestions[self.current_index].clone())
+        Some(&self.current_suggestions[self.current_index])
     }
 
-    /// Common commands for different platforms
-    #[allow(dead_code)] // Used by get_suggestions
-    fn common_commands() -> Vec<&'static str> {
-        vec![
-            // Unix/Linux/Mac
-            "ls",
-            "cd",
-            "pwd",
-            "mkdir",
-            "rm",
-            "cp",
-            "mv",
-            "cat",
-            "grep",
-            "find",
-            "chmod",
-            "chown",
-            "ps",
-            "kill",
-            "top",
-            "df",
-            "du",
-            "tar",
-            "zip",
-            "unzip",
-            "git",
-            "ssh",
-            "curl",
-            "wget",
-            "vim",
-            "nano",
-            "echo",
-            "export",
-            // Windows
-            "dir",
-            "cls",
-            "type",
-            "copy",
-            "move",
-            "del",
-            "xcopy",
-            "attrib",
-            "tasklist",
-            "taskkill",
-            "ipconfig",
-            "ping",
-            "netstat",
-            // PowerShell
-            "Get-Command",
-            "Get-Help",
-            "Get-Process",
-            "Get-Service",
-            "Set-Location",
-            "Get-ChildItem",
-            "Remove-Item",
-            "Copy-Item",
-            "Move-Item",
-            // Git
-            "git status",
-            "git add",
-            "git commit",
-            "git push",
-            "git pull",
-            "git clone",
-            "git branch",
-            "git checkout",
-            "git merge",
-            "git log",
-            // Docker
-            "docker ps",
-            "docker images",
-            "docker run",
-            "docker build",
-            "docker exec",
-            "docker-compose up",
-            "docker-compose down",
-            // NPM/Node
-            "npm install",
-            "npm start",
-            "npm run",
-            "npm test",
-            "npx",
-            // Cargo/Rust
-            "cargo build",
-            "cargo run",
-            "cargo test",
-            "cargo bench",
-            "cargo check",
-        ]
+    /// Get previous suggestion as owned String (legacy API)
+    #[allow(dead_code)]
+    pub fn previous_suggestion_owned(&mut self) -> Option<String> {
+        self.previous_suggestion().map(|s| s.to_string())
     }
 
     /// Get history (for up/down arrow navigation)
-    #[allow(dead_code)] // Public API
+    #[allow(dead_code)]
+    pub fn get_history(&self) -> impl Iterator<Item = &str> {
+        self.history.iter().map(|s| s.as_ref())
+    }
+
+    /// Get history length
+    #[allow(dead_code)]
     #[must_use]
-    pub fn get_history(&self) -> &VecDeque<String> {
-        &self.history
+    pub fn history_len(&self) -> usize {
+        self.history.len()
     }
 
     /// Clear history
-    #[allow(dead_code)] // Public API
+    #[allow(dead_code)]
     pub fn clear_history(&mut self) {
         self.history.clear();
+        self.history_set.clear();
         self.current_suggestions.clear();
         self.current_index = 0;
     }
@@ -222,7 +210,7 @@ mod tests {
     #[test]
     fn test_autocomplete_creation() {
         let autocomplete = Autocomplete::new();
-        assert_eq!(autocomplete.history.len(), 0);
+        assert_eq!(autocomplete.history_len(), 0);
     }
 
     #[test]
@@ -231,8 +219,22 @@ mod tests {
         autocomplete.add_to_history("ls -la".to_string());
         autocomplete.add_to_history("cd /home".to_string());
 
-        assert_eq!(autocomplete.history.len(), 2);
-        assert_eq!(autocomplete.history[0], "cd /home");
+        assert_eq!(autocomplete.history_len(), 2);
+        let history: Vec<_> = autocomplete.get_history().collect();
+        assert_eq!(history[0], "cd /home");
+    }
+
+    #[test]
+    fn test_add_to_history_dedup() {
+        let mut autocomplete = Autocomplete::new();
+        autocomplete.add_to_history("ls -la".to_string());
+        autocomplete.add_to_history("cd /home".to_string());
+        autocomplete.add_to_history("ls -la".to_string()); // Duplicate
+
+        // Should still have 2 entries, with "ls -la" moved to front
+        assert_eq!(autocomplete.history_len(), 2);
+        let history: Vec<_> = autocomplete.get_history().collect();
+        assert_eq!(history[0], "ls -la");
     }
 
     #[test]
@@ -254,11 +256,41 @@ mod tests {
 
         autocomplete.get_suggestions("cmd");
 
-        let first = autocomplete.next_suggestion();
+        let first = autocomplete.next_suggestion().map(|s| s.to_string());
         assert!(first.is_some());
 
-        let second = autocomplete.next_suggestion();
+        let second = autocomplete.next_suggestion().map(|s| s.to_string());
         assert!(second.is_some());
         assert_ne!(first, second);
+    }
+
+    #[test]
+    fn test_previous_navigation() {
+        let mut autocomplete = Autocomplete::new();
+        autocomplete.add_to_history("cmd1".to_string());
+        autocomplete.add_to_history("cmd2".to_string());
+
+        autocomplete.get_suggestions("cmd");
+
+        // Go forward twice
+        let _ = autocomplete.next_suggestion();
+        let _ = autocomplete.next_suggestion();
+
+        // Go back
+        let prev = autocomplete.previous_suggestion();
+        assert!(prev.is_some());
+    }
+
+    #[test]
+    fn test_common_commands_cached() {
+        let mut autocomplete = Autocomplete::new();
+
+        // First call
+        let suggestions1 = autocomplete.get_suggestions("git");
+        assert!(suggestions1.iter().any(|s| s.starts_with("git")));
+
+        // Second call - should use cached common commands
+        let suggestions2 = autocomplete.get_suggestions("git");
+        assert!(suggestions2.iter().any(|s| s.starts_with("git")));
     }
 }
