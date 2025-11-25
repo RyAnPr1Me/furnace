@@ -608,7 +608,7 @@ impl Terminal {
                 let byte_count = self
                     .command_buffers
                     .get(self.active_session)
-                    .map(|b| b.len())
+                    .map(std::vec::Vec::len)
                     .unwrap_or(0);
 
                 // Send backspaces to clear the original command
@@ -971,7 +971,7 @@ impl Terminal {
         let buffer_len = self
             .output_buffers
             .get(self.active_session)
-            .map(|b| b.len())
+            .map(std::vec::Vec::len)
             .unwrap_or(0);
         let cached_len = self
             .cached_buffer_lens

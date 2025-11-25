@@ -124,7 +124,7 @@ impl PluginManager {
     #[allow(dead_code)] // Public API
     #[must_use]
     pub fn list_plugins(&self) -> Vec<&str> {
-        self.plugins.keys().map(|s| s.as_str()).collect()
+        self.plugins.keys().map(std::string::String::as_str).collect()
     }
 
     /// Check if plugin is loaded

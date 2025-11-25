@@ -132,7 +132,7 @@ impl Autocomplete {
         // Return cloned strings (required by API)
         self.current_suggestions
             .iter()
-            .map(|s| s.to_string())
+            .map(std::string::ToString::to_string)
             .collect()
     }
 
@@ -151,7 +151,7 @@ impl Autocomplete {
     /// Get next suggestion as owned String (legacy API)
     #[allow(dead_code)]
     pub fn next_suggestion_owned(&mut self) -> Option<String> {
-        self.next_suggestion().map(|s| s.to_string())
+        self.next_suggestion().map(std::string::ToString::to_string)
     }
 
     /// Get previous suggestion (Bug #27: return reference, avoid clone)
