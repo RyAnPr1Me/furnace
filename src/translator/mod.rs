@@ -1641,7 +1641,7 @@ static LINUX_TO_WINDOWS_MAP: LazyLock<HashMap<&'static str, CommandMapping>> =
                         }
                         result.push(' ');
                         result.push_str(name);
-                        if !name.ends_with(".exe") {
+                        if !name.to_lowercase().ends_with(".exe") {
                             result.push_str(".exe");
                         }
                     }

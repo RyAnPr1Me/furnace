@@ -567,8 +567,7 @@ impl Terminal {
             let command = self
                 .command_buffers
                 .get(self.active_session)
-                .map(|b| String::from_utf8_lossy(b))
-                .unwrap_or(Cow::Borrowed(""));
+                .map_or(Cow::Borrowed(""), |b| String::from_utf8_lossy(b));
 
             // Check for SSH command
             if self.config.ssh_manager.enabled
@@ -608,8 +607,7 @@ impl Terminal {
                 let byte_count = self
                     .command_buffers
                     .get(self.active_session)
-                    .map(std::vec::Vec::len)
-                    .unwrap_or(0);
+                    .map_or(0, std::vec::Vec::len);
 
                 // Send backspaces to clear the original command
                 for _ in 0..byte_count {
@@ -861,18 +859,10 @@ impl Terminal {
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Length(
-                    if self.config.terminal.enable_tabs && self.sessions.len() > 1 {
-                        1
-                    } else {
-                        0
-                    },
+                    u16::from(self.config.terminal.enable_tabs && self.sessions.len() > 1)
                 ),
-                Constraint::Length(if self.translation_notification.is_some() {
-                    1
-                } else {
-                    0
-                }),
-                Constraint::Length(if self.progress_bar.visible { 1 } else { 0 }),
+                Constraint::Length(u16::from(self.translation_notification.is_some())),
+                Constraint::Length(u16::from(self.progress_bar.visible)),
                 Constraint::Min(0),
                 Constraint::Length(if self.show_resources { 3 } else { 0 }),
             ])
@@ -971,8 +961,7 @@ impl Terminal {
         let buffer_len = self
             .output_buffers
             .get(self.active_session)
-            .map(std::vec::Vec::len)
-            .unwrap_or(0);
+            .map_or(0, std::vec::Vec::len);
         let cached_len = self
             .cached_buffer_lens
             .get(self.active_session)
