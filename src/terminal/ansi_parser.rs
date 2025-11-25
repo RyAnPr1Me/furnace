@@ -12,6 +12,12 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use vte::{Params, Parser, Perform};
 
+/// Convert a u16 color value to u8, clamping to valid range
+#[inline]
+fn to_color_u8(value: u16) -> u8 {
+    value.min(255) as u8
+}
+
 /// ANSI parser that converts escape sequences to styled ratatui spans
 pub struct AnsiParser {
     /// Current style being applied
@@ -175,7 +181,7 @@ impl AnsiParser {
                                         if !color_param.is_empty() {
                                             self.current_style = self
                                                 .current_style
-                                                .fg(Color::Indexed(color_param[0] as u8));
+                                                .fg(Color::Indexed(to_color_u8(color_param[0])));
                                         }
                                     }
                                 }
@@ -186,7 +192,7 @@ impl AnsiParser {
                                     let b = iter.next().and_then(|p| p.first().copied());
                                     if let (Some(r), Some(g), Some(b)) = (r, g, b) {
                                         self.current_style =
-                                            self.current_style.fg(Color::Rgb(r as u8, g as u8, b as u8));
+                                            self.current_style.fg(Color::Rgb(to_color_u8(r), to_color_u8(g), to_color_u8(b)));
                                     }
                                 }
                                 _ => {}
@@ -218,7 +224,7 @@ impl AnsiParser {
                                         if !color_param.is_empty() {
                                             self.current_style = self
                                                 .current_style
-                                                .bg(Color::Indexed(color_param[0] as u8));
+                                                .bg(Color::Indexed(to_color_u8(color_param[0])));
                                         }
                                     }
                                 }
@@ -229,7 +235,7 @@ impl AnsiParser {
                                     let b = iter.next().and_then(|p| p.first().copied());
                                     if let (Some(r), Some(g), Some(b)) = (r, g, b) {
                                         self.current_style =
-                                            self.current_style.bg(Color::Rgb(r as u8, g as u8, b as u8));
+                                            self.current_style.bg(Color::Rgb(to_color_u8(r), to_color_u8(g), to_color_u8(b)));
                                     }
                                 }
                                 _ => {}

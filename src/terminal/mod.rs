@@ -510,18 +510,15 @@ impl Terminal {
                     if let Some(cmd_buf) = self.command_buffers.get_mut(self.active_session) {
                         // Pop one complete UTF-8 character from the end
                         // UTF-8 encoding: ASCII is 0xxxxxxx, lead bytes are 11xxxxxx, continuation bytes are 10xxxxxx
-                        if !cmd_buf.is_empty() {
-                            // First, pop any trailing continuation bytes (10xxxxxx pattern)
-                            while !cmd_buf.is_empty() {
-                                let last = *cmd_buf.last().unwrap();
-                                if (last & 0xC0) == 0x80 {
-                                    // This is a continuation byte, pop it
-                                    cmd_buf.pop();
-                                } else {
-                                    // This is either ASCII or a lead byte, pop it and we're done
-                                    cmd_buf.pop();
-                                    break;
-                                }
+                        // First, pop any trailing continuation bytes (10xxxxxx pattern)
+                        while let Some(&last) = cmd_buf.last() {
+                            if (last & 0xC0) == 0x80 {
+                                // This is a continuation byte, pop it
+                                cmd_buf.pop();
+                            } else {
+                                // This is either ASCII or a lead byte, pop it and we're done
+                                cmd_buf.pop();
+                                break;
                             }
                         }
                     }
