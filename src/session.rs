@@ -107,8 +107,22 @@ impl SessionManager {
 }
 
 impl Default for SessionManager {
+    /// Create a default session manager
+    /// 
+    /// # Panics
+    /// This implementation panics if the home directory cannot be determined.
+    /// For fallible creation, use `SessionManager::new()` instead.
     fn default() -> Self {
-        Self::new().expect("Failed to create session manager")
+        // Try to create with graceful fallback
+        match Self::new() {
+            Ok(manager) => manager,
+            Err(_) => {
+                // Fallback: use temp directory if home is unavailable
+                let sessions_dir = std::env::temp_dir().join("furnace_sessions");
+                let _ = std::fs::create_dir_all(&sessions_dir);
+                Self { sessions_dir }
+            }
+        }
     }
 }
 

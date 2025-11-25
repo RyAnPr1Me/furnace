@@ -14,10 +14,34 @@ pub struct PluginManager {
 pub struct LoadedPlugin {
     #[allow(dead_code)]
     library: Library,
+    /// Raw pointer to the plugin - must be properly dropped
+    plugin_ptr: *mut dyn Plugin,
     #[allow(dead_code)] // Public API field
     pub name: String,
     #[allow(dead_code)] // Public API field
     pub version: String,
+}
+
+// Safety: LoadedPlugin is safe to send between threads because
+// the raw pointer is only accessed during plugin operations
+// and the Library ensures thread-safe access to the plugin
+unsafe impl Send for LoadedPlugin {}
+unsafe impl Sync for LoadedPlugin {}
+
+impl Drop for LoadedPlugin {
+    fn drop(&mut self) {
+        // Safety: The plugin was created by the plugin's constructor
+        // and we are responsible for cleaning it up
+        if !self.plugin_ptr.is_null() {
+            unsafe {
+                // Call cleanup on the plugin before dropping
+                let plugin = &mut *self.plugin_ptr;
+                plugin.cleanup();
+                // Convert back to Box and drop it properly
+                drop(Box::from_raw(self.plugin_ptr));
+            }
+        }
+    }
 }
 
 /// Plugin API trait that plugins must implement
@@ -64,14 +88,21 @@ impl PluginManager {
                 .get(b"_plugin_create")
                 .context("Failed to find plugin constructor")?;
 
-            let plugin = constructor();
-            let plugin_ref = &*plugin;
+            let plugin_ptr = constructor();
+            
+            // Validate the pointer before using it
+            if plugin_ptr.is_null() {
+                return Err(anyhow::anyhow!("Plugin constructor returned null pointer"));
+            }
+            
+            let plugin_ref = &*plugin_ptr;
 
             let name = plugin_ref.name().to_string();
             let version = plugin_ref.version().to_string();
 
             let loaded = LoadedPlugin {
                 library: lib,
+                plugin_ptr,
                 name: name.clone(),
                 version,
             };

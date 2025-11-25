@@ -67,7 +67,21 @@ impl ResourceMonitor {
         }
         self.last_update = Instant::now();
 
-        let system = self.system.lock().unwrap();
+        // Safely lock the system, return cached or default stats if lock fails
+        let Ok(system) = self.system.lock() else {
+            // Return cached stats if available, otherwise return default empty stats
+            return self.cached_stats.clone().unwrap_or(ResourceStats {
+                cpu_usage: 0.0,
+                cpu_count: 1,
+                memory_used: 0,
+                memory_total: 1,
+                memory_percent: 0.0,
+                process_count: 0,
+                network_rx: 0,
+                network_tx: 0,
+                disk_usage: Vec::new(),
+            });
+        };
 
         // CPU usage (average across all cores) - optimized calculation
         let cpus = system.cpus();
