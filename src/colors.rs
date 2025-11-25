@@ -90,8 +90,12 @@ impl TrueColor {
     #[must_use]
     pub fn luminance(self) -> f32 {
         // Use mul_add for more efficient and accurate calculation
-        0.299f32.mul_add(f32::from(self.r), 
-            0.587f32.mul_add(f32::from(self.g), 0.114 * f32::from(self.b))) / 255.0
+        // Formula: (0.299*r + 0.587*g + 0.114*b) / 255.0
+        // Nested mul_add: 0.299*r + (0.587*g + 0.114*b)
+        0.299f32.mul_add(
+            f32::from(self.r), 
+            0.587f32.mul_add(f32::from(self.g), 0.114 * f32::from(self.b))
+        ) / 255.0
     }
 
     /// Check if color is light

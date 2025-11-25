@@ -33,15 +33,14 @@ impl SshConnection {
     /// Format as SSH command string
     #[must_use]
     pub fn to_command(&self) -> String {
+        use std::fmt::Write;
         let mut cmd = format!("ssh {}@{}", self.username, self.host);
 
         if self.port != 22 {
-            use std::fmt::Write;
             let _ = write!(cmd, " -p {}", self.port);
         }
 
         if let Some(ref key) = self.identity_file {
-            use std::fmt::Write;
             let _ = write!(cmd, " -i {}", key);
         }
 
