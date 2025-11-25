@@ -56,7 +56,7 @@ impl SessionManager {
     /// Load a session by ID
     #[allow(dead_code)] // Public API
     pub fn load_session(&self, id: &str) -> Result<SavedSession> {
-        let session_file = self.sessions_dir.join(format!("{}.json", id));
+        let session_file = self.sessions_dir.join(format!("{id}.json"));
         let json = fs::read_to_string(&session_file).context("Failed to read session file")?;
 
         let session: SavedSession =
@@ -92,7 +92,7 @@ impl SessionManager {
     /// Delete a session
     #[allow(dead_code)] // Public API
     pub fn delete_session(&self, id: &str) -> Result<()> {
-        let session_file = self.sessions_dir.join(format!("{}.json", id));
+        let session_file = self.sessions_dir.join(format!("{id}.json"));
         fs::remove_file(&session_file).context("Failed to delete session file")?;
 
         Ok(())

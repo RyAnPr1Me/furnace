@@ -426,7 +426,7 @@ impl Terminal {
 
         match (key.code, key.modifiers) {
             // SSH Manager (Ctrl+Shift+S) - Bug #18: Don't fall through when disabled
-            (KeyCode::Char('s'), m) | (KeyCode::Char('S'), m)
+            (KeyCode::Char('s' | 'S'), m)
                 if m.contains(KeyModifiers::CONTROL) && m.contains(KeyModifiers::SHIFT) =>
             {
                 if self.config.ssh_manager.enabled {
@@ -753,7 +753,7 @@ impl Terminal {
                 // Cycle to next theme
                 self.theme_manager.next_theme();
                 let theme_name = self.theme_manager.current().name.clone();
-                self.translation_notification = Some(format!("Theme: {}", theme_name));
+                self.translation_notification = Some(format!("Theme: {theme_name}"));
                 self.notification_frames = TARGET_FPS * NOTIFICATION_DURATION_SECS;
                 // Force redraw with new theme
                 self.dirty = true;
@@ -781,7 +781,7 @@ impl Terminal {
                 } else {
                     // Show available themes
                     let available = self.theme_manager.available_theme_names().join(", ");
-                    self.translation_notification = Some(format!("Available themes: {}", available));
+                    self.translation_notification = Some(format!("Available themes: {available}"));
                     self.notification_frames = TARGET_FPS * NOTIFICATION_DURATION_SECS;
                 }
             }

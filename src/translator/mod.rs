@@ -149,10 +149,10 @@ pub enum TranslationError {
 impl std::fmt::Display for TranslationError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::UnknownCommand(cmd) => write!(f, "Unknown command: {}", cmd),
-            Self::InvalidSyntax(msg) => write!(f, "Invalid syntax: {}", msg),
-            Self::UnsupportedOperator(op) => write!(f, "Unsupported operator: {}", op),
-            Self::PartialTranslation(msg) => write!(f, "Partial translation: {}", msg),
+            Self::UnknownCommand(cmd) => write!(f, "Unknown command: {cmd}"),
+            Self::InvalidSyntax(msg) => write!(f, "Invalid syntax: {msg}"),
+            Self::UnsupportedOperator(op) => write!(f, "Unsupported operator: {op}"),
+            Self::PartialTranslation(msg) => write!(f, "Partial translation: {msg}"),
         }
     }
 }

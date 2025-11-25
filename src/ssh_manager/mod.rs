@@ -41,7 +41,7 @@ impl SshConnection {
         }
 
         if let Some(ref key) = self.identity_file {
-            let _ = write!(cmd, " -i {}", key);
+            let _ = write!(cmd, " -i {key}");
         }
 
         cmd
@@ -257,7 +257,7 @@ impl SshManager {
         let name = if username.is_empty() {
             host.clone()
         } else {
-            format!("{}@{}", username, host)
+            format!("{username}@{host}")
         };
 
         // Use current system user if no username specified
