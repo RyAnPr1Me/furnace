@@ -3,7 +3,11 @@ use portable_pty::{CommandBuilder, NativePtySystem, PtySize, PtySystem};
 use std::io::{Read, Write};
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, trace};
+
+/// Timeout for shell read operations in milliseconds.
+/// This prevents blocking the UI event loop when no output is available.
+const SHELL_READ_TIMEOUT_MS: u64 = 10;
 
 /// High-performance shell session with zero-copy I/O where possible
 pub struct ShellSession {
@@ -82,7 +86,7 @@ impl ShellSession {
         // Apply a timeout to prevent blocking the event loop indefinitely
         // This ensures the UI remains responsive even if the shell hasn't output anything
         let result = tokio::time::timeout(
-            std::time::Duration::from_millis(10),
+            std::time::Duration::from_millis(SHELL_READ_TIMEOUT_MS),
             read_task
         ).await;
 
@@ -105,7 +109,11 @@ impl ShellSession {
                 Err(e.into())
             }
             // Timeout - no data available yet, return 0 bytes
-            Err(_) => Ok(0),
+            // This is expected during normal operation when shell is idle
+            Err(_) => {
+                trace!("Shell read timed out after {}ms - no data available", SHELL_READ_TIMEOUT_MS);
+                Ok(0)
+            }
         }
     }
 
