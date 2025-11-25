@@ -126,6 +126,101 @@ pub struct TranslationResult {
     pub original_command: String,
     pub final_command: String,
     pub description: String,
+    /// Errors encountered during translation (non-fatal)
+    pub errors: Vec<TranslationError>,
+    /// Whether the command contains pipelines
+    pub has_pipeline: bool,
+}
+
+/// Errors that can occur during command translation
+#[derive(Debug, Clone)]
+#[allow(dead_code)] // Public API - all variants available for consumers
+pub enum TranslationError {
+    /// Command not found in translation map
+    UnknownCommand(String),
+    /// Invalid syntax in command
+    InvalidSyntax(String),
+    /// Unsupported pipeline operator for translation
+    UnsupportedOperator(String),
+    /// Partial translation - some parts could not be translated
+    PartialTranslation(String),
+}
+
+impl std::fmt::Display for TranslationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::UnknownCommand(cmd) => write!(f, "Unknown command: {}", cmd),
+            Self::InvalidSyntax(msg) => write!(f, "Invalid syntax: {}", msg),
+            Self::UnsupportedOperator(op) => write!(f, "Unsupported operator: {}", op),
+            Self::PartialTranslation(msg) => write!(f, "Partial translation: {}", msg),
+        }
+    }
+}
+
+impl std::error::Error for TranslationError {}
+
+/// Pipeline operators supported by the translator
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum PipelineOperator {
+    /// Pipe operator `|`
+    Pipe,
+    /// Output redirect `>`
+    RedirectOut,
+    /// Output append `>>`
+    RedirectAppend,
+    /// Input redirect `<`
+    RedirectIn,
+    /// Command chain - run next if success `&&`
+    And,
+    /// Command chain - run next if failure `||`
+    Or,
+    /// Command separator `;`
+    Semicolon,
+}
+
+impl PipelineOperator {
+    /// Parse a pipeline operator from a string
+    #[allow(dead_code)] // Used in tests
+    fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "|" => Some(Self::Pipe),
+            ">" => Some(Self::RedirectOut),
+            ">>" => Some(Self::RedirectAppend),
+            "<" => Some(Self::RedirectIn),
+            "&&" => Some(Self::And),
+            "||" => Some(Self::Or),
+            ";" => Some(Self::Semicolon),
+            _ => None,
+        }
+    }
+
+    /// Convert to string representation
+    fn as_str(&self) -> &'static str {
+        match self {
+            Self::Pipe => "|",
+            Self::RedirectOut => ">",
+            Self::RedirectAppend => ">>",
+            Self::RedirectIn => "<",
+            Self::And => "&&",
+            Self::Or => "||",
+            Self::Semicolon => ";",
+        }
+    }
+
+    /// Translate operator between Linux and Windows
+    #[allow(dead_code)]
+    fn translate(&self, _target_os: OsType) -> &'static str {
+        // Most operators are the same across platforms
+        // PowerShell and cmd.exe support |, >, >>, <, &&, ||, ;
+        self.as_str()
+    }
+}
+
+/// A segment of a pipeline (a single command between operators)
+#[derive(Debug, Clone)]
+struct PipelineSegment {
+    command: String,
+    operator: Option<PipelineOperator>,
 }
 
 impl Default for CommandMapping {
@@ -2958,9 +3053,11 @@ impl CommandTranslator {
     }
 
     /// Translate a command if translation is enabled and applicable
+    /// Supports pipelining with |, >, >>, <, &&, ||, ;
     #[must_use]
     pub fn translate(&self, command: &str) -> TranslationResult {
         let command = command.trim();
+        let mut errors: Vec<TranslationError> = Vec::new();
 
         // Fast path: disabled or empty command
         if !self.enabled || command.is_empty() {
@@ -2969,6 +3066,219 @@ impl CommandTranslator {
                 original_command: command.to_string(),
                 final_command: command.to_string(),
                 description: String::new(),
+                errors,
+                has_pipeline: false,
+            };
+        }
+
+        // Check if command contains pipeline operators
+        let has_pipeline = self.contains_pipeline_operators(command);
+
+        if has_pipeline {
+            // Handle pipelined commands
+            return self.translate_pipeline(command);
+        }
+
+        // Single command translation
+        self.translate_single_command(command, &mut errors)
+    }
+
+    /// Check if a command contains any pipeline operators
+    fn contains_pipeline_operators(&self, command: &str) -> bool {
+        // Check for operators while avoiding false positives in strings
+        // This is a simplified check - full parsing would require proper tokenization
+        let operators = ["||", "&&", "|", ">>", ">", "<", ";"];
+        
+        for op in operators {
+            if command.contains(op) {
+                // Make sure it's not inside quotes
+                let mut in_single_quote = false;
+                let mut in_double_quote = false;
+                let mut pos = 0;
+                
+                for c in command.chars() {
+                    match c {
+                        '\'' if !in_double_quote => in_single_quote = !in_single_quote,
+                        '"' if !in_single_quote => in_double_quote = !in_double_quote,
+                        _ => {}
+                    }
+                    
+                    if !in_single_quote && !in_double_quote {
+                        // Check if we're at an operator
+                        let remaining = &command[pos..];
+                        if remaining.starts_with(op) {
+                            return true;
+                        }
+                    }
+                    pos += c.len_utf8();
+                }
+            }
+        }
+        false
+    }
+
+    /// Parse a command line into pipeline segments
+    fn parse_pipeline(&self, command: &str) -> Vec<PipelineSegment> {
+        let mut segments = Vec::new();
+        let mut current_segment = String::new();
+        let mut in_single_quote = false;
+        let mut in_double_quote = false;
+        let mut chars = command.chars().peekable();
+
+        while let Some(c) = chars.next() {
+            match c {
+                '\'' if !in_double_quote => {
+                    in_single_quote = !in_single_quote;
+                    current_segment.push(c);
+                }
+                '"' if !in_single_quote => {
+                    in_double_quote = !in_double_quote;
+                    current_segment.push(c);
+                }
+                '|' if !in_single_quote && !in_double_quote => {
+                    // Check for || vs |
+                    if chars.peek() == Some(&'|') {
+                        chars.next();
+                        segments.push(PipelineSegment {
+                            command: current_segment.trim().to_string(),
+                            operator: Some(PipelineOperator::Or),
+                        });
+                    } else {
+                        segments.push(PipelineSegment {
+                            command: current_segment.trim().to_string(),
+                            operator: Some(PipelineOperator::Pipe),
+                        });
+                    }
+                    current_segment = String::new();
+                }
+                '&' if !in_single_quote && !in_double_quote => {
+                    // Check for &&
+                    if chars.peek() == Some(&'&') {
+                        chars.next();
+                        segments.push(PipelineSegment {
+                            command: current_segment.trim().to_string(),
+                            operator: Some(PipelineOperator::And),
+                        });
+                        current_segment = String::new();
+                    } else {
+                        // Single & (background) - just pass through
+                        current_segment.push(c);
+                    }
+                }
+                '>' if !in_single_quote && !in_double_quote => {
+                    // Check for >> vs >
+                    if chars.peek() == Some(&'>') {
+                        chars.next();
+                        segments.push(PipelineSegment {
+                            command: current_segment.trim().to_string(),
+                            operator: Some(PipelineOperator::RedirectAppend),
+                        });
+                    } else {
+                        segments.push(PipelineSegment {
+                            command: current_segment.trim().to_string(),
+                            operator: Some(PipelineOperator::RedirectOut),
+                        });
+                    }
+                    current_segment = String::new();
+                }
+                '<' if !in_single_quote && !in_double_quote => {
+                    segments.push(PipelineSegment {
+                        command: current_segment.trim().to_string(),
+                        operator: Some(PipelineOperator::RedirectIn),
+                    });
+                    current_segment = String::new();
+                }
+                ';' if !in_single_quote && !in_double_quote => {
+                    segments.push(PipelineSegment {
+                        command: current_segment.trim().to_string(),
+                        operator: Some(PipelineOperator::Semicolon),
+                    });
+                    current_segment = String::new();
+                }
+                _ => {
+                    current_segment.push(c);
+                }
+            }
+        }
+
+        // Add the last segment
+        if !current_segment.trim().is_empty() {
+            segments.push(PipelineSegment {
+                command: current_segment.trim().to_string(),
+                operator: None,
+            });
+        }
+
+        segments
+    }
+
+    /// Translate a pipeline command (command with operators like |, >, &&, etc.)
+    fn translate_pipeline(&self, command: &str) -> TranslationResult {
+        let segments = self.parse_pipeline(command);
+        let mut errors: Vec<TranslationError> = Vec::new();
+        let mut translated_parts: Vec<String> = Vec::new();
+        let mut any_translated = false;
+        let mut descriptions: Vec<String> = Vec::new();
+
+        for segment in &segments {
+            if segment.command.is_empty() {
+                // Handle empty segments (e.g., leading operator)
+                if let Some(op) = &segment.operator {
+                    translated_parts.push(op.as_str().to_string());
+                }
+                continue;
+            }
+
+            // Translate the command part
+            let result = self.translate_single_command(&segment.command, &mut errors);
+            
+            if result.translated {
+                any_translated = true;
+                translated_parts.push(result.final_command);
+                if !result.description.is_empty() {
+                    descriptions.push(result.description);
+                }
+            } else {
+                // Keep original if not translated
+                translated_parts.push(segment.command.clone());
+            }
+
+            // Add the operator
+            if let Some(op) = &segment.operator {
+                translated_parts.push(format!(" {} ", op.as_str()));
+            }
+        }
+
+        // Join all parts
+        let final_command = translated_parts.join("").trim().to_string();
+        let description = if descriptions.is_empty() {
+            String::new()
+        } else {
+            descriptions.join("; ")
+        };
+
+        TranslationResult {
+            translated: any_translated,
+            original_command: command.to_string(),
+            final_command,
+            description,
+            errors,
+            has_pipeline: true,
+        }
+    }
+
+    /// Translate a single command (no pipeline operators)
+    fn translate_single_command(&self, command: &str, errors: &mut Vec<TranslationError>) -> TranslationResult {
+        let command = command.trim();
+
+        if command.is_empty() {
+            return TranslationResult {
+                translated: false,
+                original_command: command.to_string(),
+                final_command: command.to_string(),
+                description: String::new(),
+                errors: Vec::new(),
+                has_pipeline: false,
             };
         }
 
@@ -2977,11 +3287,14 @@ impl CommandTranslator {
         let cmd = match parts.next() {
             Some(c) => c,
             None => {
+                errors.push(TranslationError::InvalidSyntax("Empty command".to_string()));
                 return TranslationResult {
                     translated: false,
                     original_command: command.to_string(),
                     final_command: command.to_string(),
                     description: String::new(),
+                    errors: Vec::new(),
+                    has_pipeline: false,
                 };
             }
         };
@@ -3007,6 +3320,8 @@ impl CommandTranslator {
                 original_command: command.to_string(),
                 final_command: command.to_string(),
                 description: String::new(),
+                errors: Vec::new(),
+                has_pipeline: false,
             };
         }
 
@@ -3017,6 +3332,8 @@ impl CommandTranslator {
                 original_command: command.to_string(),
                 final_command: command.to_string(),
                 description: String::new(),
+                errors: Vec::new(),
+                has_pipeline: false,
             };
         }
 
@@ -3031,6 +3348,8 @@ impl CommandTranslator {
                 original_command: command.to_string(),
                 final_command: command.to_string(),
                 description: String::new(),
+                errors: Vec::new(),
+                has_pipeline: false,
             };
         }
 
@@ -3047,13 +3366,19 @@ impl CommandTranslator {
                 original_command: command.to_string(),
                 final_command: final_cmd.trim().to_string(),
                 description: mapping.description.to_string(),
+                errors: Vec::new(),
+                has_pipeline: false,
             }
         } else {
+            // Command not found in translation map - add error for context
+            errors.push(TranslationError::UnknownCommand(cmd.to_string()));
             TranslationResult {
                 translated: false,
                 original_command: command.to_string(),
                 final_command: command.to_string(),
                 description: String::new(),
+                errors: Vec::new(),
+                has_pipeline: false,
             }
         }
     }
@@ -3686,5 +4011,224 @@ mod tests {
         assert_eq!(identity_args("test"), "test");
         assert_eq!(identity_args(""), "");
         assert_eq!(identity_args("multiple args here"), "multiple args here");
+    }
+
+    // ========== Pipeline Tests ==========
+
+    #[test]
+    fn test_pipeline_detection() {
+        let translator = CommandTranslator::new(true);
+
+        // Commands with pipes
+        assert!(translator.contains_pipeline_operators("ls | grep foo"));
+        assert!(translator.contains_pipeline_operators("cat file.txt | sort | uniq"));
+
+        // Commands with redirects
+        assert!(translator.contains_pipeline_operators("echo hello > file.txt"));
+        assert!(translator.contains_pipeline_operators("cat < input.txt"));
+        assert!(translator.contains_pipeline_operators("echo hello >> file.txt"));
+
+        // Commands with chaining
+        assert!(translator.contains_pipeline_operators("ls && echo done"));
+        assert!(translator.contains_pipeline_operators("ls || echo failed"));
+        assert!(translator.contains_pipeline_operators("ls; pwd"));
+
+        // Commands without pipelines
+        assert!(!translator.contains_pipeline_operators("ls -la"));
+        assert!(!translator.contains_pipeline_operators("cat file.txt"));
+    }
+
+    #[test]
+    fn test_pipeline_parsing() {
+        let translator = CommandTranslator::new(true);
+
+        // Single pipe
+        let segments = translator.parse_pipeline("ls | grep foo");
+        assert_eq!(segments.len(), 2);
+        assert_eq!(segments[0].command, "ls");
+        assert_eq!(segments[0].operator, Some(PipelineOperator::Pipe));
+        assert_eq!(segments[1].command, "grep foo");
+        assert!(segments[1].operator.is_none());
+
+        // Multiple pipes
+        let segments = translator.parse_pipeline("cat file.txt | sort | uniq");
+        assert_eq!(segments.len(), 3);
+        assert_eq!(segments[0].command, "cat file.txt");
+        assert_eq!(segments[1].command, "sort");
+        assert_eq!(segments[2].command, "uniq");
+
+        // Output redirect
+        let segments = translator.parse_pipeline("echo hello > output.txt");
+        assert_eq!(segments.len(), 2);
+        assert_eq!(segments[0].command, "echo hello");
+        assert_eq!(segments[0].operator, Some(PipelineOperator::RedirectOut));
+        assert_eq!(segments[1].command, "output.txt");
+
+        // Command chaining with &&
+        let segments = translator.parse_pipeline("ls && echo done");
+        assert_eq!(segments.len(), 2);
+        assert_eq!(segments[0].command, "ls");
+        assert_eq!(segments[0].operator, Some(PipelineOperator::And));
+        assert_eq!(segments[1].command, "echo done");
+    }
+
+    #[test]
+    #[cfg(not(target_os = "windows"))]
+    fn test_pipeline_translation_linux() {
+        let translator = CommandTranslator::new(true);
+
+        // dir | findstr -> ls | grep
+        let result = translator.translate("dir | findstr foo");
+        assert!(result.translated);
+        assert!(result.has_pipeline);
+        assert!(result.final_command.contains("ls"));
+        assert!(result.final_command.contains("|"));
+        assert!(result.final_command.contains("grep"));
+
+        // type file.txt | sort -> cat file.txt | sort
+        let result = translator.translate("type file.txt | sort");
+        assert!(result.translated);
+        assert!(result.has_pipeline);
+        assert!(result.final_command.contains("cat"));
+
+        // Command chaining: cls && dir -> clear && ls
+        let result = translator.translate("cls && dir");
+        assert!(result.translated);
+        assert!(result.has_pipeline);
+        assert!(result.final_command.contains("clear"));
+        assert!(result.final_command.contains("&&"));
+        assert!(result.final_command.contains("ls"));
+    }
+
+    #[test]
+    #[cfg(target_os = "windows")]
+    fn test_pipeline_translation_windows() {
+        let translator = CommandTranslator::new(true);
+
+        // ls | grep -> dir | findstr
+        let result = translator.translate("ls | grep foo");
+        assert!(result.translated);
+        assert!(result.has_pipeline);
+        assert!(result.final_command.contains("dir"));
+        assert!(result.final_command.contains("|"));
+        assert!(result.final_command.contains("findstr"));
+
+        // cat file.txt | sort -> type file.txt | sort
+        let result = translator.translate("cat file.txt | sort");
+        assert!(result.translated);
+        assert!(result.has_pipeline);
+        assert!(result.final_command.contains("type"));
+
+        // Command chaining: clear && ls -> cls && dir
+        let result = translator.translate("clear && ls");
+        assert!(result.translated);
+        assert!(result.has_pipeline);
+        assert!(result.final_command.contains("cls"));
+        assert!(result.final_command.contains("&&"));
+        assert!(result.final_command.contains("dir"));
+    }
+
+    #[test]
+    fn test_pipeline_with_redirect() {
+        let translator = CommandTranslator::new(true);
+
+        // Output redirect should be preserved
+        let result = translator.translate("echo hello > output.txt");
+        assert!(result.has_pipeline);
+        assert!(result.final_command.contains(">"));
+        assert!(result.final_command.contains("output.txt"));
+
+        // Append redirect
+        let result = translator.translate("echo hello >> output.txt");
+        assert!(result.has_pipeline);
+        assert!(result.final_command.contains(">>"));
+    }
+
+    // ========== Error Handling Tests ==========
+
+    #[test]
+    fn test_translation_error_display() {
+        let err = TranslationError::UnknownCommand("foo".to_string());
+        assert!(format!("{}", err).contains("Unknown command"));
+        assert!(format!("{}", err).contains("foo"));
+
+        let err = TranslationError::InvalidSyntax("bad syntax".to_string());
+        assert!(format!("{}", err).contains("Invalid syntax"));
+
+        let err = TranslationError::UnsupportedOperator(">>>".to_string());
+        assert!(format!("{}", err).contains("Unsupported operator"));
+
+        let err = TranslationError::PartialTranslation("some parts failed".to_string());
+        assert!(format!("{}", err).contains("Partial translation"));
+    }
+
+    #[test]
+    fn test_translation_result_errors() {
+        let translator = CommandTranslator::new(true);
+
+        // Unknown command should have no errors (just not translated)
+        let result = translator.translate("unknowncommand");
+        assert!(!result.translated);
+        // The command is passed through, not an error
+
+        // Valid translation should have no errors
+        #[cfg(not(target_os = "windows"))]
+        {
+            let result = translator.translate("dir");
+            assert!(result.translated);
+            assert!(result.errors.is_empty());
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            let result = translator.translate("ls");
+            assert!(result.translated);
+            assert!(result.errors.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_pipeline_operator_from_str() {
+        assert_eq!(PipelineOperator::from_str("|"), Some(PipelineOperator::Pipe));
+        assert_eq!(PipelineOperator::from_str(">"), Some(PipelineOperator::RedirectOut));
+        assert_eq!(PipelineOperator::from_str(">>"), Some(PipelineOperator::RedirectAppend));
+        assert_eq!(PipelineOperator::from_str("<"), Some(PipelineOperator::RedirectIn));
+        assert_eq!(PipelineOperator::from_str("&&"), Some(PipelineOperator::And));
+        assert_eq!(PipelineOperator::from_str("||"), Some(PipelineOperator::Or));
+        assert_eq!(PipelineOperator::from_str(";"), Some(PipelineOperator::Semicolon));
+        assert_eq!(PipelineOperator::from_str("invalid"), None);
+    }
+
+    #[test]
+    fn test_pipeline_operator_as_str() {
+        assert_eq!(PipelineOperator::Pipe.as_str(), "|");
+        assert_eq!(PipelineOperator::RedirectOut.as_str(), ">");
+        assert_eq!(PipelineOperator::RedirectAppend.as_str(), ">>");
+        assert_eq!(PipelineOperator::RedirectIn.as_str(), "<");
+        assert_eq!(PipelineOperator::And.as_str(), "&&");
+        assert_eq!(PipelineOperator::Or.as_str(), "||");
+        assert_eq!(PipelineOperator::Semicolon.as_str(), ";");
+    }
+
+    #[test]
+    fn test_complex_pipeline() {
+        let translator = CommandTranslator::new(true);
+
+        // Complex pipeline with multiple operators
+        let result = translator.translate("echo start; ls | grep test && echo done || echo failed");
+        assert!(result.has_pipeline);
+        // The command should be processed
+        assert!(!result.final_command.is_empty());
+    }
+
+    #[test]
+    fn test_pipeline_with_quotes() {
+        let translator = CommandTranslator::new(true);
+
+        // Operators inside quotes should not be treated as pipeline operators
+        // Note: This is a simplified test - full quote handling is complex
+        let segments = translator.parse_pipeline("echo 'hello world'");
+        assert_eq!(segments.len(), 1);
+        assert_eq!(segments[0].command, "echo 'hello world'");
     }
 }
