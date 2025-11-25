@@ -54,6 +54,9 @@ pub trait Plugin {
     fn version(&self) -> &str;
 
     /// Initialize plugin
+    /// 
+    /// # Errors
+    /// Returns an error if plugin initialization fails
     fn init(&mut self) -> Result<()>;
 
     /// Handle command from terminal
@@ -77,6 +80,9 @@ impl PluginManager {
     }
 
     /// Load a plugin from a dynamic library
+    /// 
+    /// # Errors
+    /// Returns an error if the plugin library cannot be loaded or initialized
     #[allow(dead_code)] // Public API
     pub fn load_plugin<P: AsRef<Path>>(&mut self, path: P) -> Result<()> {
         let path = path.as_ref();
@@ -114,6 +120,9 @@ impl PluginManager {
     }
 
     /// Unload a plugin
+    /// 
+    /// # Errors
+    /// Returns an error if the plugin is not found
     #[allow(dead_code)] // Public API
     pub fn unload_plugin(&mut self, name: &str) -> Result<()> {
         self.plugins.remove(name).context("Plugin not found")?;
