@@ -82,7 +82,7 @@
 //!
 //! # Examples
 //! ```
-//! use furnace::translator::CommandTranslator;
+//! use cmdx::CommandTranslator;
 //!
 //! let translator = CommandTranslator::new(true);
 //! let result = translator.translate("ls -la /home");

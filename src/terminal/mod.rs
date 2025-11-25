@@ -14,6 +14,7 @@ pub mod ansi_parser;
 
 use anyhow::Result;
 use crossterm::{
+    cursor::{Hide, Show},
     event::{
         self, Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
     },
@@ -44,6 +45,7 @@ use crate::ssh_manager::SshManager;
 use crate::translator::CommandTranslator;
 use crate::ui::{
     autocomplete::Autocomplete, command_palette::CommandPalette, resource_monitor::ResourceMonitor,
+    themes::ThemeManager,
 };
 use crate::url_handler::UrlHandler;
 
@@ -88,6 +90,8 @@ pub struct Terminal {
     plugin_manager: PluginManager,
     #[allow(dead_code)]
     color_palette: TrueColorPalette,
+    // Theme manager for dynamic theme switching
+    theme_manager: ThemeManager,
     // Performance optimization: track if redraw is needed
     dirty: bool,
     // Reusable read buffer to reduce allocations
@@ -128,6 +132,26 @@ impl Terminal {
 
         let command_translator = CommandTranslator::new(config.command_translation.enabled);
         let ssh_manager = SshManager::new()?;
+        
+        // Initialize theme manager with custom themes directory
+        let theme_manager = match ThemeManager::default_themes_dir() {
+            Ok(themes_dir) => {
+                match ThemeManager::with_themes_dir(&themes_dir) {
+                    Ok(manager) => {
+                        debug!("Theme manager initialized with custom themes from {:?}", themes_dir);
+                        manager
+                    }
+                    Err(e) => {
+                        warn!("Failed to initialize theme manager with custom themes: {}", e);
+                        ThemeManager::new()
+                    }
+                }
+            }
+            Err(e) => {
+                warn!("Could not determine themes directory: {}", e);
+                ThemeManager::new()
+            }
+        };
 
         Ok(Self {
             config,
@@ -143,6 +167,7 @@ impl Terminal {
             session_manager: SessionManager::new()?,
             plugin_manager: PluginManager::new(),
             color_palette: TrueColorPalette::default_dark(),
+            theme_manager,
             dirty: true,
             read_buffer: vec![0u8; READ_BUFFER_SIZE],
             frame_count: 0,
@@ -172,10 +197,12 @@ impl Terminal {
         execute!(stdout, EnterAlternateScreen)?;
 
         // Enable mouse capture and bracketed paste mode (Bug #21)
+        // Hide cursor initially - ratatui manages its own cursor
         execute!(
             stdout,
             crossterm::event::EnableMouseCapture,
-            crossterm::event::EnableBracketedPaste
+            crossterm::event::EnableBracketedPaste,
+            Hide
         )?;
 
         let backend = CrosstermBackend::new(stdout);
@@ -309,7 +336,8 @@ impl Terminal {
         execute!(
             terminal.backend_mut(),
             crossterm::event::DisableMouseCapture,
-            crossterm::event::DisableBracketedPaste
+            crossterm::event::DisableBracketedPaste,
+            Show
         )?;
         disable_raw_mode()?;
         execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
@@ -724,8 +752,41 @@ impl Terminal {
                     *len = 0;
                 }
             }
+            "theme" => {
+                // Cycle to next theme
+                self.theme_manager.next_theme();
+                let theme_name = self.theme_manager.current().name.clone();
+                self.translation_notification = Some(format!("Theme: {}", theme_name));
+                self.notification_frames = TARGET_FPS * NOTIFICATION_DURATION_SECS;
+                // Force redraw with new theme
+                self.dirty = true;
+                // Invalidate all render caches to apply new theme
+                for len in &mut self.cached_buffer_lens {
+                    *len = 0;
+                }
+            }
             "quit" => {
                 self.should_quit = true;
+            }
+            cmd if cmd.starts_with("theme ") => {
+                // Switch to specific theme by name
+                // The strip_prefix is guaranteed to succeed due to the starts_with check
+                let theme_name = &cmd["theme ".len()..];
+                let theme_name = theme_name.trim();
+                if self.theme_manager.switch_theme(theme_name) {
+                    self.translation_notification = Some(format!("Theme: {}", self.theme_manager.current().name));
+                    self.notification_frames = TARGET_FPS * NOTIFICATION_DURATION_SECS;
+                    self.dirty = true;
+                    // Invalidate all render caches
+                    for len in &mut self.cached_buffer_lens {
+                        *len = 0;
+                    }
+                } else {
+                    // Show available themes
+                    let available = self.theme_manager.available_theme_names().join(", ");
+                    self.translation_notification = Some(format!("Available themes: {}", available));
+                    self.notification_frames = TARGET_FPS * NOTIFICATION_DURATION_SECS;
+                }
             }
             _ => {
                 debug!("Unknown command: {}", command);

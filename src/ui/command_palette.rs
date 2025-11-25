@@ -73,8 +73,23 @@ impl CommandPalette {
                 },
                 Command {
                     name: "theme".to_string(),
-                    description: "Change theme".to_string(),
-                    aliases: vec!["t".to_string()],
+                    description: "Cycle to next theme".to_string(),
+                    aliases: vec!["t".to_string(), "next-theme".to_string()],
+                },
+                Command {
+                    name: "theme dark".to_string(),
+                    description: "Switch to dark theme".to_string(),
+                    aliases: vec!["dark".to_string()],
+                },
+                Command {
+                    name: "theme light".to_string(),
+                    description: "Switch to light theme".to_string(),
+                    aliases: vec!["light".to_string()],
+                },
+                Command {
+                    name: "theme nord".to_string(),
+                    description: "Switch to Nord theme".to_string(),
+                    aliases: vec!["nord".to_string()],
                 },
                 Command {
                     name: "clear".to_string(),
