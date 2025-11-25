@@ -347,6 +347,19 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_to_color_u8() {
+        // Normal values should pass through
+        assert_eq!(to_color_u8(0), 0);
+        assert_eq!(to_color_u8(128), 128);
+        assert_eq!(to_color_u8(255), 255);
+        
+        // Values > 255 should be clamped
+        assert_eq!(to_color_u8(256), 255);
+        assert_eq!(to_color_u8(500), 255);
+        assert_eq!(to_color_u8(u16::MAX), 255);
+    }
+
+    #[test]
     fn test_plain_text() {
         let lines = AnsiParser::parse("Hello, World!");
         assert_eq!(lines.len(), 1);
