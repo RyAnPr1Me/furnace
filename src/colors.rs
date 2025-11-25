@@ -90,9 +90,11 @@ impl TrueColor {
     #[allow(dead_code)] // Public API
     #[must_use]
     pub fn luminance(self) -> f32 {
-        // Use nested mul_add for more efficient and accurate calculation with FMA
-        // Formula: (0.299*r + 0.587*g + 0.114*b) / 255.0
-        // Nested as: 0.299*r + (0.587*g + (0.114*b))
+        // Use nested mul_add for hardware FMA (Fused Multiply-Add) optimization
+        // Original formula: (0.299*r + 0.587*g + 0.114*b) / 255.0
+        // Nested as: 0.299*r + (0.587*g + (0.114*b + 0.0))
+        // This leverages single-instruction FMA on modern CPUs for better performance and accuracy
+        // Trade-off: slightly reduced readability for measurable performance gains in tight loops
         0.299f32.mul_add(
             f32::from(self.r), 
             0.587f32.mul_add(f32::from(self.g), 0.114f32.mul_add(f32::from(self.b), 0.0))
