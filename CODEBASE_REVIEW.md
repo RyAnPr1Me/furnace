@@ -106,11 +106,12 @@ let paragraph = Paragraph::new(text);
 
 The parser uses the industry-standard VTE library which is the same parser used by terminal emulators like Alacritty.
 
-### 2. Potential Panic in Session Manager Default
+### 2. Session Manager Default (FIXED)
 
-In `session.rs`, lines 109-112, there's a `Default` implementation that could crash:
+The `Default` implementation in `session.rs` previously used `expect()` which could crash:
 
 ```rust
+// BEFORE (BUGGY): Would panic if home directory unavailable
 impl Default for SessionManager {
     fn default() -> Self {
         Self::new().expect("Failed to create session manager")
@@ -118,24 +119,49 @@ impl Default for SessionManager {
 }
 ```
 
-The `expect` function will crash the program if creating the session manager fails (for example, if the user's home directory can't be found). A safer approach would be to return an `Option` or handle the error more gracefully.
-
-**Why this matters**: If someone calls `SessionManager::default()` and it can't find the home directory (rare, but possible on some systems), the entire program crashes instead of showing an error message.
-
-### 3. Unwraps in Color Palette Creation
-
-In `colors.rs`, the `default_dark()` function uses `.unwrap()` on hex color parsing:
+**The Fix**: Now uses graceful fallback to temp directory:
 
 ```rust
+// AFTER (FIXED): Falls back to temp directory if home unavailable
+impl Default for SessionManager {
+    fn default() -> Self {
+        match Self::new() {
+            Ok(manager) => manager,
+            Err(_) => {
+                // Fallback: use temp directory
+                let sessions_dir = std::env::temp_dir().join("furnace_sessions");
+                let _ = std::fs::create_dir_all(&sessions_dir);
+                Self { sessions_dir }
+            }
+        }
+    }
+}
+```
+
+This ensures the terminal never crashes just because the home directory is unavailable.
+
+### 3. Color Palette Creation (FIXED)
+
+In `colors.rs`, the `default_dark()` function previously used `.unwrap()` on hex color parsing:
+
+```rust
+// BEFORE: Could potentially panic on hex parsing (though unlikely with valid literals)
 black: TrueColor::from_hex("#000000").unwrap(),
 red: TrueColor::from_hex("#FF5555").unwrap(),
 ```
 
-While these specific hex values are valid (so they won't fail), using `unwrap` is generally discouraged because:
-- It can crash if the values somehow become invalid
-- It doesn't communicate why the program believes this is safe
+**The Fix**: Now uses const `TrueColor::new()` with direct RGB values:
 
-The `const fn new()` function would be safer here since these are constant values.
+```rust
+// AFTER (FIXED): Compile-time verified, no runtime unwrap needed
+black: TrueColor::new(0x00, 0x00, 0x00),       // #000000
+red: TrueColor::new(0xFF, 0x55, 0x55),         // #FF5555
+```
+
+This is safer because:
+- Values are verified at compile time
+- No runtime parsing or potential panics
+- More efficient (no string parsing needed)
 
 ### 4. Plugin System Uses Unsafe Code (FIXED - Memory Leak)
 
@@ -187,15 +213,23 @@ let Ok(system) = self.system.lock() else {
 };
 ```
 
-### 6. Cast Truncation in Color Blending
+### 6. Cast Truncation in Color Blending (FIXED)
 
-In `colors.rs`, lines 60-67, the blend function has potential precision issues:
+In `colors.rs`, the blend function previously had precision issues:
 
 ```rust
+// BEFORE: Truncates - 254.9 becomes 254
 r: ((self.r as f32) * (1.0 - factor) + (other.r as f32) * factor) as u8,
 ```
 
-Converting a floating-point number to a `u8` (number 0-255) truncates rather than rounds. This means `254.9` becomes `254`, not `255`. For colors, this usually doesn't matter visually, but it's technically imprecise.
+**The Fix**: Now uses `.round()` for proper rounding:
+
+```rust
+// AFTER (FIXED): Rounds - 254.9 becomes 255
+r: ((self.r as f32) * (1.0 - factor) + (other.r as f32) * factor).round() as u8,
+```
+
+This ensures color blending produces more accurate results.
 
 ### 7. Potential Thread Safety in Command Palette Navigation
 
