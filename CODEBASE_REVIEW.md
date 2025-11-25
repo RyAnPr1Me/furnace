@@ -137,28 +137,57 @@ While these specific hex values are valid (so they won't fail), using `unwrap` i
 
 The `const fn new()` function would be safer here since these are constant values.
 
-### 4. Plugin System Uses Unsafe Code
+### 4. Plugin System Uses Unsafe Code (FIXED - Memory Leak)
 
-In `plugins/loader.rs`, there's `unsafe` code for loading plugins:
+In `plugins/loader.rs`, there was `unsafe` code for loading plugins that had a **memory leak bug**:
 
 ```rust
-unsafe {
-    let lib = Library::new(path).context("Failed to load plugin library")?;
-    let constructor: Symbol<PluginCreate> = lib
-        .get(b"_plugin_create")
-        .context("Failed to find plugin constructor")?;
-    
-    let plugin = constructor();
-    let plugin_ref = &*plugin;
+// BEFORE (BUGGY): Raw pointer was dereferenced but never freed
+let plugin = constructor();
+let plugin_ref = &*plugin;  // Memory leak - pointer never cleaned up!
 ```
 
-**What "unsafe" means**: Rust normally guarantees your program can't have memory bugs. When you write `unsafe`, you're telling Rust "I know what I'm doing, trust me." But if you're wrong, the program could crash or behave unpredictably.
+**The Fix**: Added proper memory management with a `Drop` implementation that:
+- Stores the raw pointer in `LoadedPlugin`
+- Calls the plugin's `cleanup()` method before dropping
+- Properly converts the raw pointer back to a `Box` and drops it
 
-This unsafe code is necessary for loading external plugins (code that wasn't compiled with the main program), but it means:
-- A malicious or buggy plugin could crash the entire program
-- Memory corruption is possible if the plugin doesn't follow the expected format
+```rust
+// AFTER (FIXED): Proper cleanup in Drop implementation
+impl Drop for LoadedPlugin {
+    fn drop(&mut self) {
+        if !self.plugin_ptr.is_null() {
+            unsafe {
+                let plugin = &mut *self.plugin_ptr;
+                plugin.cleanup();
+                drop(Box::from_raw(self.plugin_ptr));
+            }
+        }
+    }
+}
+```
 
-### 5. Cast Truncation in Color Blending
+Also added null pointer validation to prevent crashes from malformed plugins.
+
+### 5. Resource Monitor Mutex Panic (FIXED)
+
+In `ui/resource_monitor.rs`, line 70, there was an `unwrap()` on a mutex lock:
+
+```rust
+// BEFORE (BUGGY): Could panic if mutex is poisoned
+let system = self.system.lock().unwrap();
+```
+
+**The Fix**: Replaced with graceful error handling that returns cached/default stats if the lock fails:
+
+```rust
+// AFTER (FIXED): Graceful handling of lock failure
+let Ok(system) = self.system.lock() else {
+    return self.cached_stats.clone().unwrap_or(ResourceStats { /* defaults */ });
+};
+```
+
+### 6. Cast Truncation in Color Blending
 
 In `colors.rs`, lines 60-67, the blend function has potential precision issues:
 
@@ -168,7 +197,7 @@ r: ((self.r as f32) * (1.0 - factor) + (other.r as f32) * factor) as u8,
 
 Converting a floating-point number to a `u8` (number 0-255) truncates rather than rounds. This means `254.9` becomes `254`, not `255`. For colors, this usually doesn't matter visually, but it's technically imprecise.
 
-### 6. Potential Thread Safety in Command Palette Navigation
+### 7. Potential Thread Safety in Command Palette Navigation
 
 In `command_palette.rs`, lines 192-196, when navigating suggestions:
 
