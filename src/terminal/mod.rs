@@ -216,9 +216,15 @@ impl Terminal {
     async fn read_and_store_output(&mut self, max_attempts: usize, delay_ms: u64) -> usize {
         let mut total_bytes = 0;
         
-        // Bounds check to prevent panic
-        if self.active_session >= self.output_buffers.len() {
-            warn!("Active session index {} is out of bounds", self.active_session);
+        // Bounds check to prevent panic - ensure both vectors are in sync
+        if self.active_session >= self.sessions.len() 
+            || self.active_session >= self.output_buffers.len() {
+            warn!(
+                "Active session index {} is out of bounds (sessions: {}, buffers: {})",
+                self.active_session,
+                self.sessions.len(),
+                self.output_buffers.len()
+            );
             return 0;
         }
         
