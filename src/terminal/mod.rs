@@ -1016,10 +1016,10 @@ impl Terminal {
                 .map(|i| {
                     let style = if i == self.active_session {
                         Style::default()
-                            .fg(Color::Yellow)
+                            .fg(Color::Rgb(0xDD, 0x66, 0x66)) // Cool red for active tab
                             .add_modifier(Modifier::BOLD)
                     } else {
-                        Style::default().fg(Color::White)
+                        Style::default().fg(Color::Rgb(0xC0, 0xB0, 0xB0)) // Reddish-gray for inactive
                     };
                     Line::from(Span::styled(format!(" Tab {} ", i + 1), style))
                 })
@@ -1028,10 +1028,10 @@ impl Terminal {
             let tabs = Tabs::new(tab_titles)
                 .block(Block::default().borders(Borders::BOTTOM))
                 .select(self.active_session)
-                .style(Style::default().fg(Color::White))
+                .style(Style::default().fg(Color::Rgb(0xC0, 0xB0, 0xB0))) // Reddish-gray
                 .highlight_style(
                     Style::default()
-                        .fg(Color::Yellow)
+                        .fg(Color::Rgb(0xDD, 0x66, 0x66)) // Cool red highlight
                         .add_modifier(Modifier::BOLD),
                 );
 
@@ -1043,8 +1043,8 @@ impl Terminal {
             let notification = Paragraph::new(msg.as_str())
                 .style(
                     Style::default()
-                        .fg(Color::Green)
-                        .bg(Color::Black)
+                        .fg(Color::Rgb(0x6A, 0x9A, 0x7A)) // Muted green for success notifications
+                        .bg(Color::Rgb(0x00, 0x00, 0x00)) // Pure black background
                         .add_modifier(Modifier::BOLD),
                 )
                 .block(Block::default().borders(Borders::NONE));
@@ -1059,8 +1059,8 @@ impl Terminal {
             let progress_widget = Paragraph::new(progress_text)
                 .style(
                     Style::default()
-                        .fg(Color::Cyan)
-                        .bg(Color::Black)
+                        .fg(Color::Rgb(0xB0, 0x5A, 0x7A)) // Magenta-red for progress
+                        .bg(Color::Rgb(0x00, 0x00, 0x00)) // Pure black background
                         .add_modifier(Modifier::BOLD),
                 )
                 .block(Block::default().borders(Borders::NONE));
@@ -1165,11 +1165,11 @@ impl Terminal {
 
                     let style = if i == self.ssh_manager.selected_index {
                         Style::default()
-                            .fg(Color::Black)
-                            .bg(Color::Yellow)
+                            .fg(Color::Rgb(0x00, 0x00, 0x00)) // Black text
+                            .bg(Color::Rgb(0xDD, 0x66, 0x66)) // Cool red background for selection
                             .add_modifier(Modifier::BOLD)
                     } else {
-                        Style::default().fg(Color::White)
+                        Style::default().fg(Color::Rgb(0xC0, 0xB0, 0xB0)) // Reddish-gray
                     };
 
                     ListItem::new(content).style(style)
@@ -1191,9 +1191,9 @@ impl Terminal {
                 Block::default()
                     .borders(Borders::ALL)
                     .title(title)
-                    .style(Style::default().bg(Color::Black)),
+                    .style(Style::default().bg(Color::Rgb(0x00, 0x00, 0x00))), // Pure black
             )
-            .style(Style::default().fg(Color::White));
+            .style(Style::default().fg(Color::Rgb(0xC0, 0xB0, 0xB0))); // Reddish-gray
 
         f.render_widget(list, popup_area);
     }
@@ -1212,13 +1212,17 @@ impl Terminal {
 
         // Input box
         let input = Paragraph::new(format!("> {}", self.command_palette.input))
-            .style(Style::default().fg(Color::Cyan).bg(Color::Black))
+            .style(
+                Style::default()
+                    .fg(Color::Rgb(0xB0, 0x5A, 0x7A)) // Magenta-red
+                    .bg(Color::Rgb(0x00, 0x00, 0x00)) // Pure black
+            )
             .block(
                 Block::default()
                     .borders(Borders::ALL)
                     .title("Command Palette (Esc to close)")
-                    .border_style(Style::default().fg(Color::Cyan))
-                    .style(Style::default().bg(Color::Black)),
+                    .border_style(Style::default().fg(Color::Rgb(0xB0, 0x5A, 0x7A))) // Magenta-red border
+                    .style(Style::default().bg(Color::Rgb(0x00, 0x00, 0x00))), // Pure black
             );
         f.render_widget(input, palette_chunks[0]);
 
@@ -1231,28 +1235,28 @@ impl Terminal {
             .map(|(i, s)| {
                 let style = if i == self.command_palette.selected_index {
                     Style::default()
-                        .fg(Color::Yellow)
+                        .fg(Color::Rgb(0xDD, 0x66, 0x66)) // Cool red for selected
                         .add_modifier(Modifier::BOLD)
                 } else {
-                    Style::default().fg(Color::White)
+                    Style::default().fg(Color::Rgb(0xC0, 0xB0, 0xB0)) // Reddish-gray
                 };
                 Line::from(vec![
                     Span::styled(format!("  {} ", s.command), style),
                     Span::styled(
                         format!("- {}", s.description),
-                        Style::default().fg(Color::Gray),
+                        Style::default().fg(Color::Rgb(0x5A, 0x4A, 0x4A)), // Dark gray comments
                     ),
                 ])
             })
             .collect();
 
         let suggestions_widget = Paragraph::new(suggestions)
-            .style(Style::default().bg(Color::Black))
+            .style(Style::default().bg(Color::Rgb(0x00, 0x00, 0x00))) // Pure black
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::Cyan))
-                    .style(Style::default().bg(Color::Black)),
+                    .border_style(Style::default().fg(Color::Rgb(0xB0, 0x5A, 0x7A))) // Magenta-red border
+                    .style(Style::default().bg(Color::Rgb(0x00, 0x00, 0x00))), // Pure black
             );
         f.render_widget(suggestions_widget, palette_chunks[1]);
     }
@@ -1274,7 +1278,11 @@ impl Terminal {
         );
 
         let resource_widget = Paragraph::new(text)
-            .style(Style::default().fg(Color::Green).bg(Color::Black))
+            .style(
+                Style::default()
+                    .fg(Color::Rgb(0x6A, 0x9A, 0x7A)) // Muted green
+                    .bg(Color::Rgb(0x00, 0x00, 0x00)) // Pure black
+            )
             .block(Block::default().borders(Borders::TOP));
 
         f.render_widget(resource_widget, area);
