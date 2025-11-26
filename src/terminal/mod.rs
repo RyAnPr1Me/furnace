@@ -70,6 +70,27 @@ const MIN_POPUP_HEIGHT: u16 = 5;
 /// Maximum command display length in progress bar (Bug #16)
 const MAX_PROGRESS_COMMAND_LEN: usize = 40;
 
+/// Initial shell output timeout in milliseconds
+const INITIAL_OUTPUT_TIMEOUT_MS: u64 = 1000;
+
+/// Polling interval for initial output in milliseconds
+const INITIAL_OUTPUT_POLL_INTERVAL_MS: u64 = 20;
+
+/// Extra read attempts after receiving initial output
+const EXTRA_READ_ATTEMPTS: usize = 5;
+
+/// Delay between extra read attempts in milliseconds
+const EXTRA_READ_DELAY_MS: u64 = 20;
+
+/// Delay after sending newline to trigger prompt
+const PROMPT_TRIGGER_DELAY_MS: u64 = 200;
+
+/// Read attempts after sending newline to trigger prompt
+const PROMPT_TRIGGER_READ_ATTEMPTS: usize = 10;
+
+/// Delay after receiving first output to get full prompt
+const INITIAL_OUTPUT_SETTLE_MS: u64 = 100;
+
 /// High-performance terminal with GPU-accelerated rendering at 170 FPS
 pub struct Terminal {
     config: Config,
@@ -190,6 +211,42 @@ impl Terminal {
         })
     }
 
+    /// Helper method to read shell output and store it in the buffer
+    /// Returns the total number of bytes read
+    async fn read_and_store_output(&mut self, max_attempts: usize, delay_ms: u64) -> usize {
+        let mut total_bytes = 0;
+        
+        // Bounds check to prevent panic - ensure both vectors are in sync
+        if self.active_session >= self.sessions.len() 
+            || self.active_session >= self.output_buffers.len() {
+            warn!(
+                "Active session index {} is out of bounds (sessions: {}, buffers: {})",
+                self.active_session,
+                self.sessions.len(),
+                self.output_buffers.len()
+            );
+            return 0;
+        }
+        
+        if let Some(session) = self.sessions.get(self.active_session) {
+            for _ in 0..max_attempts {
+                if let Ok(n) = session.read_output(&mut self.read_buffer).await {
+                    if n > 0 {
+                        self.output_buffers[self.active_session].extend_from_slice(&self.read_buffer[..n]);
+                        self.dirty = true;
+                        total_bytes += n;
+                        debug!("Read {} bytes from shell", n);
+                    }
+                }
+                if delay_ms > 0 {
+                    tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+                }
+            }
+        }
+        
+        total_bytes
+    }
+
     /// Main event loop with async I/O for maximum performance
     ///
     /// # Errors
@@ -231,6 +288,73 @@ impl Terminal {
         self.cached_buffer_lens.push(0);
 
         info!("Terminal started with {}x{} size", cols, rows);
+
+        // Wait for initial shell output (prompt) to ensure it's displayed
+        // This prevents the blank screen issue on Windows PowerShell
+        debug!("Waiting for initial shell output...");
+        let initial_timeout = Duration::from_millis(INITIAL_OUTPUT_TIMEOUT_MS);
+        let start_time = tokio::time::Instant::now();
+        let mut received_output = false;
+        
+        // Poll for initial output with timeout
+        while start_time.elapsed() < initial_timeout {
+            // Try reading once
+            let bytes_read = self.read_and_store_output(1, 0).await;
+            
+            if bytes_read > 0 {
+                received_output = true;
+                debug!("Received {} bytes of initial shell output", bytes_read);
+                
+                // Continue reading for a bit more to get the full prompt
+                tokio::time::sleep(Duration::from_millis(INITIAL_OUTPUT_SETTLE_MS)).await;
+                
+                // Try to read more data that might be coming
+                let additional = self.read_and_store_output(EXTRA_READ_ATTEMPTS, EXTRA_READ_DELAY_MS).await;
+                if additional > 0 {
+                    debug!("Received additional {} bytes", additional);
+                }
+                break;
+            }
+            
+            tokio::time::sleep(Duration::from_millis(INITIAL_OUTPUT_POLL_INTERVAL_MS)).await;
+        }
+        
+        // If no output received, try sending a newline to trigger the prompt
+        // This helps with shells like PowerShell that don't show a prompt until Enter is pressed
+        if !received_output {
+            warn!("No initial shell output received - sending newline to trigger prompt");
+            if let Some(session) = self.sessions.get(self.active_session) {
+                if let Err(e) = session.write_input(b"\r").await {
+                    warn!("Failed to send initial newline: {}", e);
+                } else {
+                    // Wait a bit for the prompt to appear after sending newline
+                    tokio::time::sleep(Duration::from_millis(PROMPT_TRIGGER_DELAY_MS)).await;
+                    
+                    // Try reading again
+                    let bytes_read = self.read_and_store_output(
+                        PROMPT_TRIGGER_READ_ATTEMPTS,
+                        INITIAL_OUTPUT_POLL_INTERVAL_MS
+                    ).await;
+                    
+                    if bytes_read > 0 {
+                        received_output = true;
+                        debug!("Received {} bytes after sending newline", bytes_read);
+                    }
+                }
+            }
+        }
+        
+        if received_output {
+            info!("Successfully captured initial shell output");
+        } else {
+            warn!("No initial shell output received - shell may be slow to start or not configured correctly");
+        }
+        
+        // Always render the initial screen, even if empty
+        // This ensures the user sees SOMETHING instead of a blank screen
+        terminal.draw(|f| self.render(f))?;
+        self.dirty = false;
+        debug!("Initial render complete");
 
         // Event loop with optimized timing for TARGET_FPS
         let frame_duration = Duration::from_micros(1_000_000 / TARGET_FPS);
