@@ -66,7 +66,7 @@ pub struct SyntaxColors {
 pub struct Themes;
 
 impl Themes {
-    /// Dark theme (default) - Cool red/black vibe
+    /// Dark theme (default) with cool red/black color scheme
     #[allow(dead_code)] // Public API
     #[must_use]
     pub fn dark() -> Theme {

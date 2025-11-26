@@ -149,8 +149,7 @@ pub struct TrueColorPalette {
 }
 
 impl TrueColorPalette {
-    /// Create default palette using const colors (no runtime unwrap/panic)
-    /// Cool red/black vibe theme
+    /// Create default dark palette with cool red/black theme (no runtime unwrap/panic)
     #[must_use]
     pub fn default_dark() -> Self {
         // Use const values - these are compile-time verified, no runtime unwrap needed
