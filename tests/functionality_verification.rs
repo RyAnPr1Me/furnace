@@ -3,7 +3,21 @@
 //! These tests verify that all claimed features in the terminal emulator
 //! actually work as described.
 
-use furnace::*;
+use furnace::colors::TrueColor;
+use furnace::config::Config;
+use furnace::keybindings::KeybindingManager;
+use furnace::plugins::PluginManager;
+use furnace::progress_bar::ProgressBar;
+use furnace::session::SessionManager;
+use furnace::shell::ShellSession;
+use furnace::ssh_manager::SshManager;
+use furnace::terminal::ansi_parser::AnsiParser;
+use furnace::translator::CommandTranslator;
+use furnace::ui::{
+    autocomplete::Autocomplete, command_palette::CommandPalette,
+    resource_monitor::ResourceMonitor, themes::ThemeManager,
+};
+use furnace::url_handler::UrlHandler;
 use tempfile::tempdir;
 
 /// Test shell session functionality

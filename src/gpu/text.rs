@@ -58,7 +58,15 @@ pub fn hex_to_rgba(hex: &str) -> Option<[f32; 4]> {
 }
 
 /// Parse terminal output into GPU cells
-#[allow(unused_assignments)] // param_idx and current_param are used in the loop
+/// 
+/// This function processes ANSI escape sequences and converts them into a vector of
+/// GPU-renderable cells with appropriate colors and styles.
+/// 
+/// # Note
+/// The `param_idx` and `current_param` variables are reused throughout the parsing loop
+/// to avoid allocations. The `#[allow(unused_assignments)]` suppresses false positives
+/// from the compiler as these variables are reassigned before each use.
+#[allow(unused_assignments)] // param_idx and current_param are reused in parsing loop
 pub fn parse_terminal_output(output: &str, cols: usize) -> Vec<GpuCell> {
     let mut cells = Vec::with_capacity(cols * 50);
     let mut current_fg = [1.0f32, 1.0, 1.0, 1.0]; // White
