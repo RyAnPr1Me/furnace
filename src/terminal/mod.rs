@@ -70,6 +70,27 @@ const MIN_POPUP_HEIGHT: u16 = 5;
 /// Maximum command display length in progress bar (Bug #16)
 const MAX_PROGRESS_COMMAND_LEN: usize = 40;
 
+/// Initial shell output timeout in milliseconds
+const INITIAL_OUTPUT_TIMEOUT_MS: u64 = 1000;
+
+/// Polling interval for initial output in milliseconds
+const INITIAL_OUTPUT_POLL_INTERVAL_MS: u64 = 20;
+
+/// Extra read attempts after receiving initial output
+const EXTRA_READ_ATTEMPTS: usize = 5;
+
+/// Delay between extra read attempts in milliseconds
+const EXTRA_READ_DELAY_MS: u64 = 20;
+
+/// Delay after sending newline to trigger prompt
+const PROMPT_TRIGGER_DELAY_MS: u64 = 200;
+
+/// Read attempts after sending newline to trigger prompt
+const PROMPT_TRIGGER_READ_ATTEMPTS: usize = 10;
+
+/// Delay after receiving first output to get full prompt
+const INITIAL_OUTPUT_SETTLE_MS: u64 = 100;
+
 /// High-performance terminal with GPU-accelerated rendering at 170 FPS
 pub struct Terminal {
     config: Config,
@@ -190,6 +211,30 @@ impl Terminal {
         })
     }
 
+    /// Helper method to read shell output and store it in the buffer
+    /// Returns the total number of bytes read
+    async fn read_and_store_output(&mut self, max_attempts: usize, delay_ms: u64) -> usize {
+        let mut total_bytes = 0;
+        
+        if let Some(session) = self.sessions.get(self.active_session) {
+            for _ in 0..max_attempts {
+                if let Ok(n) = session.read_output(&mut self.read_buffer).await {
+                    if n > 0 {
+                        self.output_buffers[self.active_session].extend_from_slice(&self.read_buffer[..n]);
+                        self.dirty = true;
+                        total_bytes += n;
+                        debug!("Read {} bytes from shell", n);
+                    }
+                }
+                if delay_ms > 0 {
+                    tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+                }
+            }
+        }
+        
+        total_bytes
+    }
+
     /// Main event loop with async I/O for maximum performance
     ///
     /// # Errors
@@ -235,7 +280,7 @@ impl Terminal {
         // Wait for initial shell output (prompt) to ensure it's displayed
         // This prevents the blank screen issue on Windows PowerShell
         debug!("Waiting for initial shell output...");
-        let initial_timeout = Duration::from_millis(1000); // Increased timeout for slower systems
+        let initial_timeout = Duration::from_millis(INITIAL_OUTPUT_TIMEOUT_MS);
         let start_time = tokio::time::Instant::now();
         let mut received_output = false;
         
@@ -248,25 +293,20 @@ impl Terminal {
                         self.dirty = true;
                         received_output = true;
                         debug!("Received {} bytes of initial shell output", n);
+                        
                         // Continue reading for a bit more to get the full prompt
-                        tokio::time::sleep(Duration::from_millis(100)).await;
+                        tokio::time::sleep(Duration::from_millis(INITIAL_OUTPUT_SETTLE_MS)).await;
                         
                         // Try to read more data that might be coming
-                        let extra_attempts = 5;
-                        for _ in 0..extra_attempts {
-                            if let Ok(n) = session.read_output(&mut self.read_buffer).await {
-                                if n > 0 {
-                                    self.output_buffers[self.active_session].extend_from_slice(&self.read_buffer[..n]);
-                                    debug!("Received additional {} bytes", n);
-                                }
-                            }
-                            tokio::time::sleep(Duration::from_millis(20)).await;
+                        let additional = self.read_and_store_output(EXTRA_READ_ATTEMPTS, EXTRA_READ_DELAY_MS).await;
+                        if additional > 0 {
+                            debug!("Received additional {} bytes", additional);
                         }
                         break;
                     }
                 }
             }
-            tokio::time::sleep(Duration::from_millis(20)).await;
+            tokio::time::sleep(Duration::from_millis(INITIAL_OUTPUT_POLL_INTERVAL_MS)).await;
         }
         
         // If no output received, try sending a newline to trigger the prompt
@@ -276,22 +316,20 @@ impl Terminal {
             if let Some(session) = self.sessions.get(self.active_session) {
                 if let Err(e) = session.write_input(b"\r").await {
                     warn!("Failed to send initial newline: {}", e);
-                }
-                
-                // Wait a bit for the prompt to appear after sending newline
-                tokio::time::sleep(Duration::from_millis(200)).await;
-                
-                // Try reading again
-                for _ in 0..10 {
-                    if let Ok(n) = session.read_output(&mut self.read_buffer).await {
-                        if n > 0 {
-                            self.output_buffers[self.active_session].extend_from_slice(&self.read_buffer[..n]);
-                            self.dirty = true;
-                            received_output = true;
-                            debug!("Received {} bytes after sending newline", n);
-                        }
+                } else {
+                    // Wait a bit for the prompt to appear after sending newline
+                    tokio::time::sleep(Duration::from_millis(PROMPT_TRIGGER_DELAY_MS)).await;
+                    
+                    // Try reading again
+                    let bytes_read = self.read_and_store_output(
+                        PROMPT_TRIGGER_READ_ATTEMPTS,
+                        INITIAL_OUTPUT_POLL_INTERVAL_MS
+                    ).await;
+                    
+                    if bytes_read > 0 {
+                        received_output = true;
+                        debug!("Received {} bytes after sending newline", bytes_read);
                     }
-                    tokio::time::sleep(Duration::from_millis(20)).await;
                 }
             }
         }
