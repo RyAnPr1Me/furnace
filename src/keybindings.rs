@@ -135,7 +135,7 @@ impl KeybindingManager {
     pub fn add_binding(&mut self, key: &str, modifiers: Vec<&str>, action: Action) {
         let binding = KeyBinding {
             key: key.to_string(),
-            modifiers: modifiers.iter().map(|s| s.to_string()).collect(),
+            modifiers: modifiers.iter().map(std::string::ToString::to_string).collect(),
         };
         self.bindings.insert(binding, action);
     }

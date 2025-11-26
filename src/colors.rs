@@ -61,10 +61,12 @@ impl TrueColor {
     pub fn blend(self, other: Self, factor: f32) -> Self {
         let factor = factor.clamp(0.0, 1.0);
         Self {
-            // Use round() instead of truncation for more accurate color blending
-            r: ((self.r as f32) * (1.0 - factor) + (other.r as f32) * factor).round() as u8,
-            g: ((self.g as f32) * (1.0 - factor) + (other.g as f32) * factor).round() as u8,
-            b: ((self.b as f32) * (1.0 - factor) + (other.b as f32) * factor).round() as u8,
+            // Use mul_add for more efficient and accurate calculation
+            // Formula: self * (1 - factor) + other * factor
+            // Restructured as: (other - self) * factor + self for proper FMA usage
+            r: (f32::from(other.r) - f32::from(self.r)).mul_add(factor, f32::from(self.r)).round() as u8,
+            g: (f32::from(other.g) - f32::from(self.g)).mul_add(factor, f32::from(self.g)).round() as u8,
+            b: (f32::from(other.b) - f32::from(self.b)).mul_add(factor, f32::from(self.b)).round() as u8,
         }
     }
 
@@ -88,7 +90,15 @@ impl TrueColor {
     #[allow(dead_code)] // Public API
     #[must_use]
     pub fn luminance(self) -> f32 {
-        (0.299 * self.r as f32 + 0.587 * self.g as f32 + 0.114 * self.b as f32) / 255.0
+        // Use nested mul_add for hardware FMA (Fused Multiply-Add) optimization
+        // Original formula: (0.299*r + 0.587*g + 0.114*b) / 255.0
+        // Nested as: 0.299*r + (0.587*g + (0.114*b + 0.0))
+        // This leverages single-instruction FMA on modern CPUs for better performance and accuracy
+        // Trade-off: slightly reduced readability for measurable performance gains in tight loops
+        0.299f32.mul_add(
+            f32::from(self.r), 
+            0.587f32.mul_add(f32::from(self.g), 0.114f32.mul_add(f32::from(self.b), 0.0))
+        ) / 255.0
     }
 
     /// Check if color is light

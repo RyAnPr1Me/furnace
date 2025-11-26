@@ -149,10 +149,10 @@ pub enum TranslationError {
 impl std::fmt::Display for TranslationError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::UnknownCommand(cmd) => write!(f, "Unknown command: {}", cmd),
-            Self::InvalidSyntax(msg) => write!(f, "Invalid syntax: {}", msg),
-            Self::UnsupportedOperator(op) => write!(f, "Unsupported operator: {}", op),
-            Self::PartialTranslation(msg) => write!(f, "Partial translation: {}", msg),
+            Self::UnknownCommand(cmd) => write!(f, "Unknown command: {cmd}"),
+            Self::InvalidSyntax(msg) => write!(f, "Invalid syntax: {msg}"),
+            Self::UnsupportedOperator(op) => write!(f, "Unsupported operator: {op}"),
+            Self::PartialTranslation(msg) => write!(f, "Partial translation: {msg}"),
         }
     }
 }
@@ -766,15 +766,15 @@ fn grep_to_findstr_args(args: &str) -> String {
         }
 
         // First non-flag is the pattern (if no -e was used)
-        if !pattern_found {
+        if pattern_found {
+            // Rest are files
+            result.push(' ');
+            result.push_str(part);
+        } else {
             result.push_str(" \"");
             result.push_str(part);
             result.push('"');
             pattern_found = true;
-        } else {
-            // Rest are files
-            result.push(' ');
-            result.push_str(part);
         }
     }
 
@@ -928,7 +928,7 @@ fn rd_to_rmdir_args(args: &str) -> String {
     result
 }
 
-/// Translates head flags to Windows PowerShell Get-Content equivalents
+/// Translates head flags to Windows `PowerShell` `Get-Content` equivalents
 /// Supported flags:
 /// - `-n NUM`, `--lines=NUM` -> -Head NUM
 /// - `-c NUM`, `--bytes=NUM` -> (no direct equivalent)
@@ -959,7 +959,7 @@ fn head_to_ps_args(args: &str) -> String {
     result
 }
 
-/// Translates tail flags to Windows PowerShell Get-Content equivalents
+/// Translates tail flags to Windows `PowerShell` `Get-Content` equivalents
 /// Supported flags:
 /// - `-n NUM`, `--lines=NUM` -> -Tail NUM
 /// - `-f`, `--follow` -> -Wait (follow file)
@@ -1641,7 +1641,7 @@ static LINUX_TO_WINDOWS_MAP: LazyLock<HashMap<&'static str, CommandMapping>> =
                         }
                         result.push(' ');
                         result.push_str(name);
-                        if !name.ends_with(".exe") {
+                        if !name.to_lowercase().ends_with(".exe") {
                             result.push_str(".exe");
                         }
                     }
@@ -1956,7 +1956,7 @@ static LINUX_TO_WINDOWS_MAP: LazyLock<HashMap<&'static str, CommandMapping>> =
                         i += 1;
                     }
 
-                    format!(" -Path {} -DestinationPath {}", archive, dest_dir)
+                    format!(" -Path {archive} -DestinationPath {dest_dir}")
                 },
             },
         );
@@ -1971,7 +1971,7 @@ static LINUX_TO_WINDOWS_MAP: LazyLock<HashMap<&'static str, CommandMapping>> =
                         .split_whitespace()
                         .find(|p| !p.starts_with('-'))
                         .unwrap_or("");
-                    format!(" -Path {} -DestinationPath {}.gz", file, file)
+                    format!(" -Path {file} -DestinationPath {file}.gz")
                 },
             },
         );
@@ -2032,7 +2032,7 @@ static LINUX_TO_WINDOWS_MAP: LazyLock<HashMap<&'static str, CommandMapping>> =
                         i += 1;
                     }
 
-                    format!(" {}\\{}", path, pattern)
+                    format!(" {path}\\{pattern}")
                 },
             },
         );
@@ -2985,7 +2985,7 @@ static WINDOWS_TO_LINUX_MAP: LazyLock<HashMap<&'static str, CommandMapping>> =
                             // systemctl edit allows editing service configuration
                             format!(" show {}", parts.get(1).unwrap_or(&""))
                         }
-                        _ => format!(" {}", args),
+                        _ => format!(" {args}"),
                     }
                 },
             },
@@ -3017,7 +3017,7 @@ static WINDOWS_TO_LINUX_MAP: LazyLock<HashMap<&'static str, CommandMapping>> =
                             // net view -> requires smbclient
                             String::new()
                         }
-                        _ => format!(" {}", args),
+                        _ => format!(" {args}"),
                     }
                 },
             },

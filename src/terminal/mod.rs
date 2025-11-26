@@ -426,7 +426,7 @@ impl Terminal {
 
         match (key.code, key.modifiers) {
             // SSH Manager (Ctrl+Shift+S) - Bug #18: Don't fall through when disabled
-            (KeyCode::Char('s'), m) | (KeyCode::Char('S'), m)
+            (KeyCode::Char('s' | 'S'), m)
                 if m.contains(KeyModifiers::CONTROL) && m.contains(KeyModifiers::SHIFT) =>
             {
                 if self.config.ssh_manager.enabled {
@@ -510,18 +510,15 @@ impl Terminal {
                     if let Some(cmd_buf) = self.command_buffers.get_mut(self.active_session) {
                         // Pop one complete UTF-8 character from the end
                         // UTF-8 encoding: ASCII is 0xxxxxxx, lead bytes are 11xxxxxx, continuation bytes are 10xxxxxx
-                        if !cmd_buf.is_empty() {
-                            // First, pop any trailing continuation bytes (10xxxxxx pattern)
-                            while !cmd_buf.is_empty() {
-                                let last = *cmd_buf.last().unwrap();
-                                if (last & 0xC0) == 0x80 {
-                                    // This is a continuation byte, pop it
-                                    cmd_buf.pop();
-                                } else {
-                                    // This is either ASCII or a lead byte, pop it and we're done
-                                    cmd_buf.pop();
-                                    break;
-                                }
+                        // First, pop any trailing continuation bytes (10xxxxxx pattern)
+                        while let Some(&last) = cmd_buf.last() {
+                            if (last & 0xC0) == 0x80 {
+                                // This is a continuation byte, pop it
+                                cmd_buf.pop();
+                            } else {
+                                // This is either ASCII or a lead byte, pop it and we're done
+                                cmd_buf.pop();
+                                break;
                             }
                         }
                     }
@@ -570,8 +567,7 @@ impl Terminal {
             let command = self
                 .command_buffers
                 .get(self.active_session)
-                .map(|b| String::from_utf8_lossy(b))
-                .unwrap_or(Cow::Borrowed(""));
+                .map_or(Cow::Borrowed(""), |b| String::from_utf8_lossy(b));
 
             // Check for SSH command
             if self.config.ssh_manager.enabled
@@ -611,8 +607,7 @@ impl Terminal {
                 let byte_count = self
                     .command_buffers
                     .get(self.active_session)
-                    .map(|b| b.len())
-                    .unwrap_or(0);
+                    .map_or(0, std::vec::Vec::len);
 
                 // Send backspaces to clear the original command
                 for _ in 0..byte_count {
@@ -756,7 +751,7 @@ impl Terminal {
                 // Cycle to next theme
                 self.theme_manager.next_theme();
                 let theme_name = self.theme_manager.current().name.clone();
-                self.translation_notification = Some(format!("Theme: {}", theme_name));
+                self.translation_notification = Some(format!("Theme: {theme_name}"));
                 self.notification_frames = TARGET_FPS * NOTIFICATION_DURATION_SECS;
                 // Force redraw with new theme
                 self.dirty = true;
@@ -784,7 +779,7 @@ impl Terminal {
                 } else {
                     // Show available themes
                     let available = self.theme_manager.available_theme_names().join(", ");
-                    self.translation_notification = Some(format!("Available themes: {}", available));
+                    self.translation_notification = Some(format!("Available themes: {available}"));
                     self.notification_frames = TARGET_FPS * NOTIFICATION_DURATION_SECS;
                 }
             }
@@ -864,18 +859,10 @@ impl Terminal {
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Length(
-                    if self.config.terminal.enable_tabs && self.sessions.len() > 1 {
-                        1
-                    } else {
-                        0
-                    },
+                    u16::from(self.config.terminal.enable_tabs && self.sessions.len() > 1)
                 ),
-                Constraint::Length(if self.translation_notification.is_some() {
-                    1
-                } else {
-                    0
-                }),
-                Constraint::Length(if self.progress_bar.visible { 1 } else { 0 }),
+                Constraint::Length(u16::from(self.translation_notification.is_some())),
+                Constraint::Length(u16::from(self.progress_bar.visible)),
                 Constraint::Min(0),
                 Constraint::Length(if self.show_resources { 3 } else { 0 }),
             ])
@@ -974,8 +961,7 @@ impl Terminal {
         let buffer_len = self
             .output_buffers
             .get(self.active_session)
-            .map(|b| b.len())
-            .unwrap_or(0);
+            .map_or(0, std::vec::Vec::len);
         let cached_len = self
             .cached_buffer_lens
             .get(self.active_session)

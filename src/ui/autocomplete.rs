@@ -34,7 +34,7 @@ type SharedString = Arc<str>;
 pub struct Autocomplete {
     /// Bug #28: History uses Arc<str> for efficient sharing
     history: VecDeque<SharedString>,
-    /// Bug #22: HashSet for O(1) duplicate detection
+    /// Bug #22: `HashSet` for O(1) duplicate detection
     history_set: HashSet<SharedString>,
     /// Current suggestions (references to history or static commands)
     current_suggestions: Vec<SharedString>,
@@ -132,7 +132,7 @@ impl Autocomplete {
         // Return cloned strings (required by API)
         self.current_suggestions
             .iter()
-            .map(|s| s.to_string())
+            .map(std::string::ToString::to_string)
             .collect()
     }
 
@@ -151,7 +151,7 @@ impl Autocomplete {
     /// Get next suggestion as owned String (legacy API)
     #[allow(dead_code)]
     pub fn next_suggestion_owned(&mut self) -> Option<String> {
-        self.next_suggestion().map(|s| s.to_string())
+        self.next_suggestion().map(std::string::ToString::to_string)
     }
 
     /// Get previous suggestion (Bug #27: return reference, avoid clone)
@@ -256,7 +256,8 @@ mod tests {
         autocomplete.add_to_history("cmd1".to_string());
         autocomplete.add_to_history("cmd2".to_string());
 
-        autocomplete.get_suggestions("cmd");
+        let suggestions = autocomplete.get_suggestions("cmd");
+        assert!(!suggestions.is_empty());
 
         let first = autocomplete.next_suggestion().map(|s| s.to_string());
         assert!(first.is_some());
@@ -272,7 +273,8 @@ mod tests {
         autocomplete.add_to_history("cmd1".to_string());
         autocomplete.add_to_history("cmd2".to_string());
 
-        autocomplete.get_suggestions("cmd");
+        let suggestions = autocomplete.get_suggestions("cmd");
+        assert!(!suggestions.is_empty());
 
         // Go forward twice
         let _ = autocomplete.next_suggestion();

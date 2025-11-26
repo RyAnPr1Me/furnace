@@ -30,7 +30,7 @@ pub struct GpuConfig {
     pub enabled: bool,
     /// Preferred GPU backend (Vulkan, Metal, DX12, etc.)
     pub backend: GpuBackend,
-    /// Enable VSync (limits to monitor refresh rate)
+    /// Enable `VSync` (limits to monitor refresh rate)
     pub vsync: bool,
     /// Font size in points
     pub font_size: f32,

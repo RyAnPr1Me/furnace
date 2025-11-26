@@ -33,14 +33,15 @@ impl SshConnection {
     /// Format as SSH command string
     #[must_use]
     pub fn to_command(&self) -> String {
+        use std::fmt::Write;
         let mut cmd = format!("ssh {}@{}", self.username, self.host);
 
         if self.port != 22 {
-            cmd.push_str(&format!(" -p {}", self.port));
+            let _ = write!(cmd, " -p {}", self.port);
         }
 
         if let Some(ref key) = self.identity_file {
-            cmd.push_str(&format!(" -i {}", key));
+            let _ = write!(cmd, " -i {key}");
         }
 
         cmd
@@ -249,33 +250,33 @@ impl SshManager {
             }
         }
 
-        if !host.is_empty() {
-            let name = if !username.is_empty() {
-                format!("{}@{}", username, host)
-            } else {
-                host.clone()
-            };
-
-            // Use current system user if no username specified
-            let default_username = std::env::var("USER")
-                .or_else(|_| std::env::var("USERNAME"))
-                .unwrap_or_else(|_| "user".to_string());
-
-            Some(SshConnection {
-                name,
-                host,
-                port: ssh_port,
-                username: if username.is_empty() {
-                    default_username
-                } else {
-                    username
-                },
-                identity_file,
-                last_used: Some(chrono::Utc::now().to_rfc3339()),
-            })
-        } else {
-            None
+        if host.is_empty() {
+            return None;
         }
+        
+        let name = if username.is_empty() {
+            host.clone()
+        } else {
+            format!("{username}@{host}")
+        };
+
+        // Use current system user if no username specified
+        let default_username = std::env::var("USER")
+            .or_else(|_| std::env::var("USERNAME"))
+            .unwrap_or_else(|_| "user".to_string());
+
+        Some(SshConnection {
+            name,
+            host,
+            port: ssh_port,
+            username: if username.is_empty() {
+                default_username
+            } else {
+                username
+            },
+            identity_file,
+            last_used: Some(chrono::Utc::now().to_rfc3339()),
+        })
     }
 }
 
