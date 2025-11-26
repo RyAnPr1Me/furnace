@@ -232,6 +232,36 @@ impl Terminal {
 
         info!("Terminal started with {}x{} size", cols, rows);
 
+        // Wait for initial shell output (prompt) to ensure it's displayed
+        // This prevents the blank screen issue on Windows PowerShell
+        debug!("Waiting for initial shell output...");
+        let initial_timeout = Duration::from_millis(500);
+        let start_time = tokio::time::Instant::now();
+        
+        // Poll for initial output with timeout
+        while start_time.elapsed() < initial_timeout {
+            if let Some(session) = self.sessions.get(self.active_session) {
+                if let Ok(n) = session.read_output(&mut self.read_buffer).await {
+                    if n > 0 {
+                        self.output_buffers[self.active_session].extend_from_slice(&self.read_buffer[..n]);
+                        self.dirty = true;
+                        debug!("Received {} bytes of initial shell output", n);
+                        // Continue reading for a bit more to get the full prompt
+                        tokio::time::sleep(Duration::from_millis(50)).await;
+                        break;
+                    }
+                }
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        
+        // Render the initial screen with shell prompt
+        if self.dirty {
+            terminal.draw(|f| self.render(f))?;
+            self.dirty = false;
+            debug!("Initial render complete");
+        }
+
         // Event loop with optimized timing for TARGET_FPS
         let frame_duration = Duration::from_micros(1_000_000 / TARGET_FPS);
         let mut render_interval = interval(frame_duration);
