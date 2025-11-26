@@ -33,7 +33,7 @@ pub mod ui;
 pub mod url_handler;
 
 /// GPU-accelerated rendering module
-/// 
+///
 /// Enabled with the `gpu` feature flag. Provides hardware-accelerated
 /// text rendering using wgpu for 170+ FPS performance.
 pub mod gpu;

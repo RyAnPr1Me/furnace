@@ -5,6 +5,7 @@
 use std::collections::HashMap;
 
 /// Glyph cache for efficient text rendering
+#[allow(dead_code)] // Some fields are for future use in complete GPU implementation
 pub struct GlyphCache {
     /// Map from character code to UV coordinates in atlas
     glyph_map: HashMap<u32, GlyphInfo>,
@@ -103,7 +104,13 @@ impl GlyphCache {
     }
 
     /// Cache a new glyph (returns UV coordinates)
-    pub fn cache_glyph(&mut self, char_code: u32, _bitmap: &[u8], width: u32, height: u32) -> [f32; 4] {
+    pub fn cache_glyph(
+        &mut self,
+        char_code: u32,
+        _bitmap: &[u8],
+        width: u32,
+        height: u32,
+    ) -> [f32; 4] {
         // Check if already cached
         if let Some(info) = self.glyph_map.get(&char_code) {
             return info.uv;
@@ -174,7 +181,7 @@ mod tests {
     #[test]
     fn test_get_ascii_glyph() {
         let cache = GlyphCache::new(14.0, "Monospace");
-        
+
         // Test getting ASCII characters
         assert!(cache.get_glyph('A' as u32).is_some());
         assert!(cache.get_glyph('z' as u32).is_some());
@@ -184,10 +191,10 @@ mod tests {
     #[test]
     fn test_cache_new_glyph() {
         let mut cache = GlyphCache::new(14.0, "Monospace");
-        
+
         // Cache a non-ASCII glyph
         let uv = cache.cache_glyph(0x1F600, &[], 20, 20); // Emoji
-        
+
         // Should be retrievable
         assert_eq!(cache.get_glyph_uv(0x1F600), Some(uv));
     }

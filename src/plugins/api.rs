@@ -8,13 +8,13 @@ pub trait PluginApi {
     fn metadata(&self) -> PluginMetadata;
 
     /// Initialize the plugin
-    /// 
+    ///
     /// # Errors
     /// Returns an error if plugin initialization fails
     fn initialize(&mut self) -> Result<()>;
 
     /// Execute a command
-    /// 
+    ///
     /// # Errors
     /// Returns an error if command execution fails
     fn execute(&self, command: &str, args: &[&str]) -> Result<String>;
@@ -49,13 +49,13 @@ pub struct PluginCommand {
 #[allow(dead_code)] // Public API trait
 pub trait ScriptingApi {
     /// Evaluate a script
-    /// 
+    ///
     /// # Errors
     /// Returns an error if script evaluation fails
     fn eval(&self, script: &str) -> Result<String>;
 
     /// Load a script file
-    /// 
+    ///
     /// # Errors
     /// Returns an error if script file cannot be loaded or parsed
     fn load_script(&self, path: &str) -> Result<()>;
