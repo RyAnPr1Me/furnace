@@ -235,8 +235,9 @@ impl Terminal {
         // Wait for initial shell output (prompt) to ensure it's displayed
         // This prevents the blank screen issue on Windows PowerShell
         debug!("Waiting for initial shell output...");
-        let initial_timeout = Duration::from_millis(500);
+        let initial_timeout = Duration::from_millis(1000); // Increased timeout for slower systems
         let start_time = tokio::time::Instant::now();
+        let mut received_output = false;
         
         // Poll for initial output with timeout
         while start_time.elapsed() < initial_timeout {
@@ -245,22 +246,67 @@ impl Terminal {
                     if n > 0 {
                         self.output_buffers[self.active_session].extend_from_slice(&self.read_buffer[..n]);
                         self.dirty = true;
+                        received_output = true;
                         debug!("Received {} bytes of initial shell output", n);
                         // Continue reading for a bit more to get the full prompt
-                        tokio::time::sleep(Duration::from_millis(50)).await;
+                        tokio::time::sleep(Duration::from_millis(100)).await;
+                        
+                        // Try to read more data that might be coming
+                        let extra_attempts = 5;
+                        for _ in 0..extra_attempts {
+                            if let Ok(n) = session.read_output(&mut self.read_buffer).await {
+                                if n > 0 {
+                                    self.output_buffers[self.active_session].extend_from_slice(&self.read_buffer[..n]);
+                                    debug!("Received additional {} bytes", n);
+                                }
+                            }
+                            tokio::time::sleep(Duration::from_millis(20)).await;
+                        }
                         break;
                     }
                 }
             }
-            tokio::time::sleep(Duration::from_millis(10)).await;
+            tokio::time::sleep(Duration::from_millis(20)).await;
         }
         
-        // Render the initial screen with shell prompt
-        if self.dirty {
-            terminal.draw(|f| self.render(f))?;
-            self.dirty = false;
-            debug!("Initial render complete");
+        // If no output received, try sending a newline to trigger the prompt
+        // This helps with shells like PowerShell that don't show a prompt until Enter is pressed
+        if !received_output {
+            warn!("No initial shell output received - sending newline to trigger prompt");
+            if let Some(session) = self.sessions.get(self.active_session) {
+                if let Err(e) = session.write_input(b"\r").await {
+                    warn!("Failed to send initial newline: {}", e);
+                }
+                
+                // Wait a bit for the prompt to appear after sending newline
+                tokio::time::sleep(Duration::from_millis(200)).await;
+                
+                // Try reading again
+                for _ in 0..10 {
+                    if let Ok(n) = session.read_output(&mut self.read_buffer).await {
+                        if n > 0 {
+                            self.output_buffers[self.active_session].extend_from_slice(&self.read_buffer[..n]);
+                            self.dirty = true;
+                            received_output = true;
+                            debug!("Received {} bytes after sending newline", n);
+                        }
+                    }
+                    tokio::time::sleep(Duration::from_millis(20)).await;
+                }
+            }
         }
+        
+        if received_output {
+            info!("Successfully captured initial shell output");
+        } else {
+            warn!("No initial shell output received - shell may be slow to start or not configured correctly");
+        }
+        
+        // Always render the initial screen, even if empty
+        // This ensures the user sees SOMETHING instead of a blank screen
+        terminal.draw(|f| self.render(f))?;
+        self.dirty = false;
+        debug!("Initial render complete");
 
         // Event loop with optimized timing for TARGET_FPS
         let frame_duration = Duration::from_micros(1_000_000 / TARGET_FPS);
