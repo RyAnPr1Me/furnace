@@ -1112,7 +1112,8 @@ impl Terminal {
                 // Use String::from_utf8_lossy which returns Cow - doesn't allocate if valid UTF-8
                 let raw_output = String::from_utf8_lossy(buffer);
                 let all_lines = AnsiParser::parse(&raw_output);
-                let height = area.height as usize;
+                // Leave 1 line at bottom for breathing room (ensure prompt is visible)
+                let height = (area.height as usize).saturating_sub(1).max(1);
                 let skip_count = all_lines.len().saturating_sub(height);
                 let visible_lines: Vec<Line<'static>> =
                     all_lines.into_iter().skip(skip_count).collect();
@@ -1135,7 +1136,11 @@ impl Terminal {
 
         let text = Text::from(styled_lines);
         let paragraph = Paragraph::new(text)
-            .style(Style::default().fg(Color::White).bg(Color::Black))
+            .style(
+                Style::default()
+                    .fg(Color::Rgb(0xD0, 0xC0, 0xC0)) // Light reddish-gray
+                    .bg(Color::Rgb(0x00, 0x00, 0x00)) // Pure black
+            )
             .block(Block::default().borders(Borders::NONE));
 
         f.render_widget(paragraph, area);

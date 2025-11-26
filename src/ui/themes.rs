@@ -66,7 +66,7 @@ pub struct SyntaxColors {
 pub struct Themes;
 
 impl Themes {
-    /// Dark theme (default)
+    /// Dark theme (default) - Cool red/black vibe
     #[allow(dead_code)] // Public API
     #[must_use]
     pub fn dark() -> Theme {
@@ -74,41 +74,41 @@ impl Themes {
             name: "Dark".to_string(),
             colors: ColorPalette {
                 black: "#000000".to_string(),
-                red: "#FF5555".to_string(),
-                green: "#50FA7B".to_string(),
-                yellow: "#F1FA8C".to_string(),
-                blue: "#BD93F9".to_string(),
-                magenta: "#FF79C6".to_string(),
-                cyan: "#8BE9FD".to_string(),
-                white: "#BFBFBF".to_string(),
-                bright_black: "#4D4D4D".to_string(),
-                bright_red: "#FF6E67".to_string(),
-                bright_green: "#5AF78E".to_string(),
-                bright_yellow: "#F4F99D".to_string(),
-                bright_blue: "#CAA9FA".to_string(),
-                bright_magenta: "#FF92D0".to_string(),
-                bright_cyan: "#9AEDFE".to_string(),
-                bright_white: "#E6E6E6".to_string(),
+                red: "#CC5555".to_string(),        // Darker, cooler red
+                green: "#5A8A6A".to_string(),      // Muted green
+                yellow: "#B89860".to_string(),     // Darker yellow
+                blue: "#6A7A9A".to_string(),       // Cool blue-gray
+                magenta: "#B05A7A".to_string(),    // Dark magenta-red
+                cyan: "#5A8A8A".to_string(),       // Dark teal
+                white: "#C0B0B0".to_string(),      // Slightly reddish gray
+                bright_black: "#3A2A2A".to_string(),   // Dark reddish-gray
+                bright_red: "#DD6666".to_string(),     // Medium cool red
+                bright_green: "#6A9A7A".to_string(),   // Muted bright green
+                bright_yellow: "#C8A870".to_string(),  // Muted gold
+                bright_blue: "#7A8AAA".to_string(),    // Cool light blue
+                bright_magenta: "#C06A8A".to_string(), // Bright magenta-red
+                bright_cyan: "#6A9A9A".to_string(),    // Muted cyan
+                bright_white: "#D0C0C0".to_string(),   // Light reddish-gray
             },
             ui: UiColors {
-                foreground: "#F8F8F2".to_string(),
-                background: "#1E1E1E".to_string(),
-                cursor: "#50FA7B".to_string(),
-                selection: "#44475A".to_string(),
-                border: "#6272A4".to_string(),
-                tab_active: "#BD93F9".to_string(),
-                tab_inactive: "#44475A".to_string(),
-                status_bar: "#282A36".to_string(),
-                command_palette: "#282A36".to_string(),
+                foreground: "#D0C0C0".to_string(),      // Light reddish-gray text
+                background: "#000000".to_string(),      // Pure black background
+                cursor: "#DD6666".to_string(),          // Cool red cursor
+                selection: "#2A1A1A".to_string(),       // Very dark red selection
+                border: "#4A3A3A".to_string(),          // Dark reddish border
+                tab_active: "#DD6666".to_string(),      // Cool red active tab
+                tab_inactive: "#2A1A1A".to_string(),    // Dark inactive tab
+                status_bar: "#1A0A0A".to_string(),      // Almost black status bar
+                command_palette: "#1A0A0A".to_string(), // Almost black palette
             },
             syntax: SyntaxColors {
-                keyword: "#FF79C6".to_string(),
-                string: "#F1FA8C".to_string(),
-                comment: "#6272A4".to_string(),
-                function: "#8BE9FD".to_string(),
-                variable: "#F8F8F2".to_string(),
-                error: "#FF5555".to_string(),
-                warning: "#FFB86C".to_string(),
+                keyword: "#DD6666".to_string(),         // Cool red keywords
+                string: "#B89860".to_string(),          // Muted gold strings
+                comment: "#5A4A4A".to_string(),         // Dark gray comments
+                function: "#B05A7A".to_string(),        // Magenta-red functions
+                variable: "#C0B0B0".to_string(),        // Reddish-gray variables
+                error: "#EE5555".to_string(),           // Brighter red for errors
+                warning: "#C8A870".to_string(),         // Gold warnings
             },
         }
     }

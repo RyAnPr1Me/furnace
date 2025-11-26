@@ -150,27 +150,28 @@ pub struct TrueColorPalette {
 
 impl TrueColorPalette {
     /// Create default palette using const colors (no runtime unwrap/panic)
+    /// Cool red/black vibe theme
     #[must_use]
     pub fn default_dark() -> Self {
         // Use const values - these are compile-time verified, no runtime unwrap needed
         Self {
             black: TrueColor::new(0x00, 0x00, 0x00),   // #000000
-            red: TrueColor::new(0xFF, 0x55, 0x55),     // #FF5555
-            green: TrueColor::new(0x50, 0xFA, 0x7B),   // #50FA7B
-            yellow: TrueColor::new(0xF1, 0xFA, 0x8C),  // #F1FA8C
-            blue: TrueColor::new(0xBD, 0x93, 0xF9),    // #BD93F9
-            magenta: TrueColor::new(0xFF, 0x79, 0xC6), // #FF79C6
-            cyan: TrueColor::new(0x8B, 0xE9, 0xFD),    // #8BE9FD
-            white: TrueColor::new(0xBF, 0xBF, 0xBF),   // #BFBFBF
+            red: TrueColor::new(0xCC, 0x55, 0x55),     // #CC5555 - Darker, cooler red
+            green: TrueColor::new(0x5A, 0x8A, 0x6A),   // #5A8A6A - Muted green
+            yellow: TrueColor::new(0xB8, 0x98, 0x60),  // #B89860 - Darker yellow
+            blue: TrueColor::new(0x6A, 0x7A, 0x9A),    // #6A7A9A - Cool blue-gray
+            magenta: TrueColor::new(0xB0, 0x5A, 0x7A), // #B05A7A - Dark magenta-red
+            cyan: TrueColor::new(0x5A, 0x8A, 0x8A),    // #5A8A8A - Dark teal
+            white: TrueColor::new(0xC0, 0xB0, 0xB0),   // #C0B0B0 - Slightly reddish gray
 
-            bright_black: TrueColor::new(0x4D, 0x4D, 0x4D), // #4D4D4D
-            bright_red: TrueColor::new(0xFF, 0x6E, 0x67),   // #FF6E67
-            bright_green: TrueColor::new(0x5A, 0xF7, 0x8E), // #5AF78E
-            bright_yellow: TrueColor::new(0xF4, 0xF9, 0x9D), // #F4F99D
-            bright_blue: TrueColor::new(0xCA, 0xA9, 0xFA),  // #CAA9FA
-            bright_magenta: TrueColor::new(0xFF, 0x92, 0xD0), // #FF92D0
-            bright_cyan: TrueColor::new(0x9A, 0xED, 0xFE),  // #9AEDFE
-            bright_white: TrueColor::new(0xE6, 0xE6, 0xE6), // #E6E6E6
+            bright_black: TrueColor::new(0x3A, 0x2A, 0x2A), // #3A2A2A - Dark reddish-gray
+            bright_red: TrueColor::new(0xDD, 0x66, 0x66),   // #DD6666 - Medium cool red
+            bright_green: TrueColor::new(0x6A, 0x9A, 0x7A), // #6A9A7A - Muted bright green
+            bright_yellow: TrueColor::new(0xC8, 0xA8, 0x70), // #C8A870 - Muted gold
+            bright_blue: TrueColor::new(0x7A, 0x8A, 0xAA),  // #7A8AAA - Cool light blue
+            bright_magenta: TrueColor::new(0xC0, 0x6A, 0x8A), // #C06A8A - Bright magenta-red
+            bright_cyan: TrueColor::new(0x6A, 0x9A, 0x9A),  // #6A9A9A - Muted cyan
+            bright_white: TrueColor::new(0xD0, 0xC0, 0xC0), // #D0C0C0 - Light reddish-gray
 
             extended: Self::generate_256_palette(),
         }
