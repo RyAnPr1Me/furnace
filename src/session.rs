@@ -33,7 +33,7 @@ pub struct TabState {
 
 impl SessionManager {
     /// Create a new session manager
-    /// 
+    ///
     /// # Errors
     /// Returns an error if the home directory cannot be determined or the sessions directory cannot be created
     pub fn new() -> Result<Self> {
@@ -111,7 +111,7 @@ impl SessionManager {
 
 impl Default for SessionManager {
     /// Create a default session manager
-    /// 
+    ///
     /// # Panics
     /// This implementation panics if the home directory cannot be determined.
     /// For fallible creation, use `SessionManager::new()` instead.

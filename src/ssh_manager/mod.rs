@@ -253,7 +253,7 @@ impl SshManager {
         if host.is_empty() {
             return None;
         }
-        
+
         let name = if username.is_empty() {
             host.clone()
         } else {

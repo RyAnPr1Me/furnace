@@ -64,9 +64,15 @@ impl TrueColor {
             // Use mul_add for more efficient and accurate calculation
             // Formula: self * (1 - factor) + other * factor
             // Restructured as: (other - self) * factor + self for proper FMA usage
-            r: (f32::from(other.r) - f32::from(self.r)).mul_add(factor, f32::from(self.r)).round() as u8,
-            g: (f32::from(other.g) - f32::from(self.g)).mul_add(factor, f32::from(self.g)).round() as u8,
-            b: (f32::from(other.b) - f32::from(self.b)).mul_add(factor, f32::from(self.b)).round() as u8,
+            r: (f32::from(other.r) - f32::from(self.r))
+                .mul_add(factor, f32::from(self.r))
+                .round() as u8,
+            g: (f32::from(other.g) - f32::from(self.g))
+                .mul_add(factor, f32::from(self.g))
+                .round() as u8,
+            b: (f32::from(other.b) - f32::from(self.b))
+                .mul_add(factor, f32::from(self.b))
+                .round() as u8,
         }
     }
 
@@ -96,8 +102,8 @@ impl TrueColor {
         // This leverages single-instruction FMA on modern CPUs for better performance and accuracy
         // Trade-off: slightly reduced readability for measurable performance gains in tight loops
         0.299f32.mul_add(
-            f32::from(self.r), 
-            0.587f32.mul_add(f32::from(self.g), 0.114f32.mul_add(f32::from(self.b), 0.0))
+            f32::from(self.r),
+            0.587f32.mul_add(f32::from(self.g), 0.114f32.mul_add(f32::from(self.b), 0.0)),
         ) / 255.0
     }
 
@@ -148,23 +154,23 @@ impl TrueColorPalette {
     pub fn default_dark() -> Self {
         // Use const values - these are compile-time verified, no runtime unwrap needed
         Self {
-            black: TrueColor::new(0x00, 0x00, 0x00),       // #000000
-            red: TrueColor::new(0xFF, 0x55, 0x55),         // #FF5555
-            green: TrueColor::new(0x50, 0xFA, 0x7B),       // #50FA7B
-            yellow: TrueColor::new(0xF1, 0xFA, 0x8C),      // #F1FA8C
-            blue: TrueColor::new(0xBD, 0x93, 0xF9),        // #BD93F9
-            magenta: TrueColor::new(0xFF, 0x79, 0xC6),     // #FF79C6
-            cyan: TrueColor::new(0x8B, 0xE9, 0xFD),        // #8BE9FD
-            white: TrueColor::new(0xBF, 0xBF, 0xBF),       // #BFBFBF
+            black: TrueColor::new(0x00, 0x00, 0x00),   // #000000
+            red: TrueColor::new(0xFF, 0x55, 0x55),     // #FF5555
+            green: TrueColor::new(0x50, 0xFA, 0x7B),   // #50FA7B
+            yellow: TrueColor::new(0xF1, 0xFA, 0x8C),  // #F1FA8C
+            blue: TrueColor::new(0xBD, 0x93, 0xF9),    // #BD93F9
+            magenta: TrueColor::new(0xFF, 0x79, 0xC6), // #FF79C6
+            cyan: TrueColor::new(0x8B, 0xE9, 0xFD),    // #8BE9FD
+            white: TrueColor::new(0xBF, 0xBF, 0xBF),   // #BFBFBF
 
-            bright_black: TrueColor::new(0x4D, 0x4D, 0x4D),     // #4D4D4D
-            bright_red: TrueColor::new(0xFF, 0x6E, 0x67),       // #FF6E67
-            bright_green: TrueColor::new(0x5A, 0xF7, 0x8E),     // #5AF78E
-            bright_yellow: TrueColor::new(0xF4, 0xF9, 0x9D),    // #F4F99D
-            bright_blue: TrueColor::new(0xCA, 0xA9, 0xFA),      // #CAA9FA
-            bright_magenta: TrueColor::new(0xFF, 0x92, 0xD0),   // #FF92D0
-            bright_cyan: TrueColor::new(0x9A, 0xED, 0xFE),      // #9AEDFE
-            bright_white: TrueColor::new(0xE6, 0xE6, 0xE6),     // #E6E6E6
+            bright_black: TrueColor::new(0x4D, 0x4D, 0x4D), // #4D4D4D
+            bright_red: TrueColor::new(0xFF, 0x6E, 0x67),   // #FF6E67
+            bright_green: TrueColor::new(0x5A, 0xF7, 0x8E), // #5AF78E
+            bright_yellow: TrueColor::new(0xF4, 0xF9, 0x9D), // #F4F99D
+            bright_blue: TrueColor::new(0xCA, 0xA9, 0xFA),  // #CAA9FA
+            bright_magenta: TrueColor::new(0xFF, 0x92, 0xD0), // #FF92D0
+            bright_cyan: TrueColor::new(0x9A, 0xED, 0xFE),  // #9AEDFE
+            bright_white: TrueColor::new(0xE6, 0xE6, 0xE6), // #E6E6E6
 
             extended: Self::generate_256_palette(),
         }

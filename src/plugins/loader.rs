@@ -54,7 +54,7 @@ pub trait Plugin {
     fn version(&self) -> &str;
 
     /// Initialize plugin
-    /// 
+    ///
     /// # Errors
     /// Returns an error if plugin initialization fails
     fn init(&mut self) -> Result<()>;
@@ -80,7 +80,7 @@ impl PluginManager {
     }
 
     /// Load a plugin from a dynamic library
-    /// 
+    ///
     /// # Errors
     /// Returns an error if the plugin library cannot be loaded or initialized
     #[allow(dead_code)] // Public API
@@ -95,12 +95,12 @@ impl PluginManager {
                 .context("Failed to find plugin constructor")?;
 
             let plugin_ptr = constructor();
-            
+
             // Validate the pointer before using it
             if plugin_ptr.is_null() {
                 return Err(anyhow::anyhow!("Plugin constructor returned null pointer"));
             }
-            
+
             let plugin_ref = &*plugin_ptr;
 
             let name = plugin_ref.name().to_string();
@@ -120,7 +120,7 @@ impl PluginManager {
     }
 
     /// Unload a plugin
-    /// 
+    ///
     /// # Errors
     /// Returns an error if the plugin is not found
     #[allow(dead_code)] // Public API
@@ -133,7 +133,10 @@ impl PluginManager {
     #[allow(dead_code)] // Public API
     #[must_use]
     pub fn list_plugins(&self) -> Vec<&str> {
-        self.plugins.keys().map(std::string::String::as_str).collect()
+        self.plugins
+            .keys()
+            .map(std::string::String::as_str)
+            .collect()
     }
 
     /// Check if plugin is loaded

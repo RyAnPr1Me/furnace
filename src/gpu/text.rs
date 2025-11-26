@@ -6,22 +6,22 @@ use super::{CellStyle, GpuCell};
 pub fn ansi_to_rgba(code: u8) -> [f32; 4] {
     // Standard 16 ANSI colors
     match code {
-        0 => [0.0, 0.0, 0.0, 1.0],       // Black
-        1 => [0.8, 0.0, 0.0, 1.0],       // Red
-        2 => [0.0, 0.8, 0.0, 1.0],       // Green
-        3 => [0.8, 0.8, 0.0, 1.0],       // Yellow
-        4 => [0.0, 0.0, 0.8, 1.0],       // Blue
-        5 => [0.8, 0.0, 0.8, 1.0],       // Magenta
-        6 => [0.0, 0.8, 0.8, 1.0],       // Cyan
-        7 => [0.75, 0.75, 0.75, 1.0],    // White
-        8 => [0.5, 0.5, 0.5, 1.0],       // Bright Black
-        9 => [1.0, 0.0, 0.0, 1.0],       // Bright Red
-        10 => [0.0, 1.0, 0.0, 1.0],      // Bright Green
-        11 => [1.0, 1.0, 0.0, 1.0],      // Bright Yellow
-        12 => [0.0, 0.0, 1.0, 1.0],      // Bright Blue
-        13 => [1.0, 0.0, 1.0, 1.0],      // Bright Magenta
-        14 => [0.0, 1.0, 1.0, 1.0],      // Bright Cyan
-        15 => [1.0, 1.0, 1.0, 1.0],      // Bright White
+        0 => [0.0, 0.0, 0.0, 1.0],    // Black
+        1 => [0.8, 0.0, 0.0, 1.0],    // Red
+        2 => [0.0, 0.8, 0.0, 1.0],    // Green
+        3 => [0.8, 0.8, 0.0, 1.0],    // Yellow
+        4 => [0.0, 0.0, 0.8, 1.0],    // Blue
+        5 => [0.8, 0.0, 0.8, 1.0],    // Magenta
+        6 => [0.0, 0.8, 0.8, 1.0],    // Cyan
+        7 => [0.75, 0.75, 0.75, 1.0], // White
+        8 => [0.5, 0.5, 0.5, 1.0],    // Bright Black
+        9 => [1.0, 0.0, 0.0, 1.0],    // Bright Red
+        10 => [0.0, 1.0, 0.0, 1.0],   // Bright Green
+        11 => [1.0, 1.0, 0.0, 1.0],   // Bright Yellow
+        12 => [0.0, 0.0, 1.0, 1.0],   // Bright Blue
+        13 => [1.0, 0.0, 1.0, 1.0],   // Bright Magenta
+        14 => [0.0, 1.0, 1.0, 1.0],   // Bright Cyan
+        15 => [1.0, 1.0, 1.0, 1.0],   // Bright White
         // 256-color palette (16-231: 6x6x6 color cube)
         16..=231 => {
             let idx = code - 16;
@@ -64,14 +64,14 @@ pub fn parse_terminal_output(output: &str, cols: usize) -> Vec<GpuCell> {
     let mut current_fg = [1.0f32, 1.0, 1.0, 1.0]; // White
     let mut current_bg = [0.0f32, 0.0, 0.0, 1.0]; // Black
     let mut current_style = CellStyle::empty();
-    
+
     let mut col = 0;
     let mut chars = output.chars().peekable();
     // Reusable buffer for parsing ANSI parameters (avoids allocation per sequence)
     let mut param_buf = [0u8; 16]; // Max 16 parameters
     let mut param_idx = 0;
     let mut current_param: u16 = 0;
-    
+
     while let Some(c) = chars.next() {
         match c {
             '\x1b' => {
@@ -80,11 +80,13 @@ pub fn parse_terminal_output(output: &str, cols: usize) -> Vec<GpuCell> {
                     chars.next(); // consume '['
                     param_idx = 0;
                     current_param = 0;
-                    
+
                     while let Some(&ch) = chars.peek() {
                         if ch.is_ascii_digit() {
                             chars.next();
-                            current_param = current_param.saturating_mul(10).saturating_add((ch as u16) - b'0' as u16);
+                            current_param = current_param
+                                .saturating_mul(10)
+                                .saturating_add((ch as u16) - b'0' as u16);
                         } else if ch == ';' {
                             chars.next();
                             if param_idx < param_buf.len() {
@@ -96,13 +98,13 @@ pub fn parse_terminal_output(output: &str, cols: usize) -> Vec<GpuCell> {
                             break;
                         }
                     }
-                    
+
                     // Store last parameter
                     if param_idx < param_buf.len() && (param_idx > 0 || current_param > 0) {
                         param_buf[param_idx] = current_param.min(255) as u8;
                         param_idx += 1;
                     }
-                    
+
                     // Get final character
                     if let Some(cmd) = chars.next() {
                         if cmd == 'm' {
@@ -183,7 +185,7 @@ pub fn parse_terminal_output(output: &str, cols: usize) -> Vec<GpuCell> {
             }
         }
     }
-    
+
     cells
 }
 

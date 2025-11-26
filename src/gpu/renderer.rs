@@ -395,7 +395,8 @@ impl GpuRenderer {
         });
 
         // Create glyph cache
-        let glyph_cache = super::glyph_cache::GlyphCache::new(config.font_size, &config.font_family);
+        let glyph_cache =
+            super::glyph_cache::GlyphCache::new(config.font_size, &config.font_family);
 
         Ok(Self {
             instance,
@@ -536,7 +537,8 @@ impl GpuRenderer {
                 render_pass.set_bind_group(1, &self.glyph_bind_group, &[]);
                 render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
                 render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
-                render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+                render_pass
+                    .set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
                 render_pass.draw_indexed(0..6, 0, 0..instances.len() as u32);
 
                 // Draw text
@@ -557,8 +559,7 @@ impl GpuRenderer {
         self.stats.frame_count += 1;
         self.stats.draw_calls = 2;
         let frame_time = start_time.elapsed().as_secs_f64() * 1000.0;
-        self.stats.avg_frame_time_ms =
-            (self.stats.avg_frame_time_ms * 0.9) + (frame_time * 0.1);
+        self.stats.avg_frame_time_ms = (self.stats.avg_frame_time_ms * 0.9) + (frame_time * 0.1);
 
         Ok(())
     }

@@ -132,21 +132,25 @@ impl Terminal {
 
         let command_translator = CommandTranslator::new(config.command_translation.enabled);
         let ssh_manager = SshManager::new()?;
-        
+
         // Initialize theme manager with custom themes directory
         let theme_manager = match ThemeManager::default_themes_dir() {
-            Ok(themes_dir) => {
-                match ThemeManager::with_themes_dir(&themes_dir) {
-                    Ok(manager) => {
-                        debug!("Theme manager initialized with custom themes from {:?}", themes_dir);
-                        manager
-                    }
-                    Err(e) => {
-                        warn!("Failed to initialize theme manager with custom themes: {}", e);
-                        ThemeManager::new()
-                    }
+            Ok(themes_dir) => match ThemeManager::with_themes_dir(&themes_dir) {
+                Ok(manager) => {
+                    debug!(
+                        "Theme manager initialized with custom themes from {:?}",
+                        themes_dir
+                    );
+                    manager
                 }
-            }
+                Err(e) => {
+                    warn!(
+                        "Failed to initialize theme manager with custom themes: {}",
+                        e
+                    );
+                    ThemeManager::new()
+                }
+            },
             Err(e) => {
                 warn!("Could not determine themes directory: {}", e);
                 ThemeManager::new()
@@ -433,7 +437,11 @@ impl Terminal {
                     self.ssh_manager.toggle();
                     debug!(
                         "SSH manager: {}",
-                        if self.ssh_manager.visible { "ON" } else { "OFF" }
+                        if self.ssh_manager.visible {
+                            "ON"
+                        } else {
+                            "OFF"
+                        }
                     );
                 }
                 // Bug #18: Don't send 's' to shell when SSH manager is disabled
@@ -471,7 +479,9 @@ impl Terminal {
             }
 
             // Previous tab
-            (KeyCode::BackTab, m) if m.contains(KeyModifiers::SHIFT) && self.config.terminal.enable_tabs => {
+            (KeyCode::BackTab, m)
+                if m.contains(KeyModifiers::SHIFT) && self.config.terminal.enable_tabs =>
+            {
                 self.prev_tab();
             }
 
@@ -574,9 +584,7 @@ impl Terminal {
                 && self.config.ssh_manager.auto_show
                 && command.trim().starts_with("ssh ")
             {
-                if let Some(conn) =
-                    crate::ssh_manager::SshManager::parse_ssh_command(&command)
-                {
+                if let Some(conn) = crate::ssh_manager::SshManager::parse_ssh_command(&command) {
                     let name = conn.name.clone();
                     self.ssh_manager.add_connection(name, conn);
                     let _ = self.ssh_manager.save_connections();
@@ -769,7 +777,8 @@ impl Terminal {
                 let theme_name = &cmd["theme ".len()..];
                 let theme_name = theme_name.trim();
                 if self.theme_manager.switch_theme(theme_name) {
-                    self.translation_notification = Some(format!("Theme: {}", self.theme_manager.current().name));
+                    self.translation_notification =
+                        Some(format!("Theme: {}", self.theme_manager.current().name));
                     self.notification_frames = TARGET_FPS * NOTIFICATION_DURATION_SECS;
                     self.dirty = true;
                     // Invalidate all render caches
@@ -792,12 +801,15 @@ impl Terminal {
 
     /// Create a new tab (Bug #7: use current terminal size)
     async fn create_new_tab(&mut self) -> Result<()> {
-        info!("Creating new tab with size {}x{}", self.terminal_cols, self.terminal_rows);
+        info!(
+            "Creating new tab with size {}x{}",
+            self.terminal_cols, self.terminal_rows
+        );
 
         let session = ShellSession::new(
             &self.config.shell.default_shell,
             self.config.shell.working_dir.as_deref(),
-            self.terminal_rows,  // Bug #7: use current size
+            self.terminal_rows, // Bug #7: use current size
             self.terminal_cols,
         )?;
 
@@ -858,9 +870,9 @@ impl Terminal {
         let main_chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(
-                    u16::from(self.config.terminal.enable_tabs && self.sessions.len() > 1)
-                ),
+                Constraint::Length(u16::from(
+                    self.config.terminal.enable_tabs && self.sessions.len() > 1,
+                )),
                 Constraint::Length(u16::from(self.translation_notification.is_some())),
                 Constraint::Length(u16::from(self.progress_bar.visible)),
                 Constraint::Min(0),
@@ -917,7 +929,9 @@ impl Terminal {
 
         // Render progress bar if visible (Bug #15, #16, #17)
         if self.progress_bar.visible {
-            let progress_text = self.progress_bar.display_text_truncated(MAX_PROGRESS_COMMAND_LEN);
+            let progress_text = self
+                .progress_bar
+                .display_text_truncated(MAX_PROGRESS_COMMAND_LEN);
             let progress_widget = Paragraph::new(progress_text)
                 .style(
                     Style::default()
@@ -976,10 +990,8 @@ impl Terminal {
                 let all_lines = AnsiParser::parse(&raw_output);
                 let height = area.height as usize;
                 let skip_count = all_lines.len().saturating_sub(height);
-                let visible_lines: Vec<Line<'static>> = all_lines
-                    .into_iter()
-                    .skip(skip_count)
-                    .collect();
+                let visible_lines: Vec<Line<'static>> =
+                    all_lines.into_iter().skip(skip_count).collect();
 
                 if let Some(cache) = self.cached_styled_lines.get_mut(self.active_session) {
                     *cache = visible_lines;

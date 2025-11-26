@@ -191,8 +191,11 @@ impl AnsiParser {
                                     let g = iter.next().and_then(|p| p.first().copied());
                                     let b = iter.next().and_then(|p| p.first().copied());
                                     if let (Some(r), Some(g), Some(b)) = (r, g, b) {
-                                        self.current_style =
-                                            self.current_style.fg(Color::Rgb(to_color_u8(r), to_color_u8(g), to_color_u8(b)));
+                                        self.current_style = self.current_style.fg(Color::Rgb(
+                                            to_color_u8(r),
+                                            to_color_u8(g),
+                                            to_color_u8(b),
+                                        ));
                                     }
                                 }
                                 _ => {}
@@ -234,8 +237,11 @@ impl AnsiParser {
                                     let g = iter.next().and_then(|p| p.first().copied());
                                     let b = iter.next().and_then(|p| p.first().copied());
                                     if let (Some(r), Some(g), Some(b)) = (r, g, b) {
-                                        self.current_style =
-                                            self.current_style.bg(Color::Rgb(to_color_u8(r), to_color_u8(g), to_color_u8(b)));
+                                        self.current_style = self.current_style.bg(Color::Rgb(
+                                            to_color_u8(r),
+                                            to_color_u8(g),
+                                            to_color_u8(b),
+                                        ));
                                     }
                                 }
                                 _ => {}
@@ -321,7 +327,13 @@ impl Perform for AnsiParser {
         // We ignore these for now
     }
 
-    fn csi_dispatch(&mut self, params: &Params, _intermediates: &[u8], _ignore: bool, action: char) {
+    fn csi_dispatch(
+        &mut self,
+        params: &Params,
+        _intermediates: &[u8],
+        _ignore: bool,
+        action: char,
+    ) {
         match action {
             // SGR - Select Graphic Rendition (colors and attributes)
             'm' => {
@@ -352,7 +364,7 @@ mod tests {
         assert_eq!(to_color_u8(0), 0);
         assert_eq!(to_color_u8(128), 128);
         assert_eq!(to_color_u8(255), 255);
-        
+
         // Values > 255 should be clamped
         assert_eq!(to_color_u8(256), 255);
         assert_eq!(to_color_u8(500), 255);

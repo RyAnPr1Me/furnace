@@ -256,11 +256,10 @@ impl ThemeManager {
     /// Returns an error if the themes directory cannot be created or themes cannot be loaded
     pub fn with_themes_dir<P: AsRef<Path>>(themes_dir: P) -> Result<Self> {
         let themes_dir = themes_dir.as_ref().to_path_buf();
-        
+
         // Create themes directory if it doesn't exist
         if !themes_dir.exists() {
-            fs::create_dir_all(&themes_dir)
-                .context("Failed to create themes directory")?;
+            fs::create_dir_all(&themes_dir).context("Failed to create themes directory")?;
         }
 
         let mut manager = Self::new();
@@ -306,10 +305,8 @@ impl ThemeManager {
 
     /// Load a theme from a YAML file
     fn load_theme_from_file<P: AsRef<Path>>(path: P) -> Result<Theme> {
-        let contents = fs::read_to_string(path.as_ref())
-            .context("Failed to read theme file")?;
-        let theme: Theme = serde_yaml::from_str(&contents)
-            .context("Failed to parse theme file")?;
+        let contents = fs::read_to_string(path.as_ref()).context("Failed to read theme file")?;
+        let theme: Theme = serde_yaml::from_str(&contents).context("Failed to parse theme file")?;
         Ok(theme)
     }
 
@@ -371,10 +368,7 @@ impl ThemeManager {
 
         let current_name = self.current_theme.name.to_lowercase();
         // If current theme isn't in the list, start from the first theme
-        let current_idx = names
-            .iter()
-            .position(|n| n == &current_name)
-            .unwrap_or(0);
+        let current_idx = names.iter().position(|n| n == &current_name).unwrap_or(0);
         let prev_idx = if current_idx == 0 {
             names.len() - 1
         } else {
@@ -399,16 +393,16 @@ impl ThemeManager {
     /// Returns an error if the themes directory is not set or the file cannot be written
     #[allow(dead_code)] // Public API
     pub fn save_theme(&self, theme: &Theme) -> Result<()> {
-        let themes_dir = self.themes_dir.as_ref()
+        let themes_dir = self
+            .themes_dir
+            .as_ref()
             .context("Themes directory not configured")?;
 
         let filename = format!("{}.yaml", theme.name.to_lowercase().replace(' ', "_"));
         let path = themes_dir.join(filename);
 
-        let contents = serde_yaml::to_string(theme)
-            .context("Failed to serialize theme")?;
-        fs::write(&path, contents)
-            .context("Failed to write theme file")?;
+        let contents = serde_yaml::to_string(theme).context("Failed to serialize theme")?;
+        fs::write(&path, contents).context("Failed to write theme file")?;
 
         Ok(())
     }
@@ -443,13 +437,13 @@ mod tests {
     #[test]
     fn test_theme_switching() {
         let mut manager = ThemeManager::new();
-        
+
         assert!(manager.switch_theme("light"));
         assert_eq!(manager.current().name, "Light");
-        
+
         assert!(manager.switch_theme("nord"));
         assert_eq!(manager.current().name, "Nord");
-        
+
         assert!(!manager.switch_theme("nonexistent"));
     }
 
@@ -457,13 +451,13 @@ mod tests {
     fn test_theme_cycling() {
         let mut manager = ThemeManager::new();
         let initial_name = manager.current().name.clone();
-        
+
         manager.next_theme();
         let next_name = manager.current().name.clone();
-        
+
         // Should have changed to a different theme
         assert_ne!(initial_name, next_name);
-        
+
         manager.prev_theme();
         // Should be back to initial
         assert_eq!(manager.current().name, initial_name);
@@ -473,7 +467,7 @@ mod tests {
     fn test_available_themes() {
         let manager = ThemeManager::new();
         let names = manager.available_theme_names();
-        
+
         assert!(names.contains(&"dark".to_string()));
         assert!(names.contains(&"light".to_string()));
         assert!(names.contains(&"nord".to_string()));

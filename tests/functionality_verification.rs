@@ -1,5 +1,5 @@
 //! Comprehensive functionality verification tests
-//! 
+//!
 //! These tests verify that all claimed features in the terminal emulator
 //! actually work as described.
 
@@ -15,45 +15,37 @@ mod shell_tests {
     #[tokio::test]
     async fn test_shell_creation() {
         // Test that shell sessions can be created
-        let shell = if cfg!(windows) {
-            "cmd.exe"
-        } else {
-            "sh"
-        };
-        
+        let shell = if cfg!(windows) { "cmd.exe" } else { "sh" };
+
         let session = ShellSession::new(shell, None, 24, 80);
         assert!(session.is_ok(), "Failed to create shell session");
     }
 
     #[tokio::test]
     async fn test_shell_write_and_read() {
-        let shell = if cfg!(windows) {
-            "cmd.exe"
-        } else {
-            "sh"
-        };
-        
+        let shell = if cfg!(windows) { "cmd.exe" } else { "sh" };
+
         let session = ShellSession::new(shell, None, 24, 80).unwrap();
-        
+
         // Write a simple command
         let command = if cfg!(windows) {
             "echo test\r\n"
         } else {
             "echo test\n"
         };
-        
+
         let write_result = session.write_input(command.as_bytes()).await;
         assert!(write_result.is_ok(), "Failed to write to shell");
         assert_eq!(write_result.unwrap(), command.len());
-        
+
         // Give shell time to process
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-        
+
         // Read output
         let mut buffer = vec![0u8; 1024];
         let read_result = session.read_output(&mut buffer).await;
         assert!(read_result.is_ok(), "Failed to read from shell");
-        
+
         // Verify we got some output
         let bytes_read = read_result.unwrap();
         assert!(bytes_read > 0, "No output from shell");
@@ -61,14 +53,10 @@ mod shell_tests {
 
     #[tokio::test]
     async fn test_shell_resize() {
-        let shell = if cfg!(windows) {
-            "cmd.exe"
-        } else {
-            "sh"
-        };
-        
+        let shell = if cfg!(windows) { "cmd.exe" } else { "sh" };
+
         let session = ShellSession::new(shell, None, 24, 80).unwrap();
-        
+
         // Test resizing
         let resize_result = session.resize(30, 100).await;
         assert!(resize_result.is_ok(), "Failed to resize PTY");
@@ -84,7 +72,7 @@ mod ansi_parser_tests {
     #[test]
     fn test_ansi_parser_basic_colors() {
         let result = AnsiParser::parse("\x1b[31mRed Text\x1b[0m");
-        
+
         assert!(!result.is_empty(), "No lines produced");
     }
 
@@ -92,7 +80,7 @@ mod ansi_parser_tests {
     fn test_ansi_parser_rgb_colors() {
         // RGB color: ESC[38;2;R;G;Bm
         let result = AnsiParser::parse("\x1b[38;2;255;100;50mRGB Text\x1b[0m");
-        
+
         assert!(!result.is_empty(), "No lines produced for RGB");
     }
 
@@ -100,8 +88,11 @@ mod ansi_parser_tests {
     fn test_ansi_parser_multiple_attributes() {
         // Bold + Red + Underline
         let result = AnsiParser::parse("\x1b[1;31;4mBold Red Underlined\x1b[0m");
-        
-        assert!(!result.is_empty(), "No lines produced for multiple attributes");
+
+        assert!(
+            !result.is_empty(),
+            "No lines produced for multiple attributes"
+        );
     }
 }
 
@@ -125,7 +116,7 @@ mod color_tests {
     fn test_true_color_blending() {
         let color1 = TrueColor::new(255, 0, 0); // Red
         let color2 = TrueColor::new(0, 0, 255); // Blue
-        
+
         let blended = color1.blend(color2, 0.5);
         // Should be purple-ish (127, 0, 127)
         assert!(blended.r > 100 && blended.r < 150);
@@ -136,7 +127,7 @@ mod color_tests {
     fn test_true_color_luminance() {
         let white = TrueColor::new(255, 255, 255);
         let black = TrueColor::new(0, 0, 0);
-        
+
         assert!(white.luminance() > black.luminance());
         assert!(white.luminance() > 0.9);
         assert!(black.luminance() < 0.1);
@@ -152,7 +143,7 @@ mod config_tests {
     #[test]
     fn test_default_config_values() {
         let config = Config::default();
-        
+
         // Verify default values
         assert!(config.terminal.enable_tabs);
         assert!(config.terminal.enable_split_pane);
@@ -165,12 +156,12 @@ mod config_tests {
     fn test_config_save_and_load() {
         let dir = tempdir().unwrap();
         let config_path = dir.path().join("test_config.yaml");
-        
+
         // Create and save config
         let mut config = Config::default();
         config.terminal.max_history = 5000;
         config.save_to_file(&config_path).unwrap();
-        
+
         // Load and verify
         let loaded = Config::load_from_file(&config_path).unwrap();
         assert_eq!(loaded.terminal.max_history, 5000);
@@ -199,12 +190,12 @@ mod translator_tests {
     #[cfg(target_os = "linux")]
     fn test_linux_command_translation() {
         let translator = CommandTranslator::new(true);
-        
+
         // Test Windows to Linux translation
         let result = translator.translate("dir");
         assert!(result.translated);
         assert_eq!(result.final_command, "ls");
-        
+
         let result = translator.translate("type file.txt");
         assert!(result.translated);
         assert_eq!(result.final_command, "cat file.txt");
@@ -214,12 +205,12 @@ mod translator_tests {
     #[cfg(target_os = "windows")]
     fn test_windows_command_translation() {
         let translator = CommandTranslator::new(true);
-        
+
         // Test Linux to Windows translation
         let result = translator.translate("ls");
         assert!(result.translated);
         assert_eq!(result.final_command, "dir");
-        
+
         let result = translator.translate("cat file.txt");
         assert!(result.translated);
         assert_eq!(result.final_command, "type file.txt");
@@ -242,10 +233,10 @@ mod ssh_manager_tests {
     fn test_ssh_manager_visibility() {
         let mut manager = SshManager::new().unwrap();
         assert!(!manager.visible);
-        
+
         manager.toggle();
         assert!(manager.visible);
-        
+
         manager.toggle();
         assert!(!manager.visible);
     }
@@ -261,7 +252,7 @@ mod url_handler_tests {
     fn test_url_handler_detection() {
         let text = "Check out https://github.com/RyAnPr1Me/furnace for more info!";
         let urls = UrlHandler::detect_urls(text);
-        
+
         assert!(!urls.is_empty(), "Failed to detect URLs");
         assert_eq!(urls.len(), 1);
         assert!(urls[0].url.contains("github.com"));
@@ -271,7 +262,7 @@ mod url_handler_tests {
     fn test_url_handler_multiple_urls() {
         let text = "Visit https://github.com and http://example.com";
         let urls = UrlHandler::detect_urls(text);
-        
+
         assert_eq!(urls.len(), 2);
     }
 
@@ -279,7 +270,7 @@ mod url_handler_tests {
     fn test_url_handler_enabled() {
         let handler = UrlHandler::new(true);
         assert!(handler.is_enabled());
-        
+
         let handler = UrlHandler::new(false);
         assert!(!handler.is_enabled());
     }
@@ -290,10 +281,8 @@ mod url_handler_tests {
 mod ui_tests {
     use super::*;
     use furnace::ui::{
-        command_palette::CommandPalette,
-        resource_monitor::ResourceMonitor,
-        autocomplete::Autocomplete,
-        themes::ThemeManager,
+        autocomplete::Autocomplete, command_palette::CommandPalette,
+        resource_monitor::ResourceMonitor, themes::ThemeManager,
     };
 
     #[test]
@@ -324,7 +313,7 @@ mod ui_tests {
     fn test_theme_manager() {
         let manager = ThemeManager::new();
         let themes = manager.available_theme_names();
-        
+
         // Should have at least 3 built-in themes
         assert!(themes.len() >= 3, "Not enough themes available");
         assert!(themes.contains(&"dark".to_string()));
@@ -384,10 +373,10 @@ mod progress_bar_tests {
     fn test_progress_bar_start_stop() {
         let mut bar = ProgressBar::new();
         assert!(!bar.visible);
-        
+
         bar.start("test command".to_string());
         assert!(bar.visible);
-        
+
         bar.stop();
         assert!(!bar.visible);
     }
