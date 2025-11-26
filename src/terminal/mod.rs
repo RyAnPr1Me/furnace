@@ -216,6 +216,12 @@ impl Terminal {
     async fn read_and_store_output(&mut self, max_attempts: usize, delay_ms: u64) -> usize {
         let mut total_bytes = 0;
         
+        // Bounds check to prevent panic
+        if self.active_session >= self.output_buffers.len() {
+            warn!("Active session index {} is out of bounds", self.active_session);
+            return 0;
+        }
+        
         if let Some(session) = self.sessions.get(self.active_session) {
             for _ in 0..max_attempts {
                 if let Ok(n) = session.read_output(&mut self.read_buffer).await {
@@ -286,26 +292,24 @@ impl Terminal {
         
         // Poll for initial output with timeout
         while start_time.elapsed() < initial_timeout {
-            if let Some(session) = self.sessions.get(self.active_session) {
-                if let Ok(n) = session.read_output(&mut self.read_buffer).await {
-                    if n > 0 {
-                        self.output_buffers[self.active_session].extend_from_slice(&self.read_buffer[..n]);
-                        self.dirty = true;
-                        received_output = true;
-                        debug!("Received {} bytes of initial shell output", n);
-                        
-                        // Continue reading for a bit more to get the full prompt
-                        tokio::time::sleep(Duration::from_millis(INITIAL_OUTPUT_SETTLE_MS)).await;
-                        
-                        // Try to read more data that might be coming
-                        let additional = self.read_and_store_output(EXTRA_READ_ATTEMPTS, EXTRA_READ_DELAY_MS).await;
-                        if additional > 0 {
-                            debug!("Received additional {} bytes", additional);
-                        }
-                        break;
-                    }
+            // Try reading once
+            let bytes_read = self.read_and_store_output(1, 0).await;
+            
+            if bytes_read > 0 {
+                received_output = true;
+                debug!("Received {} bytes of initial shell output", bytes_read);
+                
+                // Continue reading for a bit more to get the full prompt
+                tokio::time::sleep(Duration::from_millis(INITIAL_OUTPUT_SETTLE_MS)).await;
+                
+                // Try to read more data that might be coming
+                let additional = self.read_and_store_output(EXTRA_READ_ATTEMPTS, EXTRA_READ_DELAY_MS).await;
+                if additional > 0 {
+                    debug!("Received additional {} bytes", additional);
                 }
+                break;
             }
+            
             tokio::time::sleep(Duration::from_millis(INITIAL_OUTPUT_POLL_INTERVAL_MS)).await;
         }
         
