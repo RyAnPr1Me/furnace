@@ -96,7 +96,7 @@ type SharedString = Arc<str>;
 /// Bug #6: Optimized for performance - O(1) dedup, minimal allocations
 #[allow(dead_code)]
 pub struct Autocomplete {
-    /// Bug #28: History uses Arc<str> for efficient sharing
+    /// Bug #28: History uses `Arc<str>` for efficient sharing
     history: VecDeque<SharedString>,
     /// Bug #22: `HashSet` for O(1) duplicate detection
     history_set: HashSet<SharedString>,
