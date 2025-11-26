@@ -5,6 +5,7 @@
 use std::collections::HashMap;
 
 /// Glyph cache for efficient text rendering
+#[allow(dead_code)] // Some fields are for future use in complete GPU implementation
 pub struct GlyphCache {
     /// Map from character code to UV coordinates in atlas
     glyph_map: HashMap<u32, GlyphInfo>,

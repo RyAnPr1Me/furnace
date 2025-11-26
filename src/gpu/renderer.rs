@@ -2,12 +2,12 @@
 //!
 //! Provides hardware-accelerated rendering for the terminal.
 
-use std::sync::Arc;
 use wgpu::util::DeviceExt;
 
-use super::{CellStyle, GpuCell, GpuConfig, GpuStats};
+use super::{GpuCell, GpuConfig, GpuStats};
 
 /// GPU-accelerated terminal renderer
+#[allow(dead_code)] // Some fields are for future use in complete GPU implementation
 pub struct GpuRenderer {
     /// WGPU instance
     instance: wgpu::Instance,
@@ -123,7 +123,6 @@ impl GpuRenderer {
                     label: Some("Furnace GPU Device"),
                     required_features: wgpu::Features::empty(),
                     required_limits: wgpu::Limits::default(),
-                    memory_hints: wgpu::MemoryHints::Performance,
                 },
                 None,
             )
@@ -256,8 +255,7 @@ impl GpuRenderer {
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &shader,
-                entry_point: Some("vs_main"),
-                compilation_options: Default::default(),
+                entry_point: "vs_main",
                 buffers: &[
                     // Vertex buffer
                     wgpu::VertexBufferLayout {
@@ -282,8 +280,7 @@ impl GpuRenderer {
             },
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
-                entry_point: Some("fs_main"),
-                compilation_options: Default::default(),
+                entry_point: "fs_main",
                 targets: &[Some(wgpu::ColorTargetState {
                     format: wgpu::TextureFormat::Bgra8UnormSrgb,
                     blend: Some(wgpu::BlendState::ALPHA_BLENDING),
@@ -306,7 +303,6 @@ impl GpuRenderer {
                 alpha_to_coverage_enabled: false,
             },
             multiview: None,
-            cache: None,
         });
 
         // Create background pipeline (same as text but different shader entry)
@@ -315,8 +311,7 @@ impl GpuRenderer {
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &shader,
-                entry_point: Some("vs_bg"),
-                compilation_options: Default::default(),
+                entry_point: "vs_bg",
                 buffers: &[
                     wgpu::VertexBufferLayout {
                         array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
@@ -339,8 +334,7 @@ impl GpuRenderer {
             },
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
-                entry_point: Some("fs_bg"),
-                compilation_options: Default::default(),
+                entry_point: "fs_bg",
                 targets: &[Some(wgpu::ColorTargetState {
                     format: wgpu::TextureFormat::Bgra8UnormSrgb,
                     blend: Some(wgpu::BlendState::ALPHA_BLENDING),
@@ -354,7 +348,6 @@ impl GpuRenderer {
             depth_stencil: None,
             multisample: wgpu::MultisampleState::default(),
             multiview: None,
-            cache: None,
         });
 
         // Create quad vertices

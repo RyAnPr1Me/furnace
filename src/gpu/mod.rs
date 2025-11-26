@@ -90,7 +90,7 @@ impl From<GpuBackend> for wgpu::Backends {
             GpuBackend::Vulkan => wgpu::Backends::VULKAN,
             GpuBackend::Metal => wgpu::Backends::METAL,
             GpuBackend::Dx12 => wgpu::Backends::DX12,
-            GpuBackend::Dx11 => wgpu::Backends::DX11,
+            GpuBackend::Dx11 => wgpu::Backends::DX12, // DX11 not available in wgpu 0.19, fallback to DX12
             GpuBackend::OpenGl => wgpu::Backends::GL,
             GpuBackend::WebGpu => wgpu::Backends::BROWSER_WEBGPU,
         }

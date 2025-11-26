@@ -58,6 +58,7 @@ pub fn hex_to_rgba(hex: &str) -> Option<[f32; 4]> {
 }
 
 /// Parse terminal output into GPU cells
+#[allow(unused_assignments)] // param_idx and current_param are used in the loop
 pub fn parse_terminal_output(output: &str, cols: usize) -> Vec<GpuCell> {
     let mut cells = Vec::with_capacity(cols * 50);
     let mut current_fg = [1.0f32, 1.0, 1.0, 1.0]; // White
@@ -104,36 +105,34 @@ pub fn parse_terminal_output(output: &str, cols: usize) -> Vec<GpuCell> {
                     
                     // Get final character
                     if let Some(cmd) = chars.next() {
-                        match cmd {
-                            'm' => {
-                                // SGR (Select Graphic Rendition) - iterate over fixed buffer
-                                for &param in &param_buf[..param_idx] {
-                                    match param {
-                                        0 => {
-                                            current_fg = [1.0, 1.0, 1.0, 1.0];
-                                            current_bg = [0.0, 0.0, 0.0, 1.0];
-                                            current_style = CellStyle::empty();
-                                        }
-                                        1 => current_style.insert(CellStyle::BOLD),
-                                        2 => current_style.insert(CellStyle::DIM),
-                                        3 => current_style.insert(CellStyle::ITALIC),
-                                        4 => current_style.insert(CellStyle::UNDERLINE),
-                                        5 | 6 => current_style.insert(CellStyle::BLINK),
-                                        7 => current_style.insert(CellStyle::REVERSE),
-                                        8 => current_style.insert(CellStyle::HIDDEN),
-                                        9 => current_style.insert(CellStyle::STRIKETHROUGH),
-                                        30..=37 => current_fg = ansi_to_rgba(param - 30),
-                                        39 => current_fg = [1.0, 1.0, 1.0, 1.0],
-                                        40..=47 => current_bg = ansi_to_rgba(param - 40),
-                                        49 => current_bg = [0.0, 0.0, 0.0, 1.0],
-                                        90..=97 => current_fg = ansi_to_rgba(param - 90 + 8),
-                                        100..=107 => current_bg = ansi_to_rgba(param - 100 + 8),
-                                        _ => {}
+                        if cmd == 'm' {
+                            // SGR (Select Graphic Rendition) - iterate over fixed buffer
+                            for &param in &param_buf[..param_idx] {
+                                match param {
+                                    0 => {
+                                        current_fg = [1.0, 1.0, 1.0, 1.0];
+                                        current_bg = [0.0, 0.0, 0.0, 1.0];
+                                        current_style = CellStyle::empty();
                                     }
+                                    1 => current_style.insert(CellStyle::BOLD),
+                                    2 => current_style.insert(CellStyle::DIM),
+                                    3 => current_style.insert(CellStyle::ITALIC),
+                                    4 => current_style.insert(CellStyle::UNDERLINE),
+                                    5 | 6 => current_style.insert(CellStyle::BLINK),
+                                    7 => current_style.insert(CellStyle::REVERSE),
+                                    8 => current_style.insert(CellStyle::HIDDEN),
+                                    9 => current_style.insert(CellStyle::STRIKETHROUGH),
+                                    30..=37 => current_fg = ansi_to_rgba(param - 30),
+                                    39 => current_fg = [1.0, 1.0, 1.0, 1.0],
+                                    40..=47 => current_bg = ansi_to_rgba(param - 40),
+                                    49 => current_bg = [0.0, 0.0, 0.0, 1.0],
+                                    90..=97 => current_fg = ansi_to_rgba(param - 90 + 8),
+                                    100..=107 => current_bg = ansi_to_rgba(param - 100 + 8),
+                                    _ => {}
                                 }
                             }
-                            _ => {} // Ignore other sequences
                         }
+                        // Ignore other sequences
                     }
                 }
             }
