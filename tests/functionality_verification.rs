@@ -3,27 +3,9 @@
 //! These tests verify that all claimed features in the terminal emulator
 //! actually work as described.
 
-use furnace::colors::TrueColor;
-use furnace::config::Config;
-use furnace::keybindings::KeybindingManager;
-use furnace::plugins::PluginManager;
-use furnace::progress_bar::ProgressBar;
-use furnace::session::SessionManager;
-use furnace::shell::ShellSession;
-use furnace::ssh_manager::SshManager;
-use furnace::terminal::ansi_parser::AnsiParser;
-use furnace::translator::CommandTranslator;
-use furnace::ui::{
-    autocomplete::Autocomplete, command_palette::CommandPalette,
-    resource_monitor::ResourceMonitor, themes::ThemeManager,
-};
-use furnace::url_handler::UrlHandler;
-use tempfile::tempdir;
-
 /// Test shell session functionality
 #[cfg(test)]
 mod shell_tests {
-    use super::*;
     use furnace::shell::ShellSession;
 
     #[tokio::test]
@@ -80,7 +62,6 @@ mod shell_tests {
 /// Test ANSI parser functionality
 #[cfg(test)]
 mod ansi_parser_tests {
-    use super::*;
     use furnace::terminal::ansi_parser::AnsiParser;
 
     #[test]
@@ -113,7 +94,6 @@ mod ansi_parser_tests {
 /// Test color functionality
 #[cfg(test)]
 mod color_tests {
-    use super::*;
     use furnace::colors::TrueColor;
 
     #[test]
@@ -151,8 +131,8 @@ mod color_tests {
 /// Test configuration functionality
 #[cfg(test)]
 mod config_tests {
-    use super::*;
     use furnace::config::Config;
+    use tempfile::tempdir;
 
     #[test]
     fn test_default_config_values() {
@@ -185,7 +165,6 @@ mod config_tests {
 /// Test translator functionality
 #[cfg(test)]
 mod translator_tests {
-    use super::*;
     use furnace::translator::CommandTranslator;
 
     #[test]
@@ -234,7 +213,6 @@ mod translator_tests {
 /// Test SSH manager functionality
 #[cfg(test)]
 mod ssh_manager_tests {
-    use super::*;
     use furnace::ssh_manager::SshManager;
 
     #[test]
@@ -259,7 +237,6 @@ mod ssh_manager_tests {
 /// Test URL handler functionality
 #[cfg(test)]
 mod url_handler_tests {
-    use super::*;
     use furnace::url_handler::UrlHandler;
 
     #[test]
@@ -293,7 +270,6 @@ mod url_handler_tests {
 /// Test UI components
 #[cfg(test)]
 mod ui_tests {
-    use super::*;
     use furnace::ui::{
         autocomplete::Autocomplete, command_palette::CommandPalette,
         resource_monitor::ResourceMonitor, themes::ThemeManager,
@@ -339,7 +315,6 @@ mod ui_tests {
 /// Test session management
 #[cfg(test)]
 mod session_tests {
-    use super::*;
     use furnace::session::SessionManager;
 
     #[test]
@@ -352,7 +327,6 @@ mod session_tests {
 /// Test plugin system
 #[cfg(test)]
 mod plugin_tests {
-    use super::*;
     use furnace::plugins::PluginManager;
 
     #[test]
@@ -367,7 +341,6 @@ mod plugin_tests {
 /// Test keybindings
 #[cfg(test)]
 mod keybinding_tests {
-    use super::*;
     use furnace::keybindings::KeybindingManager;
 
     #[test]
@@ -380,7 +353,6 @@ mod keybinding_tests {
 /// Test progress bar
 #[cfg(test)]
 mod progress_bar_tests {
-    use super::*;
     use furnace::progress_bar::ProgressBar;
 
     #[test]

@@ -93,7 +93,6 @@ impl From<GpuBackend> for wgpu::Backends {
             // NOTE: DX11 is not available in wgpu 0.19, falling back to DX12
             // This maintains compatibility with the API while using the best available backend
             GpuBackend::Dx11 => {
-                #[cfg(feature = "tracing")]
                 tracing::warn!("DX11 backend not available in wgpu 0.19, using DX12 instead");
                 wgpu::Backends::DX12
             }

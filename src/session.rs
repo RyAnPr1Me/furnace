@@ -112,9 +112,8 @@ impl SessionManager {
 impl Default for SessionManager {
     /// Create a default session manager
     ///
-    /// # Panics
-    /// This implementation panics if the home directory cannot be determined.
-    /// For fallible creation, use `SessionManager::new()` instead.
+    /// If the home directory cannot be determined, falls back to using
+    /// the system's temporary directory.
     fn default() -> Self {
         // Try to create with graceful fallback
         match Self::new() {
