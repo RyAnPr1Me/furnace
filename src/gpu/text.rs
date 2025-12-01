@@ -58,10 +58,10 @@ pub fn hex_to_rgba(hex: &str) -> Option<[f32; 4]> {
 }
 
 /// Parse terminal output into GPU cells
-/// 
+///
 /// This function processes ANSI escape sequences and converts them into a vector of
 /// GPU-renderable cells with appropriate colors and styles.
-/// 
+///
 /// # Note
 /// The `param_idx` and `current_param` variables are reused throughout the parsing loop
 /// to avoid allocations. The `#[allow(unused_assignments)]` suppresses false positives
