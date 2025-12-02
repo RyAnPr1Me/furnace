@@ -74,21 +74,21 @@ impl Themes {
             name: "Dark".to_string(),
             colors: ColorPalette {
                 black: "#000000".to_string(),
-                red: "#CC5555".to_string(),        // Darker, cooler red
-                green: "#5A8A6A".to_string(),      // Muted green
-                yellow: "#B89860".to_string(),     // Darker yellow
-                blue: "#6A7A9A".to_string(),       // Cool blue-gray
-                magenta: "#B05A7A".to_string(),    // Dark magenta-red
-                cyan: "#5A8A8A".to_string(),       // Dark teal
-                white: "#C0B0B0".to_string(),      // Slightly reddish gray
-                bright_black: "#3A2A2A".to_string(),   // Dark reddish-gray
-                bright_red: "#DD6666".to_string(),     // Medium cool red
-                bright_green: "#6A9A7A".to_string(),   // Muted bright green
-                bright_yellow: "#C8A870".to_string(),  // Muted gold
-                bright_blue: "#7A8AAA".to_string(),    // Cool light blue
+                red: "#CC5555".to_string(),           // Darker, cooler red
+                green: "#5A8A6A".to_string(),         // Muted green
+                yellow: "#B89860".to_string(),        // Darker yellow
+                blue: "#6A7A9A".to_string(),          // Cool blue-gray
+                magenta: "#B05A7A".to_string(),       // Dark magenta-red
+                cyan: "#5A8A8A".to_string(),          // Dark teal
+                white: "#C0B0B0".to_string(),         // Slightly reddish gray
+                bright_black: "#3A2A2A".to_string(),  // Dark reddish-gray
+                bright_red: "#DD6666".to_string(),    // Medium cool red
+                bright_green: "#6A9A7A".to_string(),  // Muted bright green
+                bright_yellow: "#C8A870".to_string(), // Muted gold
+                bright_blue: "#7A8AAA".to_string(),   // Cool light blue
                 bright_magenta: "#C06A8A".to_string(), // Bright magenta-red
-                bright_cyan: "#6A9A9A".to_string(),    // Muted cyan
-                bright_white: "#D0C0C0".to_string(),   // Light reddish-gray
+                bright_cyan: "#6A9A9A".to_string(),   // Muted cyan
+                bright_white: "#D0C0C0".to_string(),  // Light reddish-gray
             },
             ui: UiColors {
                 foreground: "#D0C0C0".to_string(),      // Light reddish-gray text
@@ -102,13 +102,13 @@ impl Themes {
                 command_palette: "#1A0A0A".to_string(), // Almost black palette
             },
             syntax: SyntaxColors {
-                keyword: "#DD6666".to_string(),         // Cool red keywords
-                string: "#B89860".to_string(),          // Muted gold strings
-                comment: "#5A4A4A".to_string(),         // Dark gray comments
-                function: "#B05A7A".to_string(),        // Magenta-red functions
-                variable: "#C0B0B0".to_string(),        // Reddish-gray variables
-                error: "#EE5555".to_string(),           // Brighter red for errors
-                warning: "#C8A870".to_string(),         // Gold warnings
+                keyword: "#DD6666".to_string(),  // Cool red keywords
+                string: "#B89860".to_string(),   // Muted gold strings
+                comment: "#5A4A4A".to_string(),  // Dark gray comments
+                function: "#B05A7A".to_string(), // Magenta-red functions
+                variable: "#C0B0B0".to_string(), // Reddish-gray variables
+                error: "#EE5555".to_string(),    // Brighter red for errors
+                warning: "#C8A870".to_string(),  // Gold warnings
             },
         }
     }

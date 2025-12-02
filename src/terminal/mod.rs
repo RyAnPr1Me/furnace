@@ -92,12 +92,12 @@ const PROMPT_TRIGGER_READ_ATTEMPTS: usize = 10;
 const INITIAL_OUTPUT_SETTLE_MS: u64 = 100;
 
 /// Color constants for cool red/black theme
-const COLOR_COOL_RED: (u8, u8, u8) = (0xDD, 0x66, 0x66);        // Cool red accent
-const COLOR_REDDISH_GRAY: (u8, u8, u8) = (0xC0, 0xB0, 0xB0);    // Reddish-gray text
-const COLOR_PURE_BLACK: (u8, u8, u8) = (0x00, 0x00, 0x00);      // Pure black background
-const COLOR_MUTED_GREEN: (u8, u8, u8) = (0x6A, 0x9A, 0x7A);     // Muted green
-const COLOR_MAGENTA_RED: (u8, u8, u8) = (0xB0, 0x5A, 0x7A);     // Magenta-red
-const COLOR_DARK_GRAY: (u8, u8, u8) = (0x5A, 0x4A, 0x4A);       // Dark gray for comments
+const COLOR_COOL_RED: (u8, u8, u8) = (0xDD, 0x66, 0x66); // Cool red accent
+const COLOR_REDDISH_GRAY: (u8, u8, u8) = (0xC0, 0xB0, 0xB0); // Reddish-gray text
+const COLOR_PURE_BLACK: (u8, u8, u8) = (0x00, 0x00, 0x00); // Pure black background
+const COLOR_MUTED_GREEN: (u8, u8, u8) = (0x6A, 0x9A, 0x7A); // Muted green
+const COLOR_MAGENTA_RED: (u8, u8, u8) = (0xB0, 0x5A, 0x7A); // Magenta-red
+const COLOR_DARK_GRAY: (u8, u8, u8) = (0x5A, 0x4A, 0x4A); // Dark gray for comments
 
 /// High-performance terminal with GPU-accelerated rendering at 170 FPS
 pub struct Terminal {
@@ -223,10 +223,11 @@ impl Terminal {
     /// Returns the total number of bytes read
     async fn read_and_store_output(&mut self, max_attempts: usize, delay_ms: u64) -> usize {
         let mut total_bytes = 0;
-        
+
         // Bounds check to prevent panic - ensure both vectors are in sync
-        if self.active_session >= self.sessions.len() 
-            || self.active_session >= self.output_buffers.len() {
+        if self.active_session >= self.sessions.len()
+            || self.active_session >= self.output_buffers.len()
+        {
             warn!(
                 "Active session index {} is out of bounds (sessions: {}, buffers: {})",
                 self.active_session,
@@ -235,12 +236,13 @@ impl Terminal {
             );
             return 0;
         }
-        
+
         if let Some(session) = self.sessions.get(self.active_session) {
             for _ in 0..max_attempts {
                 if let Ok(n) = session.read_output(&mut self.read_buffer).await {
                     if n > 0 {
-                        self.output_buffers[self.active_session].extend_from_slice(&self.read_buffer[..n]);
+                        self.output_buffers[self.active_session]
+                            .extend_from_slice(&self.read_buffer[..n]);
                         self.dirty = true;
                         total_bytes += n;
                         debug!("Read {} bytes from shell", n);
@@ -251,7 +253,7 @@ impl Terminal {
                 }
             }
         }
-        
+
         total_bytes
     }
 
@@ -303,30 +305,32 @@ impl Terminal {
         let initial_timeout = Duration::from_millis(INITIAL_OUTPUT_TIMEOUT_MS);
         let start_time = tokio::time::Instant::now();
         let mut received_output = false;
-        
+
         // Poll for initial output with timeout
         while start_time.elapsed() < initial_timeout {
             // Try reading once
             let bytes_read = self.read_and_store_output(1, 0).await;
-            
+
             if bytes_read > 0 {
                 received_output = true;
                 debug!("Received {} bytes of initial shell output", bytes_read);
-                
+
                 // Continue reading for a bit more to get the full prompt
                 tokio::time::sleep(Duration::from_millis(INITIAL_OUTPUT_SETTLE_MS)).await;
-                
+
                 // Try to read more data that might be coming
-                let additional = self.read_and_store_output(EXTRA_READ_ATTEMPTS, EXTRA_READ_DELAY_MS).await;
+                let additional = self
+                    .read_and_store_output(EXTRA_READ_ATTEMPTS, EXTRA_READ_DELAY_MS)
+                    .await;
                 if additional > 0 {
                     debug!("Received additional {} bytes", additional);
                 }
                 break;
             }
-            
+
             tokio::time::sleep(Duration::from_millis(INITIAL_OUTPUT_POLL_INTERVAL_MS)).await;
         }
-        
+
         // If no output received, try sending a newline to trigger the prompt
         // This helps with shells like PowerShell that don't show a prompt until Enter is pressed
         if !received_output {
@@ -337,13 +341,15 @@ impl Terminal {
                 } else {
                     // Wait a bit for the prompt to appear after sending newline
                     tokio::time::sleep(Duration::from_millis(PROMPT_TRIGGER_DELAY_MS)).await;
-                    
+
                     // Try reading again
-                    let bytes_read = self.read_and_store_output(
-                        PROMPT_TRIGGER_READ_ATTEMPTS,
-                        INITIAL_OUTPUT_POLL_INTERVAL_MS
-                    ).await;
-                    
+                    let bytes_read = self
+                        .read_and_store_output(
+                            PROMPT_TRIGGER_READ_ATTEMPTS,
+                            INITIAL_OUTPUT_POLL_INTERVAL_MS,
+                        )
+                        .await;
+
                     if bytes_read > 0 {
                         received_output = true;
                         debug!("Received {} bytes after sending newline", bytes_read);
@@ -351,13 +357,13 @@ impl Terminal {
                 }
             }
         }
-        
+
         if received_output {
             info!("Successfully captured initial shell output");
         } else {
             warn!("No initial shell output received - shell may be slow to start or not configured correctly");
         }
-        
+
         // Always render the initial screen, even if empty
         // This ensures the user sees SOMETHING instead of a blank screen
         terminal.draw(|f| self.render(f))?;
@@ -1024,10 +1030,18 @@ impl Terminal {
                 .map(|i| {
                     let style = if i == self.active_session {
                         Style::default()
-                            .fg(Color::Rgb(COLOR_COOL_RED.0, COLOR_COOL_RED.1, COLOR_COOL_RED.2))
+                            .fg(Color::Rgb(
+                                COLOR_COOL_RED.0,
+                                COLOR_COOL_RED.1,
+                                COLOR_COOL_RED.2,
+                            ))
                             .add_modifier(Modifier::BOLD)
                     } else {
-                        Style::default().fg(Color::Rgb(COLOR_REDDISH_GRAY.0, COLOR_REDDISH_GRAY.1, COLOR_REDDISH_GRAY.2))
+                        Style::default().fg(Color::Rgb(
+                            COLOR_REDDISH_GRAY.0,
+                            COLOR_REDDISH_GRAY.1,
+                            COLOR_REDDISH_GRAY.2,
+                        ))
                     };
                     Line::from(Span::styled(format!(" Tab {} ", i + 1), style))
                 })
@@ -1036,10 +1050,18 @@ impl Terminal {
             let tabs = Tabs::new(tab_titles)
                 .block(Block::default().borders(Borders::BOTTOM))
                 .select(self.active_session)
-                .style(Style::default().fg(Color::Rgb(COLOR_REDDISH_GRAY.0, COLOR_REDDISH_GRAY.1, COLOR_REDDISH_GRAY.2)))
+                .style(Style::default().fg(Color::Rgb(
+                    COLOR_REDDISH_GRAY.0,
+                    COLOR_REDDISH_GRAY.1,
+                    COLOR_REDDISH_GRAY.2,
+                )))
                 .highlight_style(
                     Style::default()
-                        .fg(Color::Rgb(COLOR_COOL_RED.0, COLOR_COOL_RED.1, COLOR_COOL_RED.2))
+                        .fg(Color::Rgb(
+                            COLOR_COOL_RED.0,
+                            COLOR_COOL_RED.1,
+                            COLOR_COOL_RED.2,
+                        ))
                         .add_modifier(Modifier::BOLD),
                 );
 
@@ -1051,8 +1073,16 @@ impl Terminal {
             let notification = Paragraph::new(msg.as_str())
                 .style(
                     Style::default()
-                        .fg(Color::Rgb(COLOR_MUTED_GREEN.0, COLOR_MUTED_GREEN.1, COLOR_MUTED_GREEN.2))
-                        .bg(Color::Rgb(COLOR_PURE_BLACK.0, COLOR_PURE_BLACK.1, COLOR_PURE_BLACK.2))
+                        .fg(Color::Rgb(
+                            COLOR_MUTED_GREEN.0,
+                            COLOR_MUTED_GREEN.1,
+                            COLOR_MUTED_GREEN.2,
+                        ))
+                        .bg(Color::Rgb(
+                            COLOR_PURE_BLACK.0,
+                            COLOR_PURE_BLACK.1,
+                            COLOR_PURE_BLACK.2,
+                        ))
                         .add_modifier(Modifier::BOLD),
                 )
                 .block(Block::default().borders(Borders::NONE));
@@ -1067,8 +1097,16 @@ impl Terminal {
             let progress_widget = Paragraph::new(progress_text)
                 .style(
                     Style::default()
-                        .fg(Color::Rgb(COLOR_MAGENTA_RED.0, COLOR_MAGENTA_RED.1, COLOR_MAGENTA_RED.2))
-                        .bg(Color::Rgb(COLOR_PURE_BLACK.0, COLOR_PURE_BLACK.1, COLOR_PURE_BLACK.2))
+                        .fg(Color::Rgb(
+                            COLOR_MAGENTA_RED.0,
+                            COLOR_MAGENTA_RED.1,
+                            COLOR_MAGENTA_RED.2,
+                        ))
+                        .bg(Color::Rgb(
+                            COLOR_PURE_BLACK.0,
+                            COLOR_PURE_BLACK.1,
+                            COLOR_PURE_BLACK.2,
+                        ))
                         .add_modifier(Modifier::BOLD),
                 )
                 .block(Block::default().borders(Borders::NONE));
@@ -1146,8 +1184,16 @@ impl Terminal {
         let paragraph = Paragraph::new(text)
             .style(
                 Style::default()
-                    .fg(Color::Rgb(COLOR_REDDISH_GRAY.0, COLOR_REDDISH_GRAY.1, COLOR_REDDISH_GRAY.2))
-                    .bg(Color::Rgb(COLOR_PURE_BLACK.0, COLOR_PURE_BLACK.1, COLOR_PURE_BLACK.2))
+                    .fg(Color::Rgb(
+                        COLOR_REDDISH_GRAY.0,
+                        COLOR_REDDISH_GRAY.1,
+                        COLOR_REDDISH_GRAY.2,
+                    ))
+                    .bg(Color::Rgb(
+                        COLOR_PURE_BLACK.0,
+                        COLOR_PURE_BLACK.1,
+                        COLOR_PURE_BLACK.2,
+                    )),
             )
             .block(Block::default().borders(Borders::NONE));
 
@@ -1173,11 +1219,23 @@ impl Terminal {
 
                     let style = if i == self.ssh_manager.selected_index {
                         Style::default()
-                            .fg(Color::Rgb(COLOR_PURE_BLACK.0, COLOR_PURE_BLACK.1, COLOR_PURE_BLACK.2))
-                            .bg(Color::Rgb(COLOR_COOL_RED.0, COLOR_COOL_RED.1, COLOR_COOL_RED.2))
+                            .fg(Color::Rgb(
+                                COLOR_PURE_BLACK.0,
+                                COLOR_PURE_BLACK.1,
+                                COLOR_PURE_BLACK.2,
+                            ))
+                            .bg(Color::Rgb(
+                                COLOR_COOL_RED.0,
+                                COLOR_COOL_RED.1,
+                                COLOR_COOL_RED.2,
+                            ))
                             .add_modifier(Modifier::BOLD)
                     } else {
-                        Style::default().fg(Color::Rgb(COLOR_REDDISH_GRAY.0, COLOR_REDDISH_GRAY.1, COLOR_REDDISH_GRAY.2))
+                        Style::default().fg(Color::Rgb(
+                            COLOR_REDDISH_GRAY.0,
+                            COLOR_REDDISH_GRAY.1,
+                            COLOR_REDDISH_GRAY.2,
+                        ))
                     };
 
                     ListItem::new(content).style(style)
@@ -1194,14 +1252,20 @@ impl Terminal {
             )
         };
 
-        let list = List::new(items)
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .title(title)
-                    .style(Style::default().bg(Color::Rgb(COLOR_PURE_BLACK.0, COLOR_PURE_BLACK.1, COLOR_PURE_BLACK.2))),
-            )
-            .style(Style::default().fg(Color::Rgb(COLOR_REDDISH_GRAY.0, COLOR_REDDISH_GRAY.1, COLOR_REDDISH_GRAY.2)));
+        let list =
+            List::new(items)
+                .block(Block::default().borders(Borders::ALL).title(title).style(
+                    Style::default().bg(Color::Rgb(
+                        COLOR_PURE_BLACK.0,
+                        COLOR_PURE_BLACK.1,
+                        COLOR_PURE_BLACK.2,
+                    )),
+                ))
+                .style(Style::default().fg(Color::Rgb(
+                    COLOR_REDDISH_GRAY.0,
+                    COLOR_REDDISH_GRAY.1,
+                    COLOR_REDDISH_GRAY.2,
+                )));
 
         f.render_widget(list, popup_area);
     }
@@ -1222,15 +1286,31 @@ impl Terminal {
         let input = Paragraph::new(format!("> {}", self.command_palette.input))
             .style(
                 Style::default()
-                    .fg(Color::Rgb(COLOR_MAGENTA_RED.0, COLOR_MAGENTA_RED.1, COLOR_MAGENTA_RED.2))
-                    .bg(Color::Rgb(COLOR_PURE_BLACK.0, COLOR_PURE_BLACK.1, COLOR_PURE_BLACK.2))
+                    .fg(Color::Rgb(
+                        COLOR_MAGENTA_RED.0,
+                        COLOR_MAGENTA_RED.1,
+                        COLOR_MAGENTA_RED.2,
+                    ))
+                    .bg(Color::Rgb(
+                        COLOR_PURE_BLACK.0,
+                        COLOR_PURE_BLACK.1,
+                        COLOR_PURE_BLACK.2,
+                    )),
             )
             .block(
                 Block::default()
                     .borders(Borders::ALL)
                     .title("Command Palette (Esc to close)")
-                    .border_style(Style::default().fg(Color::Rgb(COLOR_MAGENTA_RED.0, COLOR_MAGENTA_RED.1, COLOR_MAGENTA_RED.2)))
-                    .style(Style::default().bg(Color::Rgb(COLOR_PURE_BLACK.0, COLOR_PURE_BLACK.1, COLOR_PURE_BLACK.2))),
+                    .border_style(Style::default().fg(Color::Rgb(
+                        COLOR_MAGENTA_RED.0,
+                        COLOR_MAGENTA_RED.1,
+                        COLOR_MAGENTA_RED.2,
+                    )))
+                    .style(Style::default().bg(Color::Rgb(
+                        COLOR_PURE_BLACK.0,
+                        COLOR_PURE_BLACK.1,
+                        COLOR_PURE_BLACK.2,
+                    ))),
             );
         f.render_widget(input, palette_chunks[0]);
 
@@ -1243,28 +1323,52 @@ impl Terminal {
             .map(|(i, s)| {
                 let style = if i == self.command_palette.selected_index {
                     Style::default()
-                        .fg(Color::Rgb(COLOR_COOL_RED.0, COLOR_COOL_RED.1, COLOR_COOL_RED.2))
+                        .fg(Color::Rgb(
+                            COLOR_COOL_RED.0,
+                            COLOR_COOL_RED.1,
+                            COLOR_COOL_RED.2,
+                        ))
                         .add_modifier(Modifier::BOLD)
                 } else {
-                    Style::default().fg(Color::Rgb(COLOR_REDDISH_GRAY.0, COLOR_REDDISH_GRAY.1, COLOR_REDDISH_GRAY.2))
+                    Style::default().fg(Color::Rgb(
+                        COLOR_REDDISH_GRAY.0,
+                        COLOR_REDDISH_GRAY.1,
+                        COLOR_REDDISH_GRAY.2,
+                    ))
                 };
                 Line::from(vec![
                     Span::styled(format!("  {} ", s.command), style),
                     Span::styled(
                         format!("- {}", s.description),
-                        Style::default().fg(Color::Rgb(COLOR_DARK_GRAY.0, COLOR_DARK_GRAY.1, COLOR_DARK_GRAY.2)),
+                        Style::default().fg(Color::Rgb(
+                            COLOR_DARK_GRAY.0,
+                            COLOR_DARK_GRAY.1,
+                            COLOR_DARK_GRAY.2,
+                        )),
                     ),
                 ])
             })
             .collect();
 
         let suggestions_widget = Paragraph::new(suggestions)
-            .style(Style::default().bg(Color::Rgb(COLOR_PURE_BLACK.0, COLOR_PURE_BLACK.1, COLOR_PURE_BLACK.2)))
+            .style(Style::default().bg(Color::Rgb(
+                COLOR_PURE_BLACK.0,
+                COLOR_PURE_BLACK.1,
+                COLOR_PURE_BLACK.2,
+            )))
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::Rgb(COLOR_MAGENTA_RED.0, COLOR_MAGENTA_RED.1, COLOR_MAGENTA_RED.2)))
-                    .style(Style::default().bg(Color::Rgb(COLOR_PURE_BLACK.0, COLOR_PURE_BLACK.1, COLOR_PURE_BLACK.2))),
+                    .border_style(Style::default().fg(Color::Rgb(
+                        COLOR_MAGENTA_RED.0,
+                        COLOR_MAGENTA_RED.1,
+                        COLOR_MAGENTA_RED.2,
+                    )))
+                    .style(Style::default().bg(Color::Rgb(
+                        COLOR_PURE_BLACK.0,
+                        COLOR_PURE_BLACK.1,
+                        COLOR_PURE_BLACK.2,
+                    ))),
             );
         f.render_widget(suggestions_widget, palette_chunks[1]);
     }
@@ -1288,8 +1392,16 @@ impl Terminal {
         let resource_widget = Paragraph::new(text)
             .style(
                 Style::default()
-                    .fg(Color::Rgb(COLOR_MUTED_GREEN.0, COLOR_MUTED_GREEN.1, COLOR_MUTED_GREEN.2))
-                    .bg(Color::Rgb(COLOR_PURE_BLACK.0, COLOR_PURE_BLACK.1, COLOR_PURE_BLACK.2))
+                    .fg(Color::Rgb(
+                        COLOR_MUTED_GREEN.0,
+                        COLOR_MUTED_GREEN.1,
+                        COLOR_MUTED_GREEN.2,
+                    ))
+                    .bg(Color::Rgb(
+                        COLOR_PURE_BLACK.0,
+                        COLOR_PURE_BLACK.1,
+                        COLOR_PURE_BLACK.2,
+                    )),
             )
             .block(Block::default().borders(Borders::TOP));
 
