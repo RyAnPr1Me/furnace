@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::Parser;
 use tracing::Level;
 use tracing_subscriber::FmtSubscriber;
@@ -49,7 +49,8 @@ async fn main() -> Result<()> {
 
     let subscriber = FmtSubscriber::builder().with_max_level(log_level).finish();
 
-    tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
+    tracing::subscriber::set_global_default(subscriber)
+        .context("Failed to set global default subscriber")?;
 
     // Load configuration
     let config = if let Some(config_path) = args.config {
