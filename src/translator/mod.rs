@@ -316,9 +316,12 @@ fn get_flag_value<'a>(args: &'a str, short: char, long: Option<&str>) -> Option<
             if part.len() == 2 && part.chars().nth(1) == Some(short) {
                 return parts.get(i + 1).copied();
             }
-            // Handle -n10 (no space)
-            if part.starts_with(&format!("-{short}")) && part.len() > 2 {
-                return Some(&part[2..]);
+            // Handle -n10 (no space) - avoid format! allocation
+            if part.len() > 2 {
+                let mut chars = part.chars();
+                if chars.next() == Some('-') && chars.next() == Some(short) {
+                    return Some(&part[2..]);
+                }
             }
         }
     }

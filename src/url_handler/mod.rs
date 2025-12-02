@@ -18,6 +18,9 @@ use std::process::Command;
 use std::sync::LazyLock;
 
 /// URL pattern matcher - more robust pattern that avoids common false positives
+/// # Panics
+/// Panics if the regex pattern is invalid. This should never happen as the pattern
+/// is a compile-time constant that has been validated.
 static URL_REGEX: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"https?://[a-zA-Z0-9\-._~:/?#\[\]@!$&'()*+,;=]+|www\.[a-zA-Z0-9\-._~:/?#\[\]@!$&'()*+,;=]+")
         .expect("URL regex pattern is invalid - this is a compile-time constant and should never fail")

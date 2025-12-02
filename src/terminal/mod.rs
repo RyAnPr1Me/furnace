@@ -55,7 +55,8 @@ use self::ansi_parser::AnsiParser;
 const TARGET_FPS: u64 = 170;
 
 /// Read buffer size optimized for typical terminal output
-const READ_BUFFER_SIZE: usize = 4096;
+/// Using 4KB as it's a common page size and provides good balance
+const READ_BUFFER_SIZE: usize = 4 * 1024;
 
 /// URL cache refresh interval in frames (at 170 FPS, 30 frames ≈ 176ms)
 const URL_CACHE_REFRESH_FRAMES: u64 = 30;

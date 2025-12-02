@@ -64,7 +64,8 @@ impl SshManager {
     pub fn new() -> Result<Self> {
         let config_path = Self::default_config_path()?;
         let connections = Self::load_connections(&config_path)?;
-        let filtered_connections: Vec<String> = connections.keys().cloned().collect();
+        let mut filtered_connections = Vec::with_capacity(connections.len());
+        filtered_connections.extend(connections.keys().map(String::as_str).map(String::from));
 
         Ok(Self {
             connections,

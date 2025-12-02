@@ -113,17 +113,21 @@ impl ProgressBar {
     #[must_use]
     pub fn display_text_truncated(&self, max_cmd_len: usize) -> String {
         if self.visible {
-            let cmd_display = if self.command.len() > max_cmd_len {
-                format!("{}...", &self.command[..max_cmd_len.saturating_sub(3)])
+            if self.command.len() > max_cmd_len {
+                format!(
+                    "{} Running: {}... ({})",
+                    self.spinner_char(),
+                    &self.command[..max_cmd_len.saturating_sub(3)],
+                    self.elapsed()
+                )
             } else {
-                self.command.clone()
-            };
-            format!(
-                "{} Running: {} ({})",
-                self.spinner_char(),
-                cmd_display,
-                self.elapsed()
-            )
+                format!(
+                    "{} Running: {} ({})",
+                    self.spinner_char(),
+                    &self.command,
+                    self.elapsed()
+                )
+            }
         } else {
             String::new()
         }

@@ -137,9 +137,9 @@ pub struct UrlHandlerConfig {
     pub enabled: bool,
 }
 
-// Default value functions for serde
+// Default value functions for serde - use const where possible for compile-time evaluation
 const fn default_max_history() -> usize {
-    10000
+    10_000
 }
 
 const fn default_true() -> bool {
@@ -151,11 +151,11 @@ const fn default_font_size() -> u16 {
 }
 
 fn default_cursor_style() -> String {
-    "block".to_string()
+    String::from("block")
 }
 
 const fn default_scrollback() -> usize {
-    10000
+    10_000
 }
 
 impl Default for ShellConfig {

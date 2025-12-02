@@ -22,22 +22,28 @@ pub struct LoadedPlugin {
     pub version: String,
 }
 
-// Safety: LoadedPlugin is safe to send between threads because
-// the raw pointer is only accessed during plugin operations
-// and the Library ensures thread-safe access to the plugin
+// Safety: LoadedPlugin is safe to send between threads because:
+// 1. The raw pointer is only accessed during plugin operations which are synchronized
+// 2. The Library ensures thread-safe access to the plugin's shared library
+// 3. The plugin_ptr is immutable after creation and only dropped once
+// 4. All plugin trait methods must be thread-safe (enforced by Plugin trait bounds)
 unsafe impl Send for LoadedPlugin {}
 unsafe impl Sync for LoadedPlugin {}
 
 impl Drop for LoadedPlugin {
     fn drop(&mut self) {
-        // Safety: The plugin was created by the plugin's constructor
-        // and we are responsible for cleaning it up
+        // Safety: The plugin was created by the plugin's constructor via Box::into_raw
+        // and we are responsible for cleaning it up. This is safe because:
+        // 1. plugin_ptr is non-null (validated during creation)
+        // 2. We own the pointer exclusively (no other code holds a reference)
+        // 3. cleanup() must be called before dropping to allow plugin-side resource cleanup
+        // 4. Box::from_raw reconstructs the box to properly drop the trait object
         if !self.plugin_ptr.is_null() {
             unsafe {
-                // Call cleanup on the plugin before dropping
+                // Call cleanup on the plugin before dropping to release any resources
                 let plugin = &mut *self.plugin_ptr;
                 plugin.cleanup();
-                // Convert back to Box and drop it properly
+                // Convert back to Box and drop it properly, which calls the destructor
                 drop(Box::from_raw(self.plugin_ptr));
             }
         }
@@ -81,28 +87,49 @@ impl PluginManager {
 
     /// Load a plugin from a dynamic library
     ///
+    /// # Safety
+    /// This function uses `unsafe` to:
+    /// 1. Load a dynamic library with `libloading`
+    /// 2. Call the `_plugin_create` function from the plugin
+    /// 3. Dereference the returned raw pointer
+    ///
+    /// Safety guarantees:
+    /// - The plugin library must export a valid `_plugin_create` function
+    /// - The function must return a valid pointer to a Plugin trait object
+    /// - The pointer must remain valid for the lifetime of LoadedPlugin
+    /// - The plugin must be compiled with the same Rust ABI version
+    ///
     /// # Errors
-    /// Returns an error if the plugin library cannot be loaded or initialized
+    /// Returns an error if:
+    /// - The plugin library cannot be loaded
+    /// - The `_plugin_create` symbol is not found
+    /// - The plugin constructor returns a null pointer
     #[allow(dead_code)] // Public API
     pub fn load_plugin<P: AsRef<Path>>(&mut self, path: P) -> Result<()> {
         let path = path.as_ref();
 
+        // Safety: We're loading a dynamic library and calling a plugin constructor.
+        // This is inherently unsafe but we validate the pointer before using it.
         unsafe {
             let lib = Library::new(path).context("Failed to load plugin library")?;
 
+            // Look up the plugin constructor function symbol
             let constructor: Symbol<PluginCreate> = lib
                 .get(b"_plugin_create")
                 .context("Failed to find plugin constructor")?;
 
+            // Call the constructor to create the plugin instance
             let plugin_ptr = constructor();
 
-            // Validate the pointer before using it
+            // Validate the pointer before using it - this prevents null pointer dereference
             if plugin_ptr.is_null() {
                 return Err(anyhow::anyhow!("Plugin constructor returned null pointer"));
             }
 
+            // Safe to dereference now that we've validated the pointer is non-null
             let plugin_ref = &*plugin_ptr;
 
+            // Extract plugin metadata
             let name = plugin_ref.name().to_string();
             let version = plugin_ref.version().to_string();
 
