@@ -16,7 +16,7 @@ use anyhow::Result;
 use crossterm::{
     cursor::{Hide, Show},
     event::{
-        self, Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
+        self, Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent,
     },
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
@@ -26,7 +26,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span, Text},
-    widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Tabs},
+    widgets::{Block, Borders, Clear, Paragraph, Tabs},
     Terminal as RatatuiTerminal,
 };
 use std::borrow::Cow;
@@ -37,17 +37,13 @@ use tracing::{debug, info, warn};
 use crate::colors::TrueColorPalette;
 use crate::config::Config;
 use crate::keybindings::KeybindingManager;
-use crate::plugins::PluginManager;
 use crate::progress_bar::ProgressBar;
 use crate::session::SessionManager;
 use crate::shell::ShellSession;
-use crate::ssh_manager::SshManager;
-use crate::translator::CommandTranslator;
 use crate::ui::{
     autocomplete::Autocomplete, command_palette::CommandPalette, resource_monitor::ResourceMonitor,
     themes::ThemeManager,
 };
-use crate::url_handler::UrlHandler;
 
 use self::ansi_parser::AnsiParser;
 
@@ -57,9 +53,6 @@ const TARGET_FPS: u64 = 170;
 /// Read buffer size optimized for typical terminal output
 /// Using 4KB as it's a common page size and provides good balance
 const READ_BUFFER_SIZE: usize = 4 * 1024;
-
-/// URL cache refresh interval in frames (at 170 FPS, 30 frames ≈ 176ms)
-const URL_CACHE_REFRESH_FRAMES: u64 = 30;
 
 /// Notification display duration in seconds
 const NOTIFICATION_DURATION_SECS: u64 = 2;
@@ -107,42 +100,30 @@ pub struct Terminal {
     active_session: usize,
     output_buffers: Vec<Vec<u8>>,
     should_quit: bool,
-    command_palette: CommandPalette,
-    resource_monitor: ResourceMonitor,
-    #[allow(dead_code)]
-    autocomplete: Autocomplete,
+    command_palette: Option<CommandPalette>,
+    resource_monitor: Option<ResourceMonitor>,
+    autocomplete: Option<Autocomplete>,
     show_resources: bool,
     #[allow(dead_code)]
     keybindings: KeybindingManager,
-    #[allow(dead_code)]
-    session_manager: SessionManager,
-    #[allow(dead_code)]
-    plugin_manager: PluginManager,
+    session_manager: Option<SessionManager>,
     #[allow(dead_code)]
     color_palette: TrueColorPalette,
     // Theme manager for dynamic theme switching
-    theme_manager: ThemeManager,
+    theme_manager: Option<ThemeManager>,
     // Performance optimization: track if redraw is needed
     dirty: bool,
     // Reusable read buffer to reduce allocations
     read_buffer: Vec<u8>,
     // Frame counter for performance metrics
     frame_count: u64,
-    // Command translator for cross-platform compatibility
-    command_translator: CommandTranslator,
     // Current command buffer for each session - tracks BYTES sent to shell (Bug #1, #2)
     command_buffers: Vec<Vec<u8>>,
-    // Translation notification message and timeout
-    translation_notification: Option<String>,
+    // Notification message and timeout
+    notification_message: Option<String>,
     notification_frames: u64,
-    // SSH connection manager
-    ssh_manager: SshManager,
-    // Cached URL positions with line numbers for coordinate mapping (Bug #5)
-    cached_urls: Vec<crate::url_handler::DetectedUrl>,
-    // Track when URL cache was last updated (frame counter)
-    url_cache_frame: u64,
     // Progress bar for command execution
-    progress_bar: ProgressBar,
+    progress_bar: Option<ProgressBar>,
     // Current terminal size for proper tab creation (Bug #7)
     terminal_cols: u16,
     terminal_rows: u16,
@@ -156,36 +137,50 @@ impl Terminal {
     /// Create a new terminal instance with optimal memory allocation
     ///
     /// # Errors
-    /// Returns an error if SSH manager or session manager initialization fails
+    /// Returns an error if session manager initialization fails
     pub fn new(config: Config) -> Result<Self> {
         info!("Initializing Furnace terminal emulator with 170 FPS GPU rendering + 24-bit color");
 
-        let command_translator = CommandTranslator::new(config.command_translation.enabled);
-        let ssh_manager = SshManager::new()?;
-
-        // Initialize theme manager with custom themes directory
-        let theme_manager = match ThemeManager::default_themes_dir() {
-            Ok(themes_dir) => match ThemeManager::with_themes_dir(&themes_dir) {
-                Ok(manager) => {
-                    debug!(
-                        "Theme manager initialized with custom themes from {:?}",
-                        themes_dir
-                    );
-                    manager
-                }
+        // Initialize optional theme manager based on config
+        let theme_manager = if config.features.theme_manager {
+            match ThemeManager::default_themes_dir() {
+                Ok(themes_dir) => match ThemeManager::with_themes_dir(&themes_dir) {
+                    Ok(manager) => {
+                        debug!(
+                            "Theme manager initialized with custom themes from {:?}",
+                            themes_dir
+                        );
+                        Some(manager)
+                    }
+                    Err(e) => {
+                        warn!(
+                            "Failed to initialize theme manager with custom themes: {}",
+                            e
+                        );
+                        Some(ThemeManager::new())
+                    }
+                },
                 Err(e) => {
-                    warn!(
-                        "Failed to initialize theme manager with custom themes: {}",
-                        e
-                    );
-                    ThemeManager::new()
+                    warn!("Could not determine themes directory: {}", e);
+                    Some(ThemeManager::new())
                 }
-            },
-            Err(e) => {
-                warn!("Could not determine themes directory: {}", e);
-                ThemeManager::new()
             }
+        } else {
+            None
         };
+
+        // Initialize optional session manager
+        let session_manager = if config.features.session_manager {
+            Some(SessionManager::new()?)
+        } else {
+            None
+        };
+
+        // Capture feature flags before moving config
+        let enable_command_palette = config.features.command_palette;
+        let enable_resource_monitor = config.features.resource_monitor;
+        let enable_autocomplete = config.features.autocomplete;
+        let enable_progress_bar = config.features.progress_bar;
 
         Ok(Self {
             config,
@@ -193,26 +188,37 @@ impl Terminal {
             active_session: 0,
             output_buffers: Vec::with_capacity(8),
             should_quit: false,
-            command_palette: CommandPalette::new(),
-            resource_monitor: ResourceMonitor::new(),
-            autocomplete: Autocomplete::new(),
+            command_palette: if enable_command_palette {
+                Some(CommandPalette::new())
+            } else {
+                None
+            },
+            resource_monitor: if enable_resource_monitor {
+                Some(ResourceMonitor::new())
+            } else {
+                None
+            },
+            autocomplete: if enable_autocomplete {
+                Some(Autocomplete::new())
+            } else {
+                None
+            },
             show_resources: false,
             keybindings: KeybindingManager::new(),
-            session_manager: SessionManager::new()?,
-            plugin_manager: PluginManager::new(),
+            session_manager,
             color_palette: TrueColorPalette::default_dark(),
             theme_manager,
             dirty: true,
             read_buffer: vec![0u8; READ_BUFFER_SIZE],
             frame_count: 0,
-            command_translator,
             command_buffers: Vec::with_capacity(8),
-            translation_notification: None,
+            notification_message: None,
             notification_frames: 0,
-            ssh_manager,
-            cached_urls: Vec::new(),
-            url_cache_frame: 0,
-            progress_bar: ProgressBar::new(),
+            progress_bar: if enable_progress_bar {
+                Some(ProgressBar::new())
+            } else {
+                None
+            },
             terminal_cols: 80,
             terminal_rows: 24,
             cached_styled_lines: Vec::with_capacity(8),
@@ -426,10 +432,20 @@ impl Terminal {
                                 self.dirty = true;
 
                                 // Bug #9: Improved prompt detection for various shells
-                                if self.progress_bar.visible {
-                                    let recent_output = String::from_utf8_lossy(&self.read_buffer[..n]);
-                                    if self.detect_prompt(&recent_output) {
-                                        self.progress_bar.stop();
+                                let should_stop_progress = if let Some(ref pb) = self.progress_bar {
+                                    if pb.visible {
+                                        let recent_output = String::from_utf8_lossy(&self.read_buffer[..n]);
+                                        self.detect_prompt(&recent_output)
+                                    } else {
+                                        false
+                                    }
+                                } else {
+                                    false
+                                };
+                                
+                                if should_stop_progress {
+                                    if let Some(ref mut pb) = self.progress_bar {
+                                        pb.stop();
                                     }
                                 }
 
@@ -438,8 +454,6 @@ impl Terminal {
                                 if self.output_buffers[self.active_session].len() > max_buffer {
                                     let excess = self.output_buffers[self.active_session].len() - max_buffer;
                                     self.output_buffers[self.active_session].drain(..excess);
-                                    // Bug #10: Invalidate URL cache since buffer changed
-                                    self.cached_urls.clear();
                                 }
                             }
                         }
@@ -449,16 +463,18 @@ impl Terminal {
                 // Render at consistent frame rate
                 _ = render_interval.tick() => {
                     // Update progress bar spinner (only if visible)
-                    if self.progress_bar.visible {
-                        self.progress_bar.tick();
-                        self.dirty = true;
+                    if let Some(ref mut pb) = self.progress_bar {
+                        if pb.visible {
+                            pb.tick();
+                            self.dirty = true;
+                        }
                     }
 
                     // Bug #11: Only decrement notification counter when actually rendering
                     if self.dirty && self.notification_frames > 0 {
                         self.notification_frames -= 1;
                         if self.notification_frames == 0 {
-                            self.translation_notification = None;
+                            self.notification_message = None;
                         }
                     }
 
@@ -507,98 +523,38 @@ impl Terminal {
             || (output.ends_with('\n') && output.len() < 100) // Short line likely prompt
     }
 
-    /// Handle mouse events for URL clicking (Bug #5: coordinate-based URL detection)
-    async fn handle_mouse_event(&mut self, mouse: MouseEvent) -> Result<()> {
-        if !self.config.url_handler.enabled {
-            return Ok(());
-        }
-
-        if let MouseEventKind::Down(MouseButton::Left) = mouse.kind {
-            if mouse.modifiers.contains(KeyModifiers::CONTROL) {
-                // Bug #5: Find URL at click position instead of opening first URL
-                if let Some(buffer) = self.output_buffers.get(self.active_session) {
-                    // Only update cache if needed (avoid allocation - Bug #3)
-                    if self.frame_count - self.url_cache_frame > URL_CACHE_REFRESH_FRAMES {
-                        let text = String::from_utf8_lossy(buffer);
-                        self.cached_urls = UrlHandler::detect_urls(&text);
-                        self.url_cache_frame = self.frame_count;
-                    }
-
-                    // Find URL at click position
-                    let click_row = mouse.row as usize;
-                    let click_col = mouse.column as usize;
-
-                    // Try to find a URL that contains the click position
-                    if let Some(url) = self.find_url_at_position(click_row, click_col) {
-                        info!("Opening URL at ({}, {}): {}", click_row, click_col, url);
-                        if let Err(e) = UrlHandler::open_url(&url) {
-                            warn!("Failed to open URL: {}", e);
-                        }
-                    }
-                }
-            }
-        }
+    /// Handle mouse events
+    async fn handle_mouse_event(&mut self, _mouse: MouseEvent) -> Result<()> {
+        // Mouse events currently not handled
         Ok(())
-    }
-
-    /// Find URL at the given screen position
-    fn find_url_at_position(&self, _row: usize, col: usize) -> Option<String> {
-        // For each cached URL, check if the click position falls within it
-        // This is a simplified implementation - a full one would track line positions
-        for detected in &self.cached_urls {
-            // Check if click column is within the URL's character range
-            if col >= detected.start_pos && col < detected.end_pos {
-                return Some(detected.url.clone());
-            }
-        }
-        // Fallback: if no position match, don't open anything (Bug #5 fix)
-        None
     }
 
     /// Handle keyboard events with optimal input processing
     async fn handle_key_event(&mut self, key: KeyEvent) -> Result<()> {
-        // SSH manager takes priority when visible
-        if self.ssh_manager.visible {
-            return self.handle_ssh_manager_input(key).await;
-        }
-
         // Command palette takes priority
-        if self.command_palette.visible {
-            return self.handle_command_palette_input(key).await;
+        if let Some(ref palette) = self.command_palette {
+            if palette.visible {
+                return self.handle_command_palette_input(key).await;
+            }
         }
 
         match (key.code, key.modifiers) {
-            // SSH Manager (Ctrl+Shift+S) - Bug #18: Don't fall through when disabled
-            (KeyCode::Char('s' | 'S'), m)
-                if m.contains(KeyModifiers::CONTROL) && m.contains(KeyModifiers::SHIFT) =>
-            {
-                if self.config.ssh_manager.enabled {
-                    self.ssh_manager.toggle();
-                    debug!(
-                        "SSH manager: {}",
-                        if self.ssh_manager.visible {
-                            "ON"
-                        } else {
-                            "OFF"
-                        }
-                    );
-                }
-                // Bug #18: Don't send 's' to shell when SSH manager is disabled
-                return Ok(());
-            }
-
             // Command palette (Ctrl+P)
             (KeyCode::Char('p'), KeyModifiers::CONTROL) => {
-                self.command_palette.toggle();
+                if let Some(ref mut palette) = self.command_palette {
+                    palette.toggle();
+                }
             }
 
             // Toggle resource monitor (Ctrl+R)
             (KeyCode::Char('r'), KeyModifiers::CONTROL) => {
-                self.show_resources = !self.show_resources;
-                debug!(
-                    "Resource monitor: {}",
-                    if self.show_resources { "ON" } else { "OFF" }
-                );
+                if self.resource_monitor.is_some() {
+                    self.show_resources = !self.show_resources;
+                    debug!(
+                        "Resource monitor: {}",
+                        if self.show_resources { "ON" } else { "OFF" }
+                    );
+                }
             }
 
             // Quit (Ctrl+C or Ctrl+D)
@@ -709,7 +665,7 @@ impl Terminal {
         Ok(())
     }
 
-    /// Handle Enter key with command translation (Bug #2: byte-based backspace)
+    /// Handle Enter key
     async fn handle_enter(&mut self) -> Result<()> {
         if let Some(session) = self.sessions.get(self.active_session) {
             // Get the current command as a string from bytes
@@ -718,66 +674,15 @@ impl Terminal {
                 .get(self.active_session)
                 .map_or(Cow::Borrowed(""), |b| String::from_utf8_lossy(b));
 
-            // Check for SSH command
-            if self.config.ssh_manager.enabled
-                && self.config.ssh_manager.auto_show
-                && command.trim().starts_with("ssh ")
-            {
-                if let Some(conn) = crate::ssh_manager::SshManager::parse_ssh_command(&command) {
-                    let name = conn.name.clone();
-                    self.ssh_manager.add_connection(name, conn);
-                    let _ = self.ssh_manager.save_connections();
-                }
-                self.ssh_manager.toggle();
-                return Ok(());
-            }
-
-            // Attempt translation
-            let result = self.command_translator.translate(&command);
-
-            if result.translated {
-                info!(
-                    "Translated '{}' to '{}'",
-                    result.original_command, result.final_command
-                );
-
-                if self.config.command_translation.show_notifications {
-                    self.translation_notification = Some(format!(
-                        "Translated: {} → {}",
-                        result.original_command, result.final_command
-                    ));
-                    self.notification_frames = TARGET_FPS * NOTIFICATION_DURATION_SECS;
-                    self.dirty = true;
-                }
-
-                // Bug #2: Send one backspace per BYTE in buffer (not per char)
-                let byte_count = self
-                    .command_buffers
-                    .get(self.active_session)
-                    .map_or(0, std::vec::Vec::len);
-
-                // Send backspaces to clear the original command
-                for _ in 0..byte_count {
-                    session.write_input(&[127]).await?;
-                }
-
-                // Send the translated command
-                session.write_input(result.final_command.as_bytes()).await?;
-            }
-
             // Send Enter
             session.write_input(b"\r").await?;
 
             // Start progress bar (Bug #24: avoid clone)
-            let command_to_track = if result.translated {
-                &result.final_command
-            } else {
-                &*command
-            };
-
-            if !command_to_track.trim().is_empty() {
-                self.progress_bar.start_ref(command_to_track);
-                self.dirty = true;
+            if !command.trim().is_empty() {
+                if let Some(ref mut pb) = self.progress_bar {
+                    pb.start_ref(&command);
+                    self.dirty = true;
+                }
             }
 
             // Clear command buffer
@@ -788,79 +693,34 @@ impl Terminal {
         Ok(())
     }
 
-    /// Handle SSH manager input
-    async fn handle_ssh_manager_input(&mut self, key: KeyEvent) -> Result<()> {
-        match key.code {
-            KeyCode::Esc => {
-                self.ssh_manager.toggle();
-            }
-            KeyCode::Enter => {
-                if let Some(conn) = self.ssh_manager.get_selected() {
-                    let cmd = conn.to_command();
-                    info!("Connecting via SSH: {}", cmd);
-
-                    if let Some(session) = self.sessions.get(self.active_session) {
-                        session.write_input(cmd.as_bytes()).await?;
-                        session.write_input(b"\r").await?;
-                    }
-
-                    self.ssh_manager.toggle();
-                }
-            }
-            KeyCode::Up => {
-                self.ssh_manager.select_previous();
-            }
-            KeyCode::Down => {
-                self.ssh_manager.select_next();
-            }
-            KeyCode::Char(c) => {
-                self.ssh_manager.filter_input.push(c);
-                self.ssh_manager.update_filter();
-            }
-            KeyCode::Backspace => {
-                self.ssh_manager.filter_input.pop();
-                self.ssh_manager.update_filter();
-            }
-            KeyCode::Delete if !self.ssh_manager.filtered_connections.is_empty() => {
-                if self.ssh_manager.selected_index < self.ssh_manager.filtered_connections.len() {
-                    let name = self.ssh_manager.filtered_connections
-                        [self.ssh_manager.selected_index]
-                        .clone();
-                    self.ssh_manager.remove_connection(&name);
-                    let _ = self.ssh_manager.save_connections();
-                }
-            }
-            _ => {}
-        }
-        Ok(())
-    }
-
     /// Handle command palette input
     async fn handle_command_palette_input(&mut self, key: KeyEvent) -> Result<()> {
+        let Some(ref mut palette) = self.command_palette else {
+            return Ok(());
+        };
+
         match key.code {
             KeyCode::Esc => {
-                self.command_palette.toggle();
+                palette.toggle();
             }
             KeyCode::Enter => {
-                if let Some(command) = self.command_palette.execute_selected() {
+                if let Some(command) = palette.execute_selected() {
                     self.execute_command(&command).await?;
                 }
             }
             KeyCode::Up => {
-                self.command_palette.select_previous();
+                palette.select_previous();
             }
             KeyCode::Down => {
-                self.command_palette.select_next();
+                palette.select_next();
             }
             KeyCode::Char(c) => {
-                self.command_palette.input.push(c);
-                self.command_palette
-                    .update_input(self.command_palette.input.clone());
+                palette.input.push(c);
+                palette.update_input(palette.input.clone());
             }
             KeyCode::Backspace => {
-                self.command_palette.input.pop();
-                self.command_palette
-                    .update_input(self.command_palette.input.clone());
+                palette.input.pop();
+                palette.update_input(palette.input.clone());
             }
             _ => {}
         }
@@ -886,8 +746,6 @@ impl Terminal {
             "clear" => {
                 if let Some(buffer) = self.output_buffers.get_mut(self.active_session) {
                     buffer.clear();
-                    // Bug #10: Clear URL cache when buffer is cleared
-                    self.cached_urls.clear();
                 }
                 // Invalidate render cache
                 if let Some(len) = self.cached_buffer_lens.get_mut(self.active_session) {
@@ -896,15 +754,17 @@ impl Terminal {
             }
             "theme" => {
                 // Cycle to next theme
-                self.theme_manager.next_theme();
-                let theme_name = self.theme_manager.current().name.clone();
-                self.translation_notification = Some(format!("Theme: {theme_name}"));
-                self.notification_frames = TARGET_FPS * NOTIFICATION_DURATION_SECS;
-                // Force redraw with new theme
-                self.dirty = true;
-                // Invalidate all render caches to apply new theme
-                for len in &mut self.cached_buffer_lens {
-                    *len = 0;
+                if let Some(ref mut tm) = self.theme_manager {
+                    tm.next_theme();
+                    let theme_name = tm.current().name.clone();
+                    self.notification_message = Some(format!("Theme: {theme_name}"));
+                    self.notification_frames = TARGET_FPS * NOTIFICATION_DURATION_SECS;
+                    // Force redraw with new theme
+                    self.dirty = true;
+                    // Invalidate all render caches to apply new theme
+                    for len in &mut self.cached_buffer_lens {
+                        *len = 0;
+                    }
                 }
             }
             "quit" => {
@@ -912,23 +772,24 @@ impl Terminal {
             }
             cmd if cmd.starts_with("theme ") => {
                 // Switch to specific theme by name
-                // The strip_prefix is guaranteed to succeed due to the starts_with check
-                let theme_name = &cmd["theme ".len()..];
-                let theme_name = theme_name.trim();
-                if self.theme_manager.switch_theme(theme_name) {
-                    self.translation_notification =
-                        Some(format!("Theme: {}", self.theme_manager.current().name));
-                    self.notification_frames = TARGET_FPS * NOTIFICATION_DURATION_SECS;
-                    self.dirty = true;
-                    // Invalidate all render caches
-                    for len in &mut self.cached_buffer_lens {
-                        *len = 0;
+                if let Some(ref mut tm) = self.theme_manager {
+                    let theme_name = &cmd["theme ".len()..];
+                    let theme_name = theme_name.trim();
+                    if tm.switch_theme(theme_name) {
+                        self.notification_message =
+                            Some(format!("Theme: {}", tm.current().name));
+                        self.notification_frames = TARGET_FPS * NOTIFICATION_DURATION_SECS;
+                        self.dirty = true;
+                        // Invalidate all render caches
+                        for len in &mut self.cached_buffer_lens {
+                            *len = 0;
+                        }
+                    } else {
+                        // Show available themes
+                        let available = tm.available_theme_names().join(", ");
+                        self.notification_message = Some(format!("Available themes: {available}"));
+                        self.notification_frames = TARGET_FPS * NOTIFICATION_DURATION_SECS;
                     }
-                } else {
-                    // Show available themes
-                    let available = self.theme_manager.available_theme_names().join(", ");
-                    self.translation_notification = Some(format!("Available themes: {available}"));
-                    self.notification_frames = TARGET_FPS * NOTIFICATION_DURATION_SECS;
                 }
             }
             _ => {
@@ -996,7 +857,6 @@ impl Terminal {
                 let excess = buffer.len() - max_buffer;
                 buffer.drain(..excess);
                 // Invalidate caches
-                self.cached_urls.clear();
                 if let Some(len) = self.cached_buffer_lens.get_mut(tab_index) {
                     *len = 0;
                 }
@@ -1006,16 +866,18 @@ impl Terminal {
 
     /// Render UI with hardware acceleration (Bug #3: zero-copy rendering)
     fn render(&mut self, f: &mut ratatui::Frame) {
+        let progress_visible = self.progress_bar.as_ref().map_or(false, |pb| pb.visible);
+        
         let main_chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Length(u16::from(
                     self.config.terminal.enable_tabs && self.sessions.len() > 1,
                 )),
-                Constraint::Length(u16::from(self.translation_notification.is_some())),
-                Constraint::Length(u16::from(self.progress_bar.visible)),
+                Constraint::Length(u16::from(self.notification_message.is_some())),
+                Constraint::Length(u16::from(progress_visible)),
                 Constraint::Min(0),
-                Constraint::Length(if self.show_resources { 3 } else { 0 }),
+                Constraint::Length(if self.show_resources && self.resource_monitor.is_some() { 3 } else { 0 }),
             ])
             .split(f.size());
 
@@ -1070,7 +932,7 @@ impl Terminal {
         }
 
         // Render translation notification if present
-        if let Some(ref msg) = self.translation_notification {
+        if let Some(ref msg) = self.notification_message {
             let notification = Paragraph::new(msg.as_str())
                 .style(
                     Style::default()
@@ -1091,52 +953,45 @@ impl Terminal {
         }
 
         // Render progress bar if visible (Bug #15, #16, #17)
-        if self.progress_bar.visible {
-            let progress_text = self
-                .progress_bar
-                .display_text_truncated(MAX_PROGRESS_COMMAND_LEN);
-            let progress_widget = Paragraph::new(progress_text)
-                .style(
-                    Style::default()
-                        .fg(Color::Rgb(
-                            COLOR_MAGENTA_RED.0,
-                            COLOR_MAGENTA_RED.1,
-                            COLOR_MAGENTA_RED.2,
-                        ))
-                        .bg(Color::Rgb(
-                            COLOR_PURE_BLACK.0,
-                            COLOR_PURE_BLACK.1,
-                            COLOR_PURE_BLACK.2,
-                        ))
-                        .add_modifier(Modifier::BOLD),
-                )
-                .block(Block::default().borders(Borders::NONE));
-            f.render_widget(progress_widget, progress_area);
-        }
-
-        // Render SSH manager if visible (takes priority over command palette)
-        if self.ssh_manager.visible {
-            // First render terminal output underneath
-            self.render_terminal_output(f, content_area);
-            // Then render SSH manager overlay
-            self.render_ssh_manager(f, content_area);
-            return;
+        if let Some(ref pb) = self.progress_bar {
+            if pb.visible {
+                let progress_text = pb.display_text_truncated(MAX_PROGRESS_COMMAND_LEN);
+                let progress_widget = Paragraph::new(progress_text)
+                    .style(
+                        Style::default()
+                            .fg(Color::Rgb(
+                                COLOR_MAGENTA_RED.0,
+                                COLOR_MAGENTA_RED.1,
+                                COLOR_MAGENTA_RED.2,
+                            ))
+                            .bg(Color::Rgb(
+                                COLOR_PURE_BLACK.0,
+                                COLOR_PURE_BLACK.1,
+                                COLOR_PURE_BLACK.2,
+                            ))
+                            .add_modifier(Modifier::BOLD),
+                    )
+                    .block(Block::default().borders(Borders::NONE));
+                f.render_widget(progress_widget, progress_area);
+            }
         }
 
         // Render command palette if visible (Bug #4: don't wipe terminal)
-        if self.command_palette.visible {
-            // First render terminal output underneath
-            self.render_terminal_output(f, content_area);
-            // Then render command palette overlay
-            self.render_command_palette(f, content_area);
-            return;
+        if let Some(ref palette) = self.command_palette {
+            if palette.visible {
+                // First render terminal output underneath
+                self.render_terminal_output(f, content_area);
+                // Then render command palette overlay
+                self.render_command_palette(f, content_area);
+                return;
+            }
         }
 
         // Render terminal output (Bug #3: use cached styled lines)
         self.render_terminal_output(f, content_area);
 
         // Render resource monitor if enabled (Bug #23: take &self not &mut self)
-        if self.show_resources {
+        if self.show_resources && self.resource_monitor.is_some() {
             self.render_resource_monitor(f, resource_area);
         }
     }
@@ -1201,78 +1056,12 @@ impl Terminal {
         f.render_widget(paragraph, area);
     }
 
-    /// Render SSH manager overlay
-    fn render_ssh_manager(&self, f: &mut ratatui::Frame, area: Rect) {
-        let popup_area = centered_popup(area, 80, 25);
-
-        // Clear just the popup area (not the whole screen)
-        f.render_widget(Clear, popup_area);
-
-        let items: Vec<ListItem> = self
-            .ssh_manager
-            .filtered_connections
-            .iter()
-            .enumerate()
-            .filter_map(|(i, name)| {
-                self.ssh_manager.get_connection(name).map(|conn| {
-                    let content =
-                        format!("{} ({}@{}:{})", name, conn.username, conn.host, conn.port);
-
-                    let style = if i == self.ssh_manager.selected_index {
-                        Style::default()
-                            .fg(Color::Rgb(
-                                COLOR_PURE_BLACK.0,
-                                COLOR_PURE_BLACK.1,
-                                COLOR_PURE_BLACK.2,
-                            ))
-                            .bg(Color::Rgb(
-                                COLOR_COOL_RED.0,
-                                COLOR_COOL_RED.1,
-                                COLOR_COOL_RED.2,
-                            ))
-                            .add_modifier(Modifier::BOLD)
-                    } else {
-                        Style::default().fg(Color::Rgb(
-                            COLOR_REDDISH_GRAY.0,
-                            COLOR_REDDISH_GRAY.1,
-                            COLOR_REDDISH_GRAY.2,
-                        ))
-                    };
-
-                    ListItem::new(content).style(style)
-                })
-            })
-            .collect();
-
-        let title = if self.ssh_manager.filter_input.is_empty() {
-            String::from("SSH Connections (Ctrl+Shift+S to close, Enter to connect, Del to remove)")
-        } else {
-            format!(
-                "SSH Connections - Filter: {}",
-                self.ssh_manager.filter_input
-            )
-        };
-
-        let list =
-            List::new(items)
-                .block(Block::default().borders(Borders::ALL).title(title).style(
-                    Style::default().bg(Color::Rgb(
-                        COLOR_PURE_BLACK.0,
-                        COLOR_PURE_BLACK.1,
-                        COLOR_PURE_BLACK.2,
-                    )),
-                ))
-                .style(Style::default().fg(Color::Rgb(
-                    COLOR_REDDISH_GRAY.0,
-                    COLOR_REDDISH_GRAY.1,
-                    COLOR_REDDISH_GRAY.2,
-                )));
-
-        f.render_widget(list, popup_area);
-    }
-
     /// Render command palette overlay (Bug #4: don't wipe terminal)
     fn render_command_palette(&self, f: &mut ratatui::Frame, area: Rect) {
+        let Some(ref palette) = self.command_palette else {
+            return;
+        };
+
         let popup_area = centered_popup(area, 80, 20);
 
         // Bug #4: Clear only the popup area, not the entire screen
@@ -1284,7 +1073,7 @@ impl Terminal {
             .split(popup_area);
 
         // Input box
-        let input = Paragraph::new(format!("> {}", self.command_palette.input))
+        let input = Paragraph::new(format!("> {}", palette.input))
             .style(
                 Style::default()
                     .fg(Color::Rgb(
@@ -1316,13 +1105,12 @@ impl Terminal {
         f.render_widget(input, palette_chunks[0]);
 
         // Suggestions
-        let suggestions: Vec<Line> = self
-            .command_palette
+        let suggestions: Vec<Line> = palette
             .suggestions
             .iter()
             .enumerate()
             .map(|(i, s)| {
-                let style = if i == self.command_palette.selected_index {
+                let style = if i == palette.selected_index {
                     Style::default()
                         .fg(Color::Rgb(
                             COLOR_COOL_RED.0,
@@ -1376,7 +1164,11 @@ impl Terminal {
 
     /// Render resource monitor (Bug #23: doesn't need &mut self)
     fn render_resource_monitor(&mut self, f: &mut ratatui::Frame, area: Rect) {
-        let stats = self.resource_monitor.get_stats();
+        let Some(ref mut monitor) = self.resource_monitor else {
+            return;
+        };
+        
+        let stats = monitor.get_stats();
 
         let text = format!(
             " CPU: {:.1}% ({} cores) | Memory: {} / {} ({:.1}%) | Processes: {} | Network: ↓{} ↑{} ",

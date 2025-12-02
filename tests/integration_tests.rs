@@ -6,26 +6,33 @@ mod config_tests {
     #[test]
     fn test_default_config() {
         let config = Config::default();
-        assert!(config.terminal.enable_tabs);
-        assert!(config.terminal.enable_split_pane);
+        assert!(!config.terminal.enable_tabs);
+        assert!(!config.terminal.enable_split_pane);
         assert_eq!(config.terminal.scrollback_lines, 10000);
         assert!(config.terminal.hardware_acceleration);
     }
 
     #[test]
-    fn test_config_save_load() {
+    fn test_config_load() {
         let dir = tempdir().unwrap();
-        let config_path = dir.path().join("test_config.yaml");
+        let config_path = dir.path().join("test_config.lua");
 
-        let config = Config::default();
-        config.save_to_file(&config_path).unwrap();
+        // Create a simple Lua config
+        let lua_config = r##"
+config = {
+    terminal = {
+        max_history = 5000
+    },
+    theme = {
+        foreground = "#AABBCC"
+    }
+}
+"##;
+        std::fs::write(&config_path, lua_config).unwrap();
 
         let loaded_config = Config::load_from_file(&config_path).unwrap();
-        assert_eq!(
-            config.terminal.max_history,
-            loaded_config.terminal.max_history
-        );
-        assert_eq!(config.theme.foreground, loaded_config.theme.foreground);
+        assert_eq!(loaded_config.terminal.max_history, 5000);
+        assert_eq!(loaded_config.theme.foreground, "#AABBCC");
     }
 
     #[test]
