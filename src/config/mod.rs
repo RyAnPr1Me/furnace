@@ -1,62 +1,50 @@
 use anyhow::{Context, Result};
-use serde::{Deserialize, Serialize};
+use mlua::{Lua, Table};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
 /// Main configuration structure with zero-copy design for performance
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct Config {
-    #[serde(default)]
     pub shell: ShellConfig,
-    #[serde(default)]
     pub terminal: TerminalConfig,
-    #[serde(default)]
     pub theme: ThemeConfig,
-    #[serde(default)]
     pub keybindings: KeyBindings,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct ShellConfig {
     pub default_shell: String,
-    #[serde(default)]
     pub env: HashMap<String, String>,
     pub working_dir: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct TerminalConfig {
     /// Maximum command history entries (memory-efficient circular buffer)
-    #[serde(default = "default_max_history")]
     pub max_history: usize,
 
     /// Enable tabs for multiple sessions
-    #[serde(default = "default_false")]
     pub enable_tabs: bool,
 
     /// Enable split panes
-    #[serde(default = "default_false")]
     pub enable_split_pane: bool,
 
     /// Font size
-    #[serde(default = "default_font_size")]
     pub font_size: u16,
 
     /// Cursor style: block, underline, bar
-    #[serde(default = "default_cursor_style")]
     pub cursor_style: String,
 
     /// Number of scrollback lines (memory-mapped for large buffers)
-    #[serde(default = "default_scrollback")]
     pub scrollback_lines: usize,
 
     /// Hardware acceleration for rendering
-    #[serde(default = "default_true")]
     pub hardware_acceleration: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct ThemeConfig {
     pub name: String,
     pub foreground: String,
@@ -66,7 +54,7 @@ pub struct ThemeConfig {
     pub colors: AnsiColors,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct AnsiColors {
     pub black: String,
     pub red: String,
@@ -86,7 +74,7 @@ pub struct AnsiColors {
     pub bright_white: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct KeyBindings {
     pub new_tab: String,
     pub close_tab: String,
@@ -98,31 +86,6 @@ pub struct KeyBindings {
     pub paste: String,
     pub search: String,
     pub clear: String,
-}
-
-// Default value functions for serde - use const where possible for compile-time evaluation
-const fn default_max_history() -> usize {
-    10_000
-}
-
-const fn default_true() -> bool {
-    true
-}
-
-const fn default_false() -> bool {
-    false
-}
-
-const fn default_font_size() -> u16 {
-    12
-}
-
-fn default_cursor_style() -> String {
-    String::from("block")
-}
-
-const fn default_scrollback() -> usize {
-    10_000
 }
 
 impl Default for ShellConfig {
@@ -149,6 +112,46 @@ impl Default for TerminalConfig {
     }
 }
 
+impl ShellConfig {
+    fn from_lua_table(table: &Table) -> Result<Self> {
+        let default_shell = table.get::<_, Option<String>>("default_shell")?
+            .unwrap_or_else(detect_default_shell);
+        
+        let env = if let Ok(env_table) = table.get::<_, Table>("env") {
+            let mut map = HashMap::new();
+            for pair in env_table.pairs::<String, String>() {
+                let (key, value) = pair?;
+                map.insert(key, value);
+            }
+            map
+        } else {
+            HashMap::new()
+        };
+
+        let working_dir = table.get::<_, Option<String>>("working_dir")?;
+
+        Ok(Self {
+            default_shell,
+            env,
+            working_dir,
+        })
+    }
+}
+
+impl TerminalConfig {
+    fn from_lua_table(table: &Table) -> Result<Self> {
+        Ok(Self {
+            max_history: table.get::<_, Option<usize>>("max_history")?.unwrap_or(10000),
+            enable_tabs: table.get::<_, Option<bool>>("enable_tabs")?.unwrap_or(false),
+            enable_split_pane: table.get::<_, Option<bool>>("enable_split_pane")?.unwrap_or(false),
+            font_size: table.get::<_, Option<u16>>("font_size")?.unwrap_or(12),
+            cursor_style: table.get::<_, Option<String>>("cursor_style")?.unwrap_or_else(|| "block".to_string()),
+            scrollback_lines: table.get::<_, Option<usize>>("scrollback_lines")?.unwrap_or(10000),
+            hardware_acceleration: table.get::<_, Option<bool>>("hardware_acceleration")?.unwrap_or(true),
+        })
+    }
+}
+
 impl Default for ThemeConfig {
     fn default() -> Self {
         Self {
@@ -159,6 +162,31 @@ impl Default for ThemeConfig {
             selection: "#264F78".to_string(),
             colors: AnsiColors::default(),
         }
+    }
+}
+
+impl ThemeConfig {
+    fn from_lua_table(table: &Table) -> Result<Self> {
+        let name = table.get::<_, Option<String>>("name")?.unwrap_or_else(|| "default".to_string());
+        let foreground = table.get::<_, Option<String>>("foreground")?.unwrap_or_else(|| "#FFFFFF".to_string());
+        let background = table.get::<_, Option<String>>("background")?.unwrap_or_else(|| "#1E1E1E".to_string());
+        let cursor = table.get::<_, Option<String>>("cursor")?.unwrap_or_else(|| "#00FF00".to_string());
+        let selection = table.get::<_, Option<String>>("selection")?.unwrap_or_else(|| "#264F78".to_string());
+        
+        let colors = if let Ok(colors_table) = table.get::<_, Table>("colors") {
+            AnsiColors::from_lua_table(&colors_table)?
+        } else {
+            AnsiColors::default()
+        };
+
+        Ok(Self {
+            name,
+            foreground,
+            background,
+            cursor,
+            selection,
+            colors,
+        })
     }
 }
 
@@ -185,6 +213,29 @@ impl Default for AnsiColors {
     }
 }
 
+impl AnsiColors {
+    fn from_lua_table(table: &Table) -> Result<Self> {
+        Ok(Self {
+            black: table.get::<_, Option<String>>("black")?.unwrap_or_else(|| "#000000".to_string()),
+            red: table.get::<_, Option<String>>("red")?.unwrap_or_else(|| "#FF0000".to_string()),
+            green: table.get::<_, Option<String>>("green")?.unwrap_or_else(|| "#00FF00".to_string()),
+            yellow: table.get::<_, Option<String>>("yellow")?.unwrap_or_else(|| "#FFFF00".to_string()),
+            blue: table.get::<_, Option<String>>("blue")?.unwrap_or_else(|| "#0000FF".to_string()),
+            magenta: table.get::<_, Option<String>>("magenta")?.unwrap_or_else(|| "#FF00FF".to_string()),
+            cyan: table.get::<_, Option<String>>("cyan")?.unwrap_or_else(|| "#00FFFF".to_string()),
+            white: table.get::<_, Option<String>>("white")?.unwrap_or_else(|| "#FFFFFF".to_string()),
+            bright_black: table.get::<_, Option<String>>("bright_black")?.unwrap_or_else(|| "#808080".to_string()),
+            bright_red: table.get::<_, Option<String>>("bright_red")?.unwrap_or_else(|| "#FF8080".to_string()),
+            bright_green: table.get::<_, Option<String>>("bright_green")?.unwrap_or_else(|| "#80FF80".to_string()),
+            bright_yellow: table.get::<_, Option<String>>("bright_yellow")?.unwrap_or_else(|| "#FFFF80".to_string()),
+            bright_blue: table.get::<_, Option<String>>("bright_blue")?.unwrap_or_else(|| "#8080FF".to_string()),
+            bright_magenta: table.get::<_, Option<String>>("bright_magenta")?.unwrap_or_else(|| "#FF80FF".to_string()),
+            bright_cyan: table.get::<_, Option<String>>("bright_cyan")?.unwrap_or_else(|| "#80FFFF".to_string()),
+            bright_white: table.get::<_, Option<String>>("bright_white")?.unwrap_or_else(|| "#FFFFFF".to_string()),
+        })
+    }
+}
+
 impl Default for KeyBindings {
     fn default() -> Self {
         Self {
@@ -199,6 +250,23 @@ impl Default for KeyBindings {
             search: "Ctrl+F".to_string(),
             clear: "Ctrl+L".to_string(),
         }
+    }
+}
+
+impl KeyBindings {
+    fn from_lua_table(table: &Table) -> Result<Self> {
+        Ok(Self {
+            new_tab: table.get::<_, Option<String>>("new_tab")?.unwrap_or_else(|| "Ctrl+T".to_string()),
+            close_tab: table.get::<_, Option<String>>("close_tab")?.unwrap_or_else(|| "Ctrl+W".to_string()),
+            next_tab: table.get::<_, Option<String>>("next_tab")?.unwrap_or_else(|| "Ctrl+Tab".to_string()),
+            prev_tab: table.get::<_, Option<String>>("prev_tab")?.unwrap_or_else(|| "Ctrl+Shift+Tab".to_string()),
+            split_vertical: table.get::<_, Option<String>>("split_vertical")?.unwrap_or_else(|| "Ctrl+Shift+V".to_string()),
+            split_horizontal: table.get::<_, Option<String>>("split_horizontal")?.unwrap_or_else(|| "Ctrl+Shift+H".to_string()),
+            copy: table.get::<_, Option<String>>("copy")?.unwrap_or_else(|| "Ctrl+Shift+C".to_string()),
+            paste: table.get::<_, Option<String>>("paste")?.unwrap_or_else(|| "Ctrl+Shift+V".to_string()),
+            search: table.get::<_, Option<String>>("search")?.unwrap_or_else(|| "Ctrl+F".to_string()),
+            clear: table.get::<_, Option<String>>("clear")?.unwrap_or_else(|| "Ctrl+L".to_string()),
+        })
     }
 }
 
@@ -217,34 +285,54 @@ impl Config {
         }
     }
 
-    /// Load configuration from a specific file
+    /// Load configuration from a Lua file
     ///
     /// # Errors
-    /// Returns an error if the file cannot be read or the YAML is invalid
+    /// Returns an error if the file cannot be read or the Lua is invalid
     pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
         let contents = fs::read_to_string(path.as_ref()).context("Failed to read config file")?;
 
-        let config: Self =
-            serde_yaml::from_str(&contents).context("Failed to parse config file")?;
+        let lua = Lua::new();
+        lua.load(&contents).exec().context("Failed to execute Lua config")?;
 
-        Ok(config)
+        let globals = lua.globals();
+        let config_table: Table = globals.get("config").context("Config table not found in Lua file")?;
+
+        Ok(Self::from_lua_table(&config_table)?)
     }
 
-    /// Save configuration to file
-    ///
-    /// # Errors
-    /// Returns an error if the file cannot be written or serialization fails
-    #[allow(dead_code)] // Public API method
-    pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> Result<()> {
-        let contents = serde_yaml::to_string(self).context("Failed to serialize config")?;
+    /// Parse configuration from a Lua table
+    fn from_lua_table(table: &Table) -> Result<Self> {
+        let shell = if let Ok(shell_table) = table.get::<_, Table>("shell") {
+            ShellConfig::from_lua_table(&shell_table)?
+        } else {
+            ShellConfig::default()
+        };
 
-        if let Some(parent) = path.as_ref().parent() {
-            fs::create_dir_all(parent).context("Failed to create config directory")?;
-        }
+        let terminal = if let Ok(terminal_table) = table.get::<_, Table>("terminal") {
+            TerminalConfig::from_lua_table(&terminal_table)?
+        } else {
+            TerminalConfig::default()
+        };
 
-        fs::write(path.as_ref(), contents).context("Failed to write config file")?;
+        let theme = if let Ok(theme_table) = table.get::<_, Table>("theme") {
+            ThemeConfig::from_lua_table(&theme_table)?
+        } else {
+            ThemeConfig::default()
+        };
 
-        Ok(())
+        let keybindings = if let Ok(kb_table) = table.get::<_, Table>("keybindings") {
+            KeyBindings::from_lua_table(&kb_table)?
+        } else {
+            KeyBindings::default()
+        };
+
+        Ok(Self {
+            shell,
+            terminal,
+            theme,
+            keybindings,
+        })
     }
 
     /// Get default configuration path
@@ -254,7 +342,7 @@ impl Config {
     pub fn default_config_path() -> Result<PathBuf> {
         let home = dirs::home_dir().context("Failed to get home directory")?;
 
-        Ok(home.join(".furnace").join("config.yaml"))
+        Ok(home.join(".furnace").join("config.lua"))
     }
 }
 
@@ -295,13 +383,20 @@ mod tests {
     }
 
     #[test]
-    fn test_config_deserialization() {
-        let yaml = r"
-terminal:
-  enable_tabs: true
-  enable_split_pane: true
-";
-        let config: Config = serde_yaml::from_str(yaml).unwrap();
+    fn test_lua_config_deserialization() {
+        let lua_config = r#"
+config = {
+    terminal = {
+        enable_tabs = true,
+        enable_split_pane = true
+    }
+}
+"#;
+        let lua = Lua::new();
+        lua.load(lua_config).exec().unwrap();
+        let globals = lua.globals();
+        let config_table: Table = globals.get("config").unwrap();
+        let config = Config::from_lua_table(&config_table).unwrap();
         assert!(config.terminal.enable_tabs);
         assert!(config.terminal.enable_split_pane);
     }

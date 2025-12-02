@@ -146,14 +146,19 @@ mod config_tests {
     }
 
     #[test]
-    fn test_config_save_and_load() {
+    fn test_config_load() {
         let dir = tempdir().unwrap();
-        let config_path = dir.path().join("test_config.yaml");
+        let config_path = dir.path().join("test_config.lua");
 
-        // Create and save config
-        let mut config = Config::default();
-        config.terminal.max_history = 5000;
-        config.save_to_file(&config_path).unwrap();
+        // Create a Lua config
+        let lua_config = r##"
+config = {
+    terminal = {
+        max_history = 5000
+    }
+}
+"##;
+        std::fs::write(&config_path, lua_config).unwrap();
 
         // Load and verify
         let loaded = Config::load_from_file(&config_path).unwrap();
