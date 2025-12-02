@@ -7,7 +7,7 @@ Build Date: 2025-12-02
 Rust Version: 1.91.1 (ed61e7d7e 2025-11-07)
 
 Available Platforms:
-- Windows x86_64 (furnace-windows-x86_64.exe) - 1.5MB
+- Windows x86_64 (furnace-windows-x86_64.exe) - 1.9MB
 - Linux x86_64 (furnace-linux-x86_64) - 2.2MB
 
 Optimization: Release with LTO
