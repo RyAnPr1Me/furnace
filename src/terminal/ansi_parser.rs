@@ -13,9 +13,15 @@ use ratatui::text::{Line, Span};
 use vte::{Params, Parser, Perform};
 
 /// Convert a u16 color value to u8, clamping to valid range
+/// This is marked inline to allow the compiler to optimize it away when possible
 #[inline]
-fn to_color_u8(value: u16) -> u8 {
-    value.min(255) as u8
+#[must_use]
+const fn to_color_u8(value: u16) -> u8 {
+    if value > 255 {
+        255
+    } else {
+        value as u8
+    }
 }
 
 /// ANSI parser that converts escape sequences to styled ratatui spans
