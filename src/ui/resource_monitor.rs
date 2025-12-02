@@ -164,7 +164,7 @@ impl ResourceMonitor {
     pub fn format_bytes(bytes: u64) -> String {
         const UNITS: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
         const DIVISOR: f64 = 1024.0;
-        
+
         let mut size = bytes as f64;
         let mut unit_index = 0;
 
