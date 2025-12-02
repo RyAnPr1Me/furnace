@@ -13,26 +13,31 @@ Furnace is built with **Rust** for:
 
 ## Features
 
-### Core Features
+### Core Features (Always Available)
 - **Native Performance**: Written in Rust with aggressive optimizations (LTO, codegen-units=1)
 - **Memory Safe**: Compile-time guarantees prevent memory leaks and data races
 - **GPU-Accelerated Rendering**: Ultra-smooth visuals at 170 FPS (vs 60 FPS in most terminals) - enabled by default
 - **24-bit True Color Support**: Full RGB color spectrum with 16.7 million colors
-- **Multiple Tabs**: Efficient tab management for multiple shell sessions (can be enabled in config)
-- **Split Panes**: Divide your workspace horizontally and vertically (can be enabled in config)
 - **Rich Text Rendering**: Full Unicode support with hardware-accelerated rendering
-- **Advanced Themes**: Built-in themes (Dark, Light, Nord) with full customization
 - **Custom Backgrounds**: Support for image backgrounds with opacity, blur, and multiple display modes
 - **Cursor Trails**: Configurable cursor trail effects with customizable length, color, and fade modes
-- **System Resource Monitor**: Real-time CPU, memory, and process monitoring (Ctrl+R)
-- **Smart Command Palette**: Fuzzy search command launcher (Ctrl+P)
-- **Advanced Autocomplete**: Context-aware command completion with history
 - **Lua Configuration**: Extremely customizable configuration using Lua scripting with dynamic runtime logic
 - **Enhanced Keybindings**: Fully customizable keyboard shortcuts
-- **Session Management**: Save and restore terminal sessions with full state
 - **Shell Integration**: Advanced shell integration with directory tracking and OSC sequences
 - **Command History**: Efficient circular buffer for command history
 - **Smart Scrollback**: Memory-mapped large scrollback buffers
+
+### Optional Features (Enable in Config)
+All UI features are **disabled by default** to minimize resource usage. Enable only what you need in `config.lua`:
+
+- **Multiple Tabs**: Efficient tab management for multiple shell sessions (`terminal.enable_tabs = true`)
+- **Split Panes**: Divide your workspace horizontally and vertically (`terminal.enable_split_pane = true`)
+- **Command Palette**: Fuzzy search command launcher - Ctrl+P (`features.command_palette = true`)
+- **Resource Monitor**: Real-time CPU, memory, and process monitoring - Ctrl+R (`features.resource_monitor = true`)
+- **Autocomplete**: Context-aware command completion with history (`features.autocomplete = true`)
+- **Progress Bar**: Visual indicator for long-running commands (`features.progress_bar = true`)
+- **Session Manager**: Save and restore terminal sessions (`features.session_manager = true`)
+- **Theme Manager**: Dynamic theme switching (`features.theme_manager = true`)
 
 ### Performance Optimizations
 - **Zero-cost abstractions**: No runtime overhead
@@ -85,7 +90,7 @@ furnace --shell powershell.exe
 
 Furnace uses Lua for extremely customizable configuration. Default location: `~/.furnace/config.lua`
 
-> **Note**: Tabs and split panes are **disabled by default** as of v1.0. You can enable them in your config file if needed.
+> **Note**: All UI features are **disabled by default** for minimal resource usage. Only GPU acceleration is enabled by default. Enable features you need in the config.
 
 ### Basic Example
 
@@ -105,6 +110,16 @@ config = {
         cursor_style = "block",
         scrollback_lines = 10000,
         hardware_acceleration = true   -- GPU acceleration enabled by default
+    },
+
+    -- Optional UI features (all disabled by default)
+    features = {
+        command_palette = false,     -- Enable Ctrl+P command launcher
+        resource_monitor = false,    -- Enable Ctrl+R resource monitor
+        autocomplete = false,        -- Enable command autocomplete
+        progress_bar = false,        -- Enable progress indicator
+        session_manager = false,     -- Enable session save/restore
+        theme_manager = false        -- Enable theme switching
     },
 
     theme = {

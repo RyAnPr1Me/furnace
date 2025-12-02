@@ -103,6 +103,17 @@ config = {
         -- }
     },
 
+    -- Optional UI Features (all disabled by default for minimal resource usage)
+    -- Uncomment and set to true to enable specific features
+    features = {
+        command_palette = false,     -- Enable command palette (Ctrl+P)
+        resource_monitor = false,    -- Enable resource monitor (Ctrl+R) - shows CPU/memory
+        autocomplete = false,        -- Enable command autocomplete
+        progress_bar = false,        -- Enable progress bar for running commands
+        session_manager = false,     -- Enable session save/restore
+        theme_manager = false        -- Enable theme switching
+    },
+
     -- Keyboard shortcuts
     -- You can customize these to match your workflow
     keybindings = {

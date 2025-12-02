@@ -11,6 +11,7 @@ pub struct Config {
     pub terminal: TerminalConfig,
     pub theme: ThemeConfig,
     pub keybindings: KeyBindings,
+    pub features: FeaturesConfig,
 }
 
 #[derive(Debug, Clone)]
@@ -118,6 +119,48 @@ pub struct KeyBindings {
     pub paste: String,
     pub search: String,
     pub clear: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct FeaturesConfig {
+    /// Enable command palette (Ctrl+P)
+    pub command_palette: bool,
+    /// Enable resource monitor (Ctrl+R)
+    pub resource_monitor: bool,
+    /// Enable autocomplete suggestions
+    pub autocomplete: bool,
+    /// Enable progress bar for long-running commands
+    pub progress_bar: bool,
+    /// Enable session save/restore
+    pub session_manager: bool,
+    /// Enable theme manager for theme switching
+    pub theme_manager: bool,
+}
+
+impl Default for FeaturesConfig {
+    fn default() -> Self {
+        Self {
+            command_palette: false,
+            resource_monitor: false,
+            autocomplete: false,
+            progress_bar: false,
+            session_manager: false,
+            theme_manager: false,
+        }
+    }
+}
+
+impl FeaturesConfig {
+    fn from_lua_table(table: &Table) -> Result<Self> {
+        Ok(Self {
+            command_palette: table.get::<_, Option<bool>>("command_palette")?.unwrap_or(false),
+            resource_monitor: table.get::<_, Option<bool>>("resource_monitor")?.unwrap_or(false),
+            autocomplete: table.get::<_, Option<bool>>("autocomplete")?.unwrap_or(false),
+            progress_bar: table.get::<_, Option<bool>>("progress_bar")?.unwrap_or(false),
+            session_manager: table.get::<_, Option<bool>>("session_manager")?.unwrap_or(false),
+            theme_manager: table.get::<_, Option<bool>>("theme_manager")?.unwrap_or(false),
+        })
+    }
 }
 
 impl Default for ShellConfig {
@@ -434,11 +477,18 @@ impl Config {
             KeyBindings::default()
         };
 
+        let features = if let Ok(features_table) = table.get::<_, Table>("features") {
+            FeaturesConfig::from_lua_table(&features_table)?
+        } else {
+            FeaturesConfig::default()
+        };
+
         Ok(Self {
             shell,
             terminal,
             theme,
             keybindings,
+            features,
         })
     }
 

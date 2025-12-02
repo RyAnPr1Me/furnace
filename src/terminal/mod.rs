@@ -100,19 +100,17 @@ pub struct Terminal {
     active_session: usize,
     output_buffers: Vec<Vec<u8>>,
     should_quit: bool,
-    command_palette: CommandPalette,
-    resource_monitor: ResourceMonitor,
-    #[allow(dead_code)]
-    autocomplete: Autocomplete,
+    command_palette: Option<CommandPalette>,
+    resource_monitor: Option<ResourceMonitor>,
+    autocomplete: Option<Autocomplete>,
     show_resources: bool,
     #[allow(dead_code)]
     keybindings: KeybindingManager,
-    #[allow(dead_code)]
-    session_manager: SessionManager,
+    session_manager: Option<SessionManager>,
     #[allow(dead_code)]
     color_palette: TrueColorPalette,
     // Theme manager for dynamic theme switching
-    theme_manager: ThemeManager,
+    theme_manager: Option<ThemeManager>,
     // Performance optimization: track if redraw is needed
     dirty: bool,
     // Reusable read buffer to reduce allocations
@@ -125,7 +123,7 @@ pub struct Terminal {
     notification_message: Option<String>,
     notification_frames: u64,
     // Progress bar for command execution
-    progress_bar: ProgressBar,
+    progress_bar: Option<ProgressBar>,
     // Current terminal size for proper tab creation (Bug #7)
     terminal_cols: u16,
     terminal_rows: u16,
@@ -143,29 +141,46 @@ impl Terminal {
     pub fn new(config: Config) -> Result<Self> {
         info!("Initializing Furnace terminal emulator with 170 FPS GPU rendering + 24-bit color");
 
-        // Initialize theme manager with custom themes directory
-        let theme_manager = match ThemeManager::default_themes_dir() {
-            Ok(themes_dir) => match ThemeManager::with_themes_dir(&themes_dir) {
-                Ok(manager) => {
-                    debug!(
-                        "Theme manager initialized with custom themes from {:?}",
-                        themes_dir
-                    );
-                    manager
-                }
+        // Initialize optional theme manager based on config
+        let theme_manager = if config.features.theme_manager {
+            match ThemeManager::default_themes_dir() {
+                Ok(themes_dir) => match ThemeManager::with_themes_dir(&themes_dir) {
+                    Ok(manager) => {
+                        debug!(
+                            "Theme manager initialized with custom themes from {:?}",
+                            themes_dir
+                        );
+                        Some(manager)
+                    }
+                    Err(e) => {
+                        warn!(
+                            "Failed to initialize theme manager with custom themes: {}",
+                            e
+                        );
+                        Some(ThemeManager::new())
+                    }
+                },
                 Err(e) => {
-                    warn!(
-                        "Failed to initialize theme manager with custom themes: {}",
-                        e
-                    );
-                    ThemeManager::new()
+                    warn!("Could not determine themes directory: {}", e);
+                    Some(ThemeManager::new())
                 }
-            },
-            Err(e) => {
-                warn!("Could not determine themes directory: {}", e);
-                ThemeManager::new()
             }
+        } else {
+            None
         };
+
+        // Initialize optional session manager
+        let session_manager = if config.features.session_manager {
+            Some(SessionManager::new()?)
+        } else {
+            None
+        };
+
+        // Capture feature flags before moving config
+        let enable_command_palette = config.features.command_palette;
+        let enable_resource_monitor = config.features.resource_monitor;
+        let enable_autocomplete = config.features.autocomplete;
+        let enable_progress_bar = config.features.progress_bar;
 
         Ok(Self {
             config,
@@ -173,12 +188,24 @@ impl Terminal {
             active_session: 0,
             output_buffers: Vec::with_capacity(8),
             should_quit: false,
-            command_palette: CommandPalette::new(),
-            resource_monitor: ResourceMonitor::new(),
-            autocomplete: Autocomplete::new(),
+            command_palette: if enable_command_palette {
+                Some(CommandPalette::new())
+            } else {
+                None
+            },
+            resource_monitor: if enable_resource_monitor {
+                Some(ResourceMonitor::new())
+            } else {
+                None
+            },
+            autocomplete: if enable_autocomplete {
+                Some(Autocomplete::new())
+            } else {
+                None
+            },
             show_resources: false,
             keybindings: KeybindingManager::new(),
-            session_manager: SessionManager::new()?,
+            session_manager,
             color_palette: TrueColorPalette::default_dark(),
             theme_manager,
             dirty: true,
@@ -187,7 +214,11 @@ impl Terminal {
             command_buffers: Vec::with_capacity(8),
             notification_message: None,
             notification_frames: 0,
-            progress_bar: ProgressBar::new(),
+            progress_bar: if enable_progress_bar {
+                Some(ProgressBar::new())
+            } else {
+                None
+            },
             terminal_cols: 80,
             terminal_rows: 24,
             cached_styled_lines: Vec::with_capacity(8),
@@ -401,10 +432,20 @@ impl Terminal {
                                 self.dirty = true;
 
                                 // Bug #9: Improved prompt detection for various shells
-                                if self.progress_bar.visible {
-                                    let recent_output = String::from_utf8_lossy(&self.read_buffer[..n]);
-                                    if self.detect_prompt(&recent_output) {
-                                        self.progress_bar.stop();
+                                let should_stop_progress = if let Some(ref pb) = self.progress_bar {
+                                    if pb.visible {
+                                        let recent_output = String::from_utf8_lossy(&self.read_buffer[..n]);
+                                        self.detect_prompt(&recent_output)
+                                    } else {
+                                        false
+                                    }
+                                } else {
+                                    false
+                                };
+                                
+                                if should_stop_progress {
+                                    if let Some(ref mut pb) = self.progress_bar {
+                                        pb.stop();
                                     }
                                 }
 
@@ -422,9 +463,11 @@ impl Terminal {
                 // Render at consistent frame rate
                 _ = render_interval.tick() => {
                     // Update progress bar spinner (only if visible)
-                    if self.progress_bar.visible {
-                        self.progress_bar.tick();
-                        self.dirty = true;
+                    if let Some(ref mut pb) = self.progress_bar {
+                        if pb.visible {
+                            pb.tick();
+                            self.dirty = true;
+                        }
                     }
 
                     // Bug #11: Only decrement notification counter when actually rendering
@@ -489,23 +532,29 @@ impl Terminal {
     /// Handle keyboard events with optimal input processing
     async fn handle_key_event(&mut self, key: KeyEvent) -> Result<()> {
         // Command palette takes priority
-        if self.command_palette.visible {
-            return self.handle_command_palette_input(key).await;
+        if let Some(ref palette) = self.command_palette {
+            if palette.visible {
+                return self.handle_command_palette_input(key).await;
+            }
         }
 
         match (key.code, key.modifiers) {
             // Command palette (Ctrl+P)
             (KeyCode::Char('p'), KeyModifiers::CONTROL) => {
-                self.command_palette.toggle();
+                if let Some(ref mut palette) = self.command_palette {
+                    palette.toggle();
+                }
             }
 
             // Toggle resource monitor (Ctrl+R)
             (KeyCode::Char('r'), KeyModifiers::CONTROL) => {
-                self.show_resources = !self.show_resources;
-                debug!(
-                    "Resource monitor: {}",
-                    if self.show_resources { "ON" } else { "OFF" }
-                );
+                if self.resource_monitor.is_some() {
+                    self.show_resources = !self.show_resources;
+                    debug!(
+                        "Resource monitor: {}",
+                        if self.show_resources { "ON" } else { "OFF" }
+                    );
+                }
             }
 
             // Quit (Ctrl+C or Ctrl+D)
@@ -630,8 +679,10 @@ impl Terminal {
 
             // Start progress bar (Bug #24: avoid clone)
             if !command.trim().is_empty() {
-                self.progress_bar.start_ref(&command);
-                self.dirty = true;
+                if let Some(ref mut pb) = self.progress_bar {
+                    pb.start_ref(&command);
+                    self.dirty = true;
+                }
             }
 
             // Clear command buffer
@@ -642,34 +693,34 @@ impl Terminal {
         Ok(())
     }
 
-    /// Handle SSH manager input
-
     /// Handle command palette input
     async fn handle_command_palette_input(&mut self, key: KeyEvent) -> Result<()> {
+        let Some(ref mut palette) = self.command_palette else {
+            return Ok(());
+        };
+
         match key.code {
             KeyCode::Esc => {
-                self.command_palette.toggle();
+                palette.toggle();
             }
             KeyCode::Enter => {
-                if let Some(command) = self.command_palette.execute_selected() {
+                if let Some(command) = palette.execute_selected() {
                     self.execute_command(&command).await?;
                 }
             }
             KeyCode::Up => {
-                self.command_palette.select_previous();
+                palette.select_previous();
             }
             KeyCode::Down => {
-                self.command_palette.select_next();
+                palette.select_next();
             }
             KeyCode::Char(c) => {
-                self.command_palette.input.push(c);
-                self.command_palette
-                    .update_input(self.command_palette.input.clone());
+                palette.input.push(c);
+                palette.update_input(palette.input.clone());
             }
             KeyCode::Backspace => {
-                self.command_palette.input.pop();
-                self.command_palette
-                    .update_input(self.command_palette.input.clone());
+                palette.input.pop();
+                palette.update_input(palette.input.clone());
             }
             _ => {}
         }
@@ -703,15 +754,17 @@ impl Terminal {
             }
             "theme" => {
                 // Cycle to next theme
-                self.theme_manager.next_theme();
-                let theme_name = self.theme_manager.current().name.clone();
-                self.notification_message = Some(format!("Theme: {theme_name}"));
-                self.notification_frames = TARGET_FPS * NOTIFICATION_DURATION_SECS;
-                // Force redraw with new theme
-                self.dirty = true;
-                // Invalidate all render caches to apply new theme
-                for len in &mut self.cached_buffer_lens {
-                    *len = 0;
+                if let Some(ref mut tm) = self.theme_manager {
+                    tm.next_theme();
+                    let theme_name = tm.current().name.clone();
+                    self.notification_message = Some(format!("Theme: {theme_name}"));
+                    self.notification_frames = TARGET_FPS * NOTIFICATION_DURATION_SECS;
+                    // Force redraw with new theme
+                    self.dirty = true;
+                    // Invalidate all render caches to apply new theme
+                    for len in &mut self.cached_buffer_lens {
+                        *len = 0;
+                    }
                 }
             }
             "quit" => {
@@ -719,23 +772,24 @@ impl Terminal {
             }
             cmd if cmd.starts_with("theme ") => {
                 // Switch to specific theme by name
-                // The strip_prefix is guaranteed to succeed due to the starts_with check
-                let theme_name = &cmd["theme ".len()..];
-                let theme_name = theme_name.trim();
-                if self.theme_manager.switch_theme(theme_name) {
-                    self.notification_message =
-                        Some(format!("Theme: {}", self.theme_manager.current().name));
-                    self.notification_frames = TARGET_FPS * NOTIFICATION_DURATION_SECS;
-                    self.dirty = true;
-                    // Invalidate all render caches
-                    for len in &mut self.cached_buffer_lens {
-                        *len = 0;
+                if let Some(ref mut tm) = self.theme_manager {
+                    let theme_name = &cmd["theme ".len()..];
+                    let theme_name = theme_name.trim();
+                    if tm.switch_theme(theme_name) {
+                        self.notification_message =
+                            Some(format!("Theme: {}", tm.current().name));
+                        self.notification_frames = TARGET_FPS * NOTIFICATION_DURATION_SECS;
+                        self.dirty = true;
+                        // Invalidate all render caches
+                        for len in &mut self.cached_buffer_lens {
+                            *len = 0;
+                        }
+                    } else {
+                        // Show available themes
+                        let available = tm.available_theme_names().join(", ");
+                        self.notification_message = Some(format!("Available themes: {available}"));
+                        self.notification_frames = TARGET_FPS * NOTIFICATION_DURATION_SECS;
                     }
-                } else {
-                    // Show available themes
-                    let available = self.theme_manager.available_theme_names().join(", ");
-                    self.notification_message = Some(format!("Available themes: {available}"));
-                    self.notification_frames = TARGET_FPS * NOTIFICATION_DURATION_SECS;
                 }
             }
             _ => {
@@ -812,6 +866,8 @@ impl Terminal {
 
     /// Render UI with hardware acceleration (Bug #3: zero-copy rendering)
     fn render(&mut self, f: &mut ratatui::Frame) {
+        let progress_visible = self.progress_bar.as_ref().map_or(false, |pb| pb.visible);
+        
         let main_chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
@@ -819,9 +875,9 @@ impl Terminal {
                     self.config.terminal.enable_tabs && self.sessions.len() > 1,
                 )),
                 Constraint::Length(u16::from(self.notification_message.is_some())),
-                Constraint::Length(u16::from(self.progress_bar.visible)),
+                Constraint::Length(u16::from(progress_visible)),
                 Constraint::Min(0),
-                Constraint::Length(if self.show_resources { 3 } else { 0 }),
+                Constraint::Length(if self.show_resources && self.resource_monitor.is_some() { 3 } else { 0 }),
             ])
             .split(f.size());
 
@@ -897,43 +953,45 @@ impl Terminal {
         }
 
         // Render progress bar if visible (Bug #15, #16, #17)
-        if self.progress_bar.visible {
-            let progress_text = self
-                .progress_bar
-                .display_text_truncated(MAX_PROGRESS_COMMAND_LEN);
-            let progress_widget = Paragraph::new(progress_text)
-                .style(
-                    Style::default()
-                        .fg(Color::Rgb(
-                            COLOR_MAGENTA_RED.0,
-                            COLOR_MAGENTA_RED.1,
-                            COLOR_MAGENTA_RED.2,
-                        ))
-                        .bg(Color::Rgb(
-                            COLOR_PURE_BLACK.0,
-                            COLOR_PURE_BLACK.1,
-                            COLOR_PURE_BLACK.2,
-                        ))
-                        .add_modifier(Modifier::BOLD),
-                )
-                .block(Block::default().borders(Borders::NONE));
-            f.render_widget(progress_widget, progress_area);
+        if let Some(ref pb) = self.progress_bar {
+            if pb.visible {
+                let progress_text = pb.display_text_truncated(MAX_PROGRESS_COMMAND_LEN);
+                let progress_widget = Paragraph::new(progress_text)
+                    .style(
+                        Style::default()
+                            .fg(Color::Rgb(
+                                COLOR_MAGENTA_RED.0,
+                                COLOR_MAGENTA_RED.1,
+                                COLOR_MAGENTA_RED.2,
+                            ))
+                            .bg(Color::Rgb(
+                                COLOR_PURE_BLACK.0,
+                                COLOR_PURE_BLACK.1,
+                                COLOR_PURE_BLACK.2,
+                            ))
+                            .add_modifier(Modifier::BOLD),
+                    )
+                    .block(Block::default().borders(Borders::NONE));
+                f.render_widget(progress_widget, progress_area);
+            }
         }
 
         // Render command palette if visible (Bug #4: don't wipe terminal)
-        if self.command_palette.visible {
-            // First render terminal output underneath
-            self.render_terminal_output(f, content_area);
-            // Then render command palette overlay
-            self.render_command_palette(f, content_area);
-            return;
+        if let Some(ref palette) = self.command_palette {
+            if palette.visible {
+                // First render terminal output underneath
+                self.render_terminal_output(f, content_area);
+                // Then render command palette overlay
+                self.render_command_palette(f, content_area);
+                return;
+            }
         }
 
         // Render terminal output (Bug #3: use cached styled lines)
         self.render_terminal_output(f, content_area);
 
         // Render resource monitor if enabled (Bug #23: take &self not &mut self)
-        if self.show_resources {
+        if self.show_resources && self.resource_monitor.is_some() {
             self.render_resource_monitor(f, resource_area);
         }
     }
@@ -998,10 +1056,12 @@ impl Terminal {
         f.render_widget(paragraph, area);
     }
 
-    /// Render SSH manager overlay
-
     /// Render command palette overlay (Bug #4: don't wipe terminal)
     fn render_command_palette(&self, f: &mut ratatui::Frame, area: Rect) {
+        let Some(ref palette) = self.command_palette else {
+            return;
+        };
+
         let popup_area = centered_popup(area, 80, 20);
 
         // Bug #4: Clear only the popup area, not the entire screen
@@ -1013,7 +1073,7 @@ impl Terminal {
             .split(popup_area);
 
         // Input box
-        let input = Paragraph::new(format!("> {}", self.command_palette.input))
+        let input = Paragraph::new(format!("> {}", palette.input))
             .style(
                 Style::default()
                     .fg(Color::Rgb(
@@ -1045,13 +1105,12 @@ impl Terminal {
         f.render_widget(input, palette_chunks[0]);
 
         // Suggestions
-        let suggestions: Vec<Line> = self
-            .command_palette
+        let suggestions: Vec<Line> = palette
             .suggestions
             .iter()
             .enumerate()
             .map(|(i, s)| {
-                let style = if i == self.command_palette.selected_index {
+                let style = if i == palette.selected_index {
                     Style::default()
                         .fg(Color::Rgb(
                             COLOR_COOL_RED.0,
@@ -1105,7 +1164,11 @@ impl Terminal {
 
     /// Render resource monitor (Bug #23: doesn't need &mut self)
     fn render_resource_monitor(&mut self, f: &mut ratatui::Frame, area: Rect) {
-        let stats = self.resource_monitor.get_stats();
+        let Some(ref mut monitor) = self.resource_monitor else {
+            return;
+        };
+        
+        let stats = monitor.get_stats();
 
         let text = format!(
             " CPU: {:.1}% ({} cores) | Memory: {} / {} ({:.1}%) | Processes: {} | Network: ↓{} ↑{} ",
