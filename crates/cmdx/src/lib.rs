@@ -3088,21 +3088,21 @@ impl CommandTranslator {
         // Check for operators while avoiding false positives in strings
         // This is a simplified check - full parsing would require proper tokenization
         let operators = ["||", "&&", "|", ">>", ">", "<", ";"];
-        
+
         for op in operators {
             if command.contains(op) {
                 // Make sure it's not inside quotes
                 let mut in_single_quote = false;
                 let mut in_double_quote = false;
                 let mut pos = 0;
-                
+
                 for c in command.chars() {
                     match c {
                         '\'' if !in_double_quote => in_single_quote = !in_single_quote,
                         '"' if !in_single_quote => in_double_quote = !in_double_quote,
                         _ => {}
                     }
-                    
+
                     if !in_single_quote && !in_double_quote {
                         // Check if we're at an operator
                         let remaining = &command[pos..];
@@ -3231,7 +3231,7 @@ impl CommandTranslator {
 
             // Translate the command part
             let result = self.translate_single_command(&segment.command, &mut errors);
-            
+
             if result.translated {
                 any_translated = true;
                 translated_parts.push(result.final_command);
@@ -3268,7 +3268,11 @@ impl CommandTranslator {
     }
 
     /// Translate a single command (no pipeline operators)
-    fn translate_single_command(&self, command: &str, errors: &mut Vec<TranslationError>) -> TranslationResult {
+    fn translate_single_command(
+        &self,
+        command: &str,
+        errors: &mut Vec<TranslationError>,
+    ) -> TranslationResult {
         let command = command.trim();
 
         if command.is_empty() {
@@ -4189,13 +4193,31 @@ mod tests {
 
     #[test]
     fn test_pipeline_operator_from_str() {
-        assert_eq!(PipelineOperator::from_str("|"), Some(PipelineOperator::Pipe));
-        assert_eq!(PipelineOperator::from_str(">"), Some(PipelineOperator::RedirectOut));
-        assert_eq!(PipelineOperator::from_str(">>"), Some(PipelineOperator::RedirectAppend));
-        assert_eq!(PipelineOperator::from_str("<"), Some(PipelineOperator::RedirectIn));
-        assert_eq!(PipelineOperator::from_str("&&"), Some(PipelineOperator::And));
+        assert_eq!(
+            PipelineOperator::from_str("|"),
+            Some(PipelineOperator::Pipe)
+        );
+        assert_eq!(
+            PipelineOperator::from_str(">"),
+            Some(PipelineOperator::RedirectOut)
+        );
+        assert_eq!(
+            PipelineOperator::from_str(">>"),
+            Some(PipelineOperator::RedirectAppend)
+        );
+        assert_eq!(
+            PipelineOperator::from_str("<"),
+            Some(PipelineOperator::RedirectIn)
+        );
+        assert_eq!(
+            PipelineOperator::from_str("&&"),
+            Some(PipelineOperator::And)
+        );
         assert_eq!(PipelineOperator::from_str("||"), Some(PipelineOperator::Or));
-        assert_eq!(PipelineOperator::from_str(";"), Some(PipelineOperator::Semicolon));
+        assert_eq!(
+            PipelineOperator::from_str(";"),
+            Some(PipelineOperator::Semicolon)
+        );
         assert_eq!(PipelineOperator::from_str("invalid"), None);
     }
 
