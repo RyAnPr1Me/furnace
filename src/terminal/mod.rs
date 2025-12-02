@@ -102,10 +102,12 @@ pub struct Terminal {
     should_quit: bool,
     command_palette: Option<CommandPalette>,
     resource_monitor: Option<ResourceMonitor>,
+    #[allow(dead_code)] // Feature not yet implemented
     autocomplete: Option<Autocomplete>,
     show_resources: bool,
     #[allow(dead_code)]
     keybindings: KeybindingManager,
+    #[allow(dead_code)] // Feature not yet implemented
     session_manager: Option<SessionManager>,
     #[allow(dead_code)]
     color_palette: TrueColorPalette,
@@ -866,7 +868,7 @@ impl Terminal {
 
     /// Render UI with hardware acceleration (Bug #3: zero-copy rendering)
     fn render(&mut self, f: &mut ratatui::Frame) {
-        let progress_visible = self.progress_bar.as_ref().map_or(false, |pb| pb.visible);
+        let progress_visible = self.progress_bar.as_ref().is_some_and(|pb| pb.visible);
         
         let main_chunks = Layout::default()
             .direction(Direction::Vertical)

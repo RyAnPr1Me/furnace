@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 
 /// Main configuration structure with zero-copy design for performance
 #[derive(Debug, Clone, Default)]
+#[allow(dead_code)] // Public API - fields accessed by users via config files
 pub struct Config {
     pub shell: ShellConfig,
     pub terminal: TerminalConfig,
@@ -16,6 +17,7 @@ pub struct Config {
 }
 
 #[derive(Debug, Clone, Default)]
+#[allow(dead_code)] // Public API - fields accessed by users via config files
 pub struct HooksConfig {
     /// Lua script paths for various hooks
     pub on_startup: Option<String>,
@@ -96,6 +98,7 @@ impl HooksConfig {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)] // Public API - fields accessed by users via config files
 pub struct ShellConfig {
     pub default_shell: String,
     pub env: HashMap<String, String>,
@@ -103,6 +106,7 @@ pub struct ShellConfig {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)] // Public API - fields accessed by users via config files
 pub struct TerminalConfig {
     /// Maximum command history entries (memory-efficient circular buffer)
     pub max_history: usize,
@@ -127,6 +131,7 @@ pub struct TerminalConfig {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)] // Public API - fields accessed by users via config files
 pub struct ThemeConfig {
     pub name: String,
     pub foreground: String,
@@ -139,6 +144,7 @@ pub struct ThemeConfig {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)] // Public API - fields accessed by users via config files
 pub struct BackgroundConfig {
     /// Path to background image file (supports PNG, JPEG, etc.)
     pub image_path: Option<String>,
@@ -153,6 +159,7 @@ pub struct BackgroundConfig {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)] // Public API - fields accessed by users via config files
 pub struct CursorTrailConfig {
     /// Enable cursor trail effect
     pub enabled: bool,
@@ -169,6 +176,7 @@ pub struct CursorTrailConfig {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)] // Public API - fields accessed by users via config files
 pub struct AnsiColors {
     pub black: String,
     pub red: String,
@@ -189,6 +197,7 @@ pub struct AnsiColors {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)] // Public API - fields accessed by users via config files
 pub struct KeyBindings {
     pub new_tab: String,
     pub close_tab: String,
@@ -202,7 +211,7 @@ pub struct KeyBindings {
     pub clear: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct FeaturesConfig {
     /// Enable command palette (Ctrl+P)
     pub command_palette: bool,
@@ -216,19 +225,6 @@ pub struct FeaturesConfig {
     pub session_manager: bool,
     /// Enable theme manager for theme switching
     pub theme_manager: bool,
-}
-
-impl Default for FeaturesConfig {
-    fn default() -> Self {
-        Self {
-            command_palette: false,
-            resource_monitor: false,
-            autocomplete: false,
-            progress_bar: false,
-            session_manager: false,
-            theme_manager: false,
-        }
-    }
 }
 
 impl FeaturesConfig {
@@ -529,7 +525,7 @@ impl Config {
         let globals = lua.globals();
         let config_table: Table = globals.get("config").context("Config table not found in Lua file")?;
 
-        Ok(Self::from_lua_table(&config_table)?)
+        Self::from_lua_table(&config_table)
     }
 
     /// Parse configuration from a Lua table
