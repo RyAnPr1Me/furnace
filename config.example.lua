@@ -127,6 +127,55 @@ config = {
         paste = "Ctrl+Shift+V",
         search = "Ctrl+F",
         clear = "Ctrl+L"
+    },
+
+    -- Advanced Extensibility: Runtime Hooks
+    -- This makes Furnace more extensible than any other terminal emulator
+    hooks = {
+        -- Execute Lua script on startup
+        -- on_startup = "~/.furnace/scripts/startup.lua",
+        
+        -- Execute Lua script on shutdown
+        -- on_shutdown = "~/.furnace/scripts/cleanup.lua",
+        
+        -- Hook for every key press (receives key event data)
+        -- on_key_press = "~/.furnace/scripts/key_logger.lua",
+        
+        -- Hook when a command starts (receives command string)
+        -- on_command_start = "~/.furnace/scripts/track_command.lua",
+        
+        -- Hook when a command completes (receives exit code)
+        -- on_command_end = "~/.furnace/scripts/command_stats.lua",
+        
+        -- Hook for output processing (receives output text)
+        -- on_output = "~/.furnace/scripts/highlight_errors.lua",
+        
+        -- Hook for terminal bell events
+        -- on_bell = "~/.furnace/scripts/notify_bell.lua",
+        
+        -- Hook for title changes
+        -- on_title_change = "~/.furnace/scripts/log_title.lua",
+        
+        -- Custom keybindings with Lua functions
+        -- Bind keys to arbitrary Lua code for ultimate flexibility
+        custom_keybindings = {
+            -- ["Ctrl+Shift+G"] = "function() print('Custom Git shortcut!') end",
+            -- ["Ctrl+Shift+D"] = "function() os.execute('docker ps') end",
+        },
+        
+        -- Output filters - transform output before display
+        -- Each filter receives text and returns modified text
+        output_filters = {
+            -- "function(text) return text:gsub('ERROR', '🔴 ERROR') end",
+            -- "function(text) return text:gsub('SUCCESS', '✅ SUCCESS') end",
+        },
+        
+        -- Custom widgets - inject custom UI elements
+        -- Each widget is Lua code that renders additional UI
+        custom_widgets = {
+            -- "function() return 'Git: ' .. io.popen('git branch --show-current'):read() end",
+            -- "function() return 'Docker: ' .. io.popen('docker ps -q | wc -l'):read() .. ' containers' end",
+        }
     }
 }
 
@@ -285,6 +334,140 @@ config = {
 --     }
 -- end
 -- config.theme.background_image = create_gradient_background()
+
+-- ==========================================
+-- ADVANCED EXTENSIBILITY EXAMPLES
+-- These demonstrate why Furnace is more extensible than any other terminal
+-- ==========================================
+
+-- Example 10: Custom keybindings with Lua functions
+-- Unlike other terminals, you can bind keys to arbitrary Lua code
+-- config.hooks.custom_keybindings = {
+--     ["Ctrl+Shift+G"] = [[
+--         function()
+--             local branch = io.popen("git branch --show-current 2>/dev/null"):read()
+--             if branch then
+--                 print("On branch: " .. branch)
+--             else
+--                 print("Not a git repository")
+--             end
+--         end
+--     ]],
+--     ["Ctrl+Shift+D"] = [[
+--         function()
+--             local count = io.popen("docker ps -q | wc -l"):read()
+--             print("Running containers: " .. count)
+--         end
+--     ]],
+-- }
+
+-- Example 11: Output filters for real-time text transformation
+-- Automatically highlight errors, warnings, and success messages
+-- config.hooks.output_filters = {
+--     -- Highlight errors in red
+--     "function(text) return text:gsub('([Ee][Rr][Rr][Oo][Rr])', '\\27[31m%1\\27[0m') end",
+--     -- Highlight warnings in yellow
+--     "function(text) return text:gsub('([Ww][Aa][Rr][Nn][Ii][Nn][Gg])', '\\27[33m%1\\27[0m') end",
+--     -- Add emoji indicators
+--     "function(text) return text:gsub('SUCCESS', '✅ SUCCESS'):gsub('FAILED', '❌ FAILED') end",
+-- }
+
+-- Example 12: Custom widgets for status bar
+-- Show live information in your terminal UI
+-- config.hooks.custom_widgets = {
+--     -- Git branch widget
+--     [[function()
+--         local handle = io.popen("git branch --show-current 2>/dev/null")
+--         local branch = handle:read("*a"):gsub("%s+", "")
+--         handle:close()
+--         return branch ~= "" and "  " .. branch or ""
+--     end]],
+--     -- Docker container count
+--     [[function()
+--         local handle = io.popen("docker ps -q 2>/dev/null | wc -l")
+--         local count = handle:read("*a"):gsub("%s+", "")
+--         handle:close()
+--         return count ~= "0" and " 🐳 " .. count or ""
+--     end]],
+--     -- Current time
+--     [[function()
+--         return " 🕐 " .. os.date("%H:%M")
+--     end]],
+-- }
+
+-- Example 13: Command lifecycle hooks
+-- Track command execution, measure performance, log commands
+-- config.hooks.on_command_start = [[
+--     -- Save start time and command
+--     _furnace_cmd_start = os.time()
+--     _furnace_cmd_text = command
+-- ]]
+-- 
+-- config.hooks.on_command_end = [[
+--     -- Calculate and display execution time
+--     if _furnace_cmd_start then
+--         local duration = os.time() - _furnace_cmd_start
+--         if duration > 5 then
+--             print(string.format("⏱️  Command took %d seconds", duration))
+--         end
+--         -- Log slow commands
+--         if duration > 30 then
+--             local log = io.open(os.getenv("HOME") .. "/.furnace/slow_commands.log", "a")
+--             log:write(string.format("%s: %s (%ds)\n", os.date(), _furnace_cmd_text, duration))
+--             log:close()
+--         end
+--     end
+-- ]]
+
+-- Example 14: Conditional configuration based on project
+-- Automatically adjust settings based on current directory
+-- local function detect_project_type()
+--     if io.open(".git", "r") then
+--         return "git"
+--     elseif io.open("Cargo.toml", "r") then
+--         return "rust"
+--     elseif io.open("package.json", "r") then
+--         return "node"
+--     elseif io.open("go.mod", "r") then
+--         return "go"
+--     end
+--     return "default"
+-- end
+-- 
+-- local project = detect_project_type()
+-- if project == "rust" then
+--     config.hooks.custom_keybindings["Ctrl+Shift+B"] = "function() os.execute('cargo build') end"
+--     config.hooks.custom_keybindings["Ctrl+Shift+T"] = "function() os.execute('cargo test') end"
+-- elseif project == "node" then
+--     config.hooks.custom_keybindings["Ctrl+Shift+B"] = "function() os.execute('npm run build') end"
+--     config.hooks.custom_keybindings["Ctrl+Shift+T"] = "function() os.execute('npm test') end"
+-- end
+
+-- Example 15: External API integration
+-- Connect to external services for notifications, logging, etc.
+-- config.hooks.on_command_end = [[
+--     -- Send notification to external service
+--     if exit_code ~= 0 then
+--         local curl_cmd = string.format(
+--             "curl -X POST https://api.example.com/notify -d 'command failed: %s'",
+--             command
+--         )
+--         os.execute(curl_cmd .. " >/dev/null 2>&1 &")
+--     end
+-- ]]
+
+-- Example 16: AI-powered command suggestions
+-- Use local LLM or API to suggest commands based on history
+-- config.hooks.on_key_press = [[
+--     if key == "Tab" and current_input ~= "" then
+--         -- Query AI for command suggestions
+--         local suggestion = io.popen(
+--             "curl -s http://localhost:11434/api/generate -d '{\"prompt\":\"" .. 
+--             current_input .. "\"}'"
+--         ):read("*a")
+--         -- Display suggestion
+--     end
+-- ]]
 
 -- Note: The config table MUST be defined at the global scope
 -- for Furnace to load it properly

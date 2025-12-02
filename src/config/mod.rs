@@ -12,6 +12,87 @@ pub struct Config {
     pub theme: ThemeConfig,
     pub keybindings: KeyBindings,
     pub features: FeaturesConfig,
+    pub hooks: HooksConfig,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct HooksConfig {
+    /// Lua script paths for various hooks
+    pub on_startup: Option<String>,
+    pub on_shutdown: Option<String>,
+    pub on_key_press: Option<String>,
+    pub on_command_start: Option<String>,
+    pub on_command_end: Option<String>,
+    pub on_output: Option<String>,
+    pub on_bell: Option<String>,
+    pub on_title_change: Option<String>,
+    
+    /// Custom keybinding handlers (key -> lua function string)
+    pub custom_keybindings: HashMap<String, String>,
+    
+    /// Output filters (Lua functions that transform output)
+    pub output_filters: Vec<String>,
+    
+    /// Custom widgets (Lua code for rendering custom UI)
+    pub custom_widgets: Vec<String>,
+}
+
+impl HooksConfig {
+    fn from_lua_table(table: &Table) -> Result<Self> {
+        let on_startup = table.get::<_, Option<String>>("on_startup")?;
+        let on_shutdown = table.get::<_, Option<String>>("on_shutdown")?;
+        let on_key_press = table.get::<_, Option<String>>("on_key_press")?;
+        let on_command_start = table.get::<_, Option<String>>("on_command_start")?;
+        let on_command_end = table.get::<_, Option<String>>("on_command_end")?;
+        let on_output = table.get::<_, Option<String>>("on_output")?;
+        let on_bell = table.get::<_, Option<String>>("on_bell")?;
+        let on_title_change = table.get::<_, Option<String>>("on_title_change")?;
+        
+        let custom_keybindings = if let Ok(kb_table) = table.get::<_, Table>("custom_keybindings") {
+            let mut map = HashMap::new();
+            for pair in kb_table.pairs::<String, String>() {
+                let (key, func) = pair?;
+                map.insert(key, func);
+            }
+            map
+        } else {
+            HashMap::new()
+        };
+        
+        let output_filters = if let Ok(filters_table) = table.get::<_, Table>("output_filters") {
+            let mut filters = Vec::new();
+            for pair in filters_table.sequence_values::<String>() {
+                filters.push(pair?);
+            }
+            filters
+        } else {
+            Vec::new()
+        };
+        
+        let custom_widgets = if let Ok(widgets_table) = table.get::<_, Table>("custom_widgets") {
+            let mut widgets = Vec::new();
+            for pair in widgets_table.sequence_values::<String>() {
+                widgets.push(pair?);
+            }
+            widgets
+        } else {
+            Vec::new()
+        };
+        
+        Ok(Self {
+            on_startup,
+            on_shutdown,
+            on_key_press,
+            on_command_start,
+            on_command_end,
+            on_output,
+            on_bell,
+            on_title_change,
+            custom_keybindings,
+            output_filters,
+            custom_widgets,
+        })
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -483,12 +564,19 @@ impl Config {
             FeaturesConfig::default()
         };
 
+        let hooks = if let Ok(hooks_table) = table.get::<_, Table>("hooks") {
+            HooksConfig::from_lua_table(&hooks_table)?
+        } else {
+            HooksConfig::default()
+        };
+
         Ok(Self {
             shell,
             terminal,
             theme,
             keybindings,
             features,
+            hooks,
         })
     }
 
