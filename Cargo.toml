@@ -28,7 +28,7 @@ portable-pty = "0.8"
 # Configuration
 serde = { version = "1.0", features = ["derive"] }
 mlua = { version = "0.9", features = ["lua54", "vendored"] }
-serde_yaml = "0.9"  # Still used for theme files
+serde_yaml = "0.9"  # Used for theme file format (themes/*.yaml)
 
 # Command line parsing
 clap = { version = "4.4", features = ["derive", "cargo"] }

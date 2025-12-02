@@ -52,6 +52,38 @@ pub struct ThemeConfig {
     pub cursor: String,
     pub selection: String,
     pub colors: AnsiColors,
+    pub background_image: Option<BackgroundConfig>,
+    pub cursor_trail: Option<CursorTrailConfig>,
+}
+
+#[derive(Debug, Clone)]
+pub struct BackgroundConfig {
+    /// Path to background image file (supports PNG, JPEG, etc.)
+    pub image_path: Option<String>,
+    /// Solid color as fallback or alternative
+    pub color: Option<String>,
+    /// Opacity/transparency (0.0 = fully transparent, 1.0 = fully opaque)
+    pub opacity: f32,
+    /// How the image should be displayed: "fill", "fit", "stretch", "tile", "center"
+    pub mode: String,
+    /// Blur effect strength (0.0 = no blur, higher = more blur)
+    pub blur: f32,
+}
+
+#[derive(Debug, Clone)]
+pub struct CursorTrailConfig {
+    /// Enable cursor trail effect
+    pub enabled: bool,
+    /// Length of the trail (number of past positions to show)
+    pub length: usize,
+    /// Trail color (with alpha channel support like "#RRGGBBAA")
+    pub color: String,
+    /// Fade mode: "linear", "exponential", "smooth"
+    pub fade_mode: String,
+    /// Trail width (multiplier of cursor size)
+    pub width: f32,
+    /// Animation speed (milliseconds per trail update)
+    pub animation_speed: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -161,7 +193,59 @@ impl Default for ThemeConfig {
             cursor: "#00FF00".to_string(),
             selection: "#264F78".to_string(),
             colors: AnsiColors::default(),
+            background_image: None,
+            cursor_trail: None,
         }
+    }
+}
+
+impl Default for BackgroundConfig {
+    fn default() -> Self {
+        Self {
+            image_path: None,
+            color: None,
+            opacity: 1.0,
+            mode: "fill".to_string(),
+            blur: 0.0,
+        }
+    }
+}
+
+impl Default for CursorTrailConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            length: 10,
+            color: "#00FF0080".to_string(), // Green with 50% alpha
+            fade_mode: "exponential".to_string(),
+            width: 1.0,
+            animation_speed: 16, // ~60 FPS
+        }
+    }
+}
+
+impl BackgroundConfig {
+    fn from_lua_table(table: &Table) -> Result<Self> {
+        Ok(Self {
+            image_path: table.get::<_, Option<String>>("image_path")?,
+            color: table.get::<_, Option<String>>("color")?,
+            opacity: table.get::<_, Option<f32>>("opacity")?.unwrap_or(1.0),
+            mode: table.get::<_, Option<String>>("mode")?.unwrap_or_else(|| "fill".to_string()),
+            blur: table.get::<_, Option<f32>>("blur")?.unwrap_or(0.0),
+        })
+    }
+}
+
+impl CursorTrailConfig {
+    fn from_lua_table(table: &Table) -> Result<Self> {
+        Ok(Self {
+            enabled: table.get::<_, Option<bool>>("enabled")?.unwrap_or(false),
+            length: table.get::<_, Option<usize>>("length")?.unwrap_or(10),
+            color: table.get::<_, Option<String>>("color")?.unwrap_or_else(|| "#00FF0080".to_string()),
+            fade_mode: table.get::<_, Option<String>>("fade_mode")?.unwrap_or_else(|| "exponential".to_string()),
+            width: table.get::<_, Option<f32>>("width")?.unwrap_or(1.0),
+            animation_speed: table.get::<_, Option<u64>>("animation_speed")?.unwrap_or(16),
+        })
     }
 }
 
@@ -179,6 +263,18 @@ impl ThemeConfig {
             AnsiColors::default()
         };
 
+        let background_image = if let Ok(bg_table) = table.get::<_, Table>("background_image") {
+            Some(BackgroundConfig::from_lua_table(&bg_table)?)
+        } else {
+            None
+        };
+
+        let cursor_trail = if let Ok(trail_table) = table.get::<_, Table>("cursor_trail") {
+            Some(CursorTrailConfig::from_lua_table(&trail_table)?)
+        } else {
+            None
+        };
+
         Ok(Self {
             name,
             foreground,
@@ -186,6 +282,8 @@ impl ThemeConfig {
             cursor,
             selection,
             colors,
+            background_image,
+            cursor_trail,
         })
     }
 }
@@ -288,7 +386,16 @@ impl Config {
     /// Load configuration from a Lua file
     ///
     /// # Errors
-    /// Returns an error if the file cannot be read or the Lua is invalid
+    /// Returns an error if:
+    /// - The file cannot be read
+    /// - The Lua code is invalid or has syntax errors
+    /// - The Lua code does not define a 'config' table
+    /// - The config table has invalid structure or data types
+    /// 
+    /// # Security
+    /// This executes Lua code from the configuration file. Only load trusted
+    /// configuration files. The Lua environment has access to the full Lua standard
+    /// library, including file I/O and OS operations.
     pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
         let contents = fs::read_to_string(path.as_ref()).context("Failed to read config file")?;
 

@@ -22,10 +22,12 @@ Furnace is built with **Rust** for:
 - **Split Panes**: Divide your workspace horizontally and vertically (can be enabled in config)
 - **Rich Text Rendering**: Full Unicode support with hardware-accelerated rendering
 - **Advanced Themes**: Built-in themes (Dark, Light, Nord) with full customization
+- **Custom Backgrounds**: Support for image backgrounds with opacity, blur, and multiple display modes
+- **Cursor Trails**: Configurable cursor trail effects with customizable length, color, and fade modes
 - **System Resource Monitor**: Real-time CPU, memory, and process monitoring (Ctrl+R)
 - **Smart Command Palette**: Fuzzy search command launcher (Ctrl+P)
 - **Advanced Autocomplete**: Context-aware command completion with history
-- **Lua Configuration**: Extremely customizable configuration using Lua scripting
+- **Lua Configuration**: Extremely customizable configuration using Lua scripting with dynamic runtime logic
 - **Enhanced Keybindings**: Fully customizable keyboard shortcuts
 - **Session Management**: Save and restore terminal sessions with full state
 - **Shell Integration**: Advanced shell integration with directory tracking and OSC sequences
@@ -82,6 +84,8 @@ furnace --shell powershell.exe
 ## Configuration
 
 Furnace uses Lua for extremely customizable configuration. Default location: `~/.furnace/config.lua`
+
+> **Note**: Tabs and split panes are **disabled by default** as of v1.0. You can enable them in your config file if needed.
 
 ### Basic Example
 
@@ -161,9 +165,52 @@ if env == "work" then
     config.terminal.enable_tabs = true
     config.terminal.scrollback_lines = 50000
 end
+
+-- Example 4: Custom background with time-based opacity
+config.theme.background_image = {
+    image_path = "~/.furnace/backgrounds/wallpaper.png",
+    opacity = 0.2 + (tonumber(os.date("%H")) / 24) * 0.3,
+    mode = "fill",
+    blur = 5.0
+}
+
+-- Example 5: Animated cursor trail
+config.theme.cursor_trail = {
+    enabled = true,
+    length = 15,
+    color = "#00FFFF80",  -- Cyan with transparency
+    fade_mode = "smooth",
+    animation_speed = 16
+}
 ```
 
 See `config.example.lua` for more advanced examples and full documentation.
+
+### Extensibility Features
+
+Furnace's Lua configuration enables extreme customization:
+
+**Background Customization:**
+- Image backgrounds with PNG/JPEG support
+- Configurable opacity (0.0 to 1.0)
+- Multiple display modes: fill, fit, stretch, tile, center
+- Blur effects for subtle backgrounds
+- Dynamic switching based on time, environment, or custom logic
+
+**Cursor Trail Effects:**
+- Smooth visual feedback with configurable trails
+- Adjustable trail length (number of positions)
+- Custom colors with alpha channel support
+- Multiple fade modes: linear, exponential, smooth
+- Configurable width and animation speed
+- Performance-aware settings
+
+**Dynamic Configuration:**
+- Time-based theme switching (day/night modes)
+- Environment-variable driven configs
+- OS-specific settings
+- Performance mode adaptations
+- Custom Lua functions for complex logic
 
 ## Key Bindings
 

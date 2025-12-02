@@ -79,7 +79,28 @@ config = {
             bright_magenta = "#FF80FF",
             bright_cyan = "#80FFFF",
             bright_white = "#FFFFFF"
-        }
+        },
+
+        -- Optional: Background image configuration
+        -- Uncomment to enable a custom background
+        -- background_image = {
+        --     image_path = "~/.furnace/backgrounds/wallpaper.png",  -- Path to your image
+        --     opacity = 0.3,              -- 0.0 (transparent) to 1.0 (opaque)
+        --     mode = "fill",              -- "fill", "fit", "stretch", "tile", "center"
+        --     blur = 5.0,                 -- Blur effect strength (0.0 = no blur)
+        --     color = "#1E1E1E"           -- Fallback solid color
+        -- },
+
+        -- Optional: Cursor trail effect for visual feedback
+        -- Uncomment to enable smooth cursor trails
+        -- cursor_trail = {
+        --     enabled = true,
+        --     length = 15,                -- Number of trail positions (higher = longer trail)
+        --     color = "#00FF0080",        -- Trail color with alpha (#RRGGBBAA format)
+        --     fade_mode = "exponential",  -- "linear", "exponential", "smooth"
+        --     width = 1.0,                -- Trail width multiplier
+        --     animation_speed = 16        -- Milliseconds per frame (~60 FPS)
+        -- }
     },
 
     -- Keyboard shortcuts
@@ -158,5 +179,102 @@ config = {
 --     config.terminal.hardware_acceleration = false
 -- end
 
+-- Example 6: Dynamic background based on battery status or time
+-- local function get_dynamic_background()
+--     local hour = tonumber(os.date("%H"))
+--     
+--     if hour >= 22 or hour < 6 then
+--         -- Night mode: dark with subtle background
+--         return {
+--             image_path = "~/.furnace/backgrounds/night.png",
+--             opacity = 0.15,
+--             blur = 8.0,
+--             mode = "fill"
+--         }
+--     elseif hour >= 6 and hour < 12 then
+--         -- Morning: lighter background
+--         return {
+--             color = "#F0F0F0",
+--             opacity = 0.05,
+--             blur = 0.0
+--         }
+--     else
+--         -- Afternoon/Evening: no background
+--         return nil
+--     end
+-- end
+-- config.theme.background_image = get_dynamic_background()
+
+-- Example 7: Animated cursor trail based on performance mode
+-- local function get_cursor_trail_config()
+--     local perf_mode = os.getenv("FURNACE_PERF") or "normal"
+--     
+--     if perf_mode == "high" then
+--         -- Smooth, long trail for high-performance systems
+--         return {
+--             enabled = true,
+--             length = 20,
+--             color = "#00FFFF60",  -- Cyan with transparency
+--             fade_mode = "smooth",
+--             width = 1.2,
+--             animation_speed = 8   -- ~120 FPS
+--         }
+--     elseif perf_mode == "low" then
+--         -- Minimal trail for low-end systems
+--         return {
+--             enabled = true,
+--             length = 5,
+--             color = "#FFFFFF40",
+--             fade_mode = "linear",
+--             width = 0.8,
+--             animation_speed = 32  -- ~30 FPS
+--         }
+--     else
+--         -- Standard trail
+--         return {
+--             enabled = true,
+--             length = 10,
+--             color = "#00FF0080",
+--             fade_mode = "exponential",
+--             width = 1.0,
+--             animation_speed = 16  -- ~60 FPS
+--         }
+--     end
+-- end
+-- config.theme.cursor_trail = get_cursor_trail_config()
+
+-- Example 8: Custom background rotation
+-- local backgrounds = {
+--     "~/.furnace/backgrounds/bg1.png",
+--     "~/.furnace/backgrounds/bg2.png",
+--     "~/.furnace/backgrounds/bg3.png"
+-- }
+-- local function rotate_background()
+--     local day_of_week = tonumber(os.date("%w"))  -- 0-6
+--     local index = (day_of_week % #backgrounds) + 1
+--     return {
+--         image_path = backgrounds[index],
+--         opacity = 0.25,
+--         mode = "fit",
+--         blur = 3.0
+--     }
+-- end
+-- config.theme.background_image = rotate_background()
+
+-- Example 9: Gradient background using math
+-- local function create_gradient_background()
+--     -- This is conceptual - actual gradient would need RGB calculation
+--     local minute = tonumber(os.date("%M"))
+--     local opacity = 0.1 + (minute / 60) * 0.3  -- Varies from 0.1 to 0.4
+--     
+--     return {
+--         color = "#1E1E2E",  -- Base color
+--         opacity = opacity,
+--         blur = 0.0
+--     }
+-- end
+-- config.theme.background_image = create_gradient_background()
+
 -- Note: The config table MUST be defined at the global scope
 -- for Furnace to load it properly
+
