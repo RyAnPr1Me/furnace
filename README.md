@@ -16,24 +16,21 @@ Furnace is built with **Rust** for:
 ### Core Features
 - **Native Performance**: Written in Rust with aggressive optimizations (LTO, codegen-units=1)
 - **Memory Safe**: Compile-time guarantees prevent memory leaks and data races
-- **GPU-Accelerated Rendering**: Ultra-smooth visuals at 170 FPS (vs 60 FPS in most terminals)
+- **GPU-Accelerated Rendering**: Ultra-smooth visuals at 170 FPS (vs 60 FPS in most terminals) - enabled by default
 - **24-bit True Color Support**: Full RGB color spectrum with 16.7 million colors
-- **Multiple Tabs**: Efficient tab management for multiple shell sessions
-- **Split Panes**: Divide your workspace horizontally and vertically
+- **Multiple Tabs**: Efficient tab management for multiple shell sessions (can be enabled in config)
+- **Split Panes**: Divide your workspace horizontally and vertically (can be enabled in config)
 - **Rich Text Rendering**: Full Unicode support with hardware-accelerated rendering
 - **Advanced Themes**: Built-in themes (Dark, Light, Nord) with full customization
 - **System Resource Monitor**: Real-time CPU, memory, and process monitoring (Ctrl+R)
 - **Smart Command Palette**: Fuzzy search command launcher (Ctrl+P)
 - **Advanced Autocomplete**: Context-aware command completion with history
-- **Enhanced Keybindings**: Fully customizable keyboard shortcuts with shell integration
+- **Lua Configuration**: Extremely customizable configuration using Lua scripting
+- **Enhanced Keybindings**: Fully customizable keyboard shortcuts
 - **Session Management**: Save and restore terminal sessions with full state
-- **Plugin/Scripting System**: Extend functionality with safe plugin architecture
 - **Shell Integration**: Advanced shell integration with directory tracking and OSC sequences
 - **Command History**: Efficient circular buffer for command history
 - **Smart Scrollback**: Memory-mapped large scrollback buffers
-- **Cross-Platform Command Translation**: Automatic translation between Linux and Windows commands (ls ⟷ dir, cat ⟷ type, etc.)
-- **SSH Connection Manager**: Built-in manager for storing and quickly accessing SSH connections
-- **Clickable URLs**: Ctrl+Click support for opening URLs directly from terminal output
 
 ### Performance Optimizations
 - **Zero-cost abstractions**: No runtime overhead
@@ -84,75 +81,99 @@ furnace --shell powershell.exe
 
 ## Configuration
 
-Furnace uses YAML for configuration. Default location: `~/.furnace/config.yaml`
+Furnace uses Lua for extremely customizable configuration. Default location: `~/.furnace/config.lua`
 
-```yaml
-shell:
-  default_shell: "powershell.exe"
-  working_dir: ~
-  env:
-    CUSTOM_VAR: "value"
+### Basic Example
 
-terminal:
-  max_history: 10000
-  enable_tabs: true
-  enable_split_pane: true
-  font_size: 12
-  cursor_style: "block"
-  scrollback_lines: 10000
-  hardware_acceleration: true
+```lua
+config = {
+    shell = {
+        default_shell = "powershell.exe",
+        working_dir = nil,
+        env = {}
+    },
 
-theme:
-  name: "default"
-  foreground: "#FFFFFF"
-  background: "#1E1E1E"
-  cursor: "#00FF00"
-  selection: "#264F78"
-  colors:
-    black: "#000000"
-    red: "#FF0000"
-    green: "#00FF00"
-    yellow: "#FFFF00"
-    blue: "#0000FF"
-    magenta: "#FF00FF"
-    cyan: "#00FFFF"
-    white: "#FFFFFF"
-    # ... (8 more bright colors)
+    terminal = {
+        max_history = 10000,
+        enable_tabs = false,           -- Disabled by default
+        enable_split_pane = false,     -- Disabled by default
+        font_size = 12,
+        cursor_style = "block",
+        scrollback_lines = 10000,
+        hardware_acceleration = true   -- GPU acceleration enabled by default
+    },
 
-keybindings:
-  new_tab: "Ctrl+T"
-  close_tab: "Ctrl+W"
-  next_tab: "Ctrl+Tab"
-  prev_tab: "Ctrl+Shift+Tab"
-  split_vertical: "Ctrl+Shift+V"
-  split_horizontal: "Ctrl+Shift+H"
-  copy: "Ctrl+Shift+C"
-  paste: "Ctrl+Shift+V"
-  search: "Ctrl+F"
-  clear: "Ctrl+L"
+    theme = {
+        name = "default",
+        foreground = "#FFFFFF",
+        background = "#1E1E1E",
+        cursor = "#00FF00",
+        selection = "#264F78",
+        colors = {
+            black = "#000000",
+            red = "#FF0000",
+            green = "#00FF00",
+            yellow = "#FFFF00",
+            blue = "#0000FF",
+            magenta = "#FF00FF",
+            cyan = "#00FFFF",
+            white = "#FFFFFF",
+            -- Plus 8 bright colors
+        }
+    },
 
-command_translation:
-  enabled: true                # Enable automatic command translation
-  show_notifications: true     # Show green notification when commands are translated
-
-ssh_manager:
-  enabled: true                # Enable SSH connection manager
-  auto_show: true              # Auto-show manager when typing 'ssh' command
-
-url_handler:
-  enabled: true                # Enable clickable URLs with Ctrl+Click
+    keybindings = {
+        new_tab = "Ctrl+T",
+        close_tab = "Ctrl+W",
+        copy = "Ctrl+Shift+C",
+        paste = "Ctrl+Shift+V",
+        search = "Ctrl+F",
+        clear = "Ctrl+L"
+    }
+}
 ```
+
+### Advanced Lua Scripting
+
+Lua configuration enables powerful dynamic configurations:
+
+```lua
+-- Example 1: Conditional configuration based on OS
+if package.config:sub(1,1) == "\\" then
+    config.shell.default_shell = "pwsh.exe"
+else
+    config.shell.default_shell = os.getenv("SHELL") or "/bin/bash"
+end
+
+-- Example 2: Theme switching based on time of day
+local hour = tonumber(os.date("%H"))
+if hour >= 6 and hour < 18 then
+    config.theme.background = "#FFFFFF"  -- Light theme during day
+    config.theme.foreground = "#000000"
+else
+    config.theme.background = "#1E1E1E"  -- Dark theme at night
+    config.theme.foreground = "#FFFFFF"
+end
+
+-- Example 3: Environment-specific configuration
+local env = os.getenv("FURNACE_ENV") or "default"
+if env == "work" then
+    config.terminal.enable_tabs = true
+    config.terminal.scrollback_lines = 50000
+end
+```
+
+See `config.example.lua` for more advanced examples and full documentation.
 
 ## Key Bindings
 
 | Action | Default Key |
 |--------|-------------|
-| **SSH Manager** | `Ctrl+Shift+S` |
 | **Command Palette** | `Ctrl+P` |
 | **Resource Monitor** | `Ctrl+R` |
 | **Save Session** | `Ctrl+S` |
 | **Load Session** | `Ctrl+Shift+O` |
-| New Tab | `Ctrl+T` |
+| New Tab | `Ctrl+T` (if tabs enabled) |
 | Close Tab | `Ctrl+W` |
 | Next Tab | `Ctrl+Tab` |
 | Previous Tab | `Ctrl+Shift+Tab` |
@@ -194,21 +215,10 @@ Advanced shell integration features:
 - **Prompt Detection**: Intelligent shell prompt recognition
 - Shell-specific optimizations (PowerShell, Bash, Zsh)
 
-### Plugin/Scripting System
-Extensible plugin architecture:
-- **Safe FFI**: Type-safe plugin loading with Rust safety guarantees
-- **Plugin API**: Well-defined interface for plugin development
-- **Dynamic Loading**: Load/unload plugins at runtime
-- **Script Support**: Execute custom scripts and commands
-- **Example Plugin**: Template for creating custom plugins
-- Plugin discovery in `~/.furnace/plugins/`
-
 ### Enhanced Keybindings
 Fully customizable keyboard shortcuts:
-- **Configurable**: Define custom keybindings in YAML
+- **Configurable**: Define custom keybindings in Lua
 - **Multi-modifier Support**: Ctrl, Shift, Alt combinations
-- **Shell Commands**: Bind keys to execute shell commands
-- **Custom Actions**: Create custom command sequences
 - **Context-Aware**: Different bindings for different modes
 
 ### Command Palette (Ctrl+P)
@@ -238,48 +248,6 @@ Smart command completion:
 - Tab to cycle through suggestions
 - Context-aware completions
 
-### Cross-Platform Command Translation
-Automatic translation between Linux and Windows commands:
-- **On Windows**: Translates Linux commands to Windows equivalents
-  - `ls` → `dir`
-  - `cat` → `type`
-  - `rm` → `del`
-  - `clear` → `cls`
-  - `pwd` → `cd`
-  - `grep` → `findstr`
-  - `ps` → `tasklist`
-  - `kill` → `taskkill`
-  - And 10+ more commands
-- **On Linux/Mac**: Translates Windows commands to Linux equivalents
-  - `dir` → `ls`
-  - `type` → `cat`
-  - `del` → `rm`
-  - `cls` → `clear`
-  - `findstr` → `grep`
-  - `tasklist` → `ps`
-  - `taskkill` → `kill`
-  - And more
-- **Smart Argument Translation**: Preserves arguments and flags where possible
-- **Visual Feedback**: Shows green notification when commands are translated
-- **Configurable**: Enable/disable translation and notifications in config.yaml
-
-### SSH Connection Manager
-Built-in SSH connection management:
-- **Store SSH Connections**: Save frequently used SSH connections
-- **Quick Access**: Quickly connect to saved hosts
-- **Connection Details**: Store host, port, username, and SSH key path
-- **Auto-Detection**: Detects when you type 'ssh' commands
-- **Persistent Storage**: Connections saved in `~/.furnace/ssh_connections.json`
-- **Search/Filter**: Filter connections by name, host, or username
-
-### Clickable URLs
-Interactive URL handling:
-- **Auto-Detection**: Automatically detects URLs in terminal output
-- **Ctrl+Click**: Open URLs in default browser with Ctrl+Click
-- **Support**: Handles http://, https://, and www. URLs
-- **Cross-Platform**: Works on Windows, macOS, and Linux
-- **Visual Feedback**: URLs are highlighted when hoverable
-
 ## Architecture
 
 Furnace is designed with performance and safety as top priorities:
@@ -288,14 +256,10 @@ Furnace is designed with performance and safety as top priorities:
 furnace/
 ├── src/
 │   ├── main.rs           # Entry point with CLI parsing
-│   ├── config/           # Configuration management (zero-copy deserialization)
+│   ├── config/           # Configuration management (Lua-based)
 │   ├── terminal/         # Main terminal logic (async event loop, 170 FPS)
 │   ├── shell/            # PTY and shell session management
 │   ├── ui/               # UI rendering (hardware-accelerated)
-│   ├── plugins/          # Plugin system (safe FFI, dynamic loading)
-│   ├── translator/       # Cross-platform command translation
-│   ├── ssh_manager/      # SSH connection manager
-│   ├── url_handler/      # URL detection and opening
 │   ├── session.rs        # Session management (save/restore)
 │   ├── keybindings.rs    # Enhanced keybinding system with shell integration
 │   └── colors.rs         # 24-bit true color support
