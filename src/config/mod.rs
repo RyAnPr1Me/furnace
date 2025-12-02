@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 
 /// Main configuration structure with zero-copy design for performance
 #[derive(Debug, Clone, Default)]
+#[allow(dead_code)] // Public API - fields accessed by users via config files
 pub struct Config {
     pub shell: ShellConfig,
     pub terminal: TerminalConfig,
@@ -16,6 +17,7 @@ pub struct Config {
 }
 
 #[derive(Debug, Clone, Default)]
+#[allow(dead_code)] // Public API - fields accessed by users via config files
 pub struct HooksConfig {
     /// Lua script paths for various hooks
     pub on_startup: Option<String>,
@@ -26,13 +28,13 @@ pub struct HooksConfig {
     pub on_output: Option<String>,
     pub on_bell: Option<String>,
     pub on_title_change: Option<String>,
-    
+
     /// Custom keybinding handlers (key -> lua function string)
     pub custom_keybindings: HashMap<String, String>,
-    
+
     /// Output filters (Lua functions that transform output)
     pub output_filters: Vec<String>,
-    
+
     /// Custom widgets (Lua code for rendering custom UI)
     pub custom_widgets: Vec<String>,
 }
@@ -47,7 +49,7 @@ impl HooksConfig {
         let on_output = table.get::<_, Option<String>>("on_output")?;
         let on_bell = table.get::<_, Option<String>>("on_bell")?;
         let on_title_change = table.get::<_, Option<String>>("on_title_change")?;
-        
+
         let custom_keybindings = if let Ok(kb_table) = table.get::<_, Table>("custom_keybindings") {
             let mut map = HashMap::new();
             for pair in kb_table.pairs::<String, String>() {
@@ -58,7 +60,7 @@ impl HooksConfig {
         } else {
             HashMap::new()
         };
-        
+
         let output_filters = if let Ok(filters_table) = table.get::<_, Table>("output_filters") {
             let mut filters = Vec::new();
             for pair in filters_table.sequence_values::<String>() {
@@ -68,7 +70,7 @@ impl HooksConfig {
         } else {
             Vec::new()
         };
-        
+
         let custom_widgets = if let Ok(widgets_table) = table.get::<_, Table>("custom_widgets") {
             let mut widgets = Vec::new();
             for pair in widgets_table.sequence_values::<String>() {
@@ -78,7 +80,7 @@ impl HooksConfig {
         } else {
             Vec::new()
         };
-        
+
         Ok(Self {
             on_startup,
             on_shutdown,
@@ -96,6 +98,7 @@ impl HooksConfig {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)] // Public API - fields accessed by users via config files
 pub struct ShellConfig {
     pub default_shell: String,
     pub env: HashMap<String, String>,
@@ -103,6 +106,7 @@ pub struct ShellConfig {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)] // Public API - fields accessed by users via config files
 pub struct TerminalConfig {
     /// Maximum command history entries (memory-efficient circular buffer)
     pub max_history: usize,
@@ -127,6 +131,7 @@ pub struct TerminalConfig {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)] // Public API - fields accessed by users via config files
 pub struct ThemeConfig {
     pub name: String,
     pub foreground: String,
@@ -139,6 +144,7 @@ pub struct ThemeConfig {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)] // Public API - fields accessed by users via config files
 pub struct BackgroundConfig {
     /// Path to background image file (supports PNG, JPEG, etc.)
     pub image_path: Option<String>,
@@ -153,6 +159,7 @@ pub struct BackgroundConfig {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)] // Public API - fields accessed by users via config files
 pub struct CursorTrailConfig {
     /// Enable cursor trail effect
     pub enabled: bool,
@@ -169,6 +176,7 @@ pub struct CursorTrailConfig {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)] // Public API - fields accessed by users via config files
 pub struct AnsiColors {
     pub black: String,
     pub red: String,
@@ -189,6 +197,7 @@ pub struct AnsiColors {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)] // Public API - fields accessed by users via config files
 pub struct KeyBindings {
     pub new_tab: String,
     pub close_tab: String,
@@ -202,7 +211,7 @@ pub struct KeyBindings {
     pub clear: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct FeaturesConfig {
     /// Enable command palette (Ctrl+P)
     pub command_palette: bool,
@@ -218,28 +227,27 @@ pub struct FeaturesConfig {
     pub theme_manager: bool,
 }
 
-impl Default for FeaturesConfig {
-    fn default() -> Self {
-        Self {
-            command_palette: false,
-            resource_monitor: false,
-            autocomplete: false,
-            progress_bar: false,
-            session_manager: false,
-            theme_manager: false,
-        }
-    }
-}
-
 impl FeaturesConfig {
     fn from_lua_table(table: &Table) -> Result<Self> {
         Ok(Self {
-            command_palette: table.get::<_, Option<bool>>("command_palette")?.unwrap_or(false),
-            resource_monitor: table.get::<_, Option<bool>>("resource_monitor")?.unwrap_or(false),
-            autocomplete: table.get::<_, Option<bool>>("autocomplete")?.unwrap_or(false),
-            progress_bar: table.get::<_, Option<bool>>("progress_bar")?.unwrap_or(false),
-            session_manager: table.get::<_, Option<bool>>("session_manager")?.unwrap_or(false),
-            theme_manager: table.get::<_, Option<bool>>("theme_manager")?.unwrap_or(false),
+            command_palette: table
+                .get::<_, Option<bool>>("command_palette")?
+                .unwrap_or(false),
+            resource_monitor: table
+                .get::<_, Option<bool>>("resource_monitor")?
+                .unwrap_or(false),
+            autocomplete: table
+                .get::<_, Option<bool>>("autocomplete")?
+                .unwrap_or(false),
+            progress_bar: table
+                .get::<_, Option<bool>>("progress_bar")?
+                .unwrap_or(false),
+            session_manager: table
+                .get::<_, Option<bool>>("session_manager")?
+                .unwrap_or(false),
+            theme_manager: table
+                .get::<_, Option<bool>>("theme_manager")?
+                .unwrap_or(false),
         })
     }
 }
@@ -270,9 +278,10 @@ impl Default for TerminalConfig {
 
 impl ShellConfig {
     fn from_lua_table(table: &Table) -> Result<Self> {
-        let default_shell = table.get::<_, Option<String>>("default_shell")?
+        let default_shell = table
+            .get::<_, Option<String>>("default_shell")?
             .unwrap_or_else(detect_default_shell);
-        
+
         let env = if let Ok(env_table) = table.get::<_, Table>("env") {
             let mut map = HashMap::new();
             for pair in env_table.pairs::<String, String>() {
@@ -297,13 +306,25 @@ impl ShellConfig {
 impl TerminalConfig {
     fn from_lua_table(table: &Table) -> Result<Self> {
         Ok(Self {
-            max_history: table.get::<_, Option<usize>>("max_history")?.unwrap_or(10000),
-            enable_tabs: table.get::<_, Option<bool>>("enable_tabs")?.unwrap_or(false),
-            enable_split_pane: table.get::<_, Option<bool>>("enable_split_pane")?.unwrap_or(false),
+            max_history: table
+                .get::<_, Option<usize>>("max_history")?
+                .unwrap_or(10000),
+            enable_tabs: table
+                .get::<_, Option<bool>>("enable_tabs")?
+                .unwrap_or(false),
+            enable_split_pane: table
+                .get::<_, Option<bool>>("enable_split_pane")?
+                .unwrap_or(false),
             font_size: table.get::<_, Option<u16>>("font_size")?.unwrap_or(12),
-            cursor_style: table.get::<_, Option<String>>("cursor_style")?.unwrap_or_else(|| "block".to_string()),
-            scrollback_lines: table.get::<_, Option<usize>>("scrollback_lines")?.unwrap_or(10000),
-            hardware_acceleration: table.get::<_, Option<bool>>("hardware_acceleration")?.unwrap_or(true),
+            cursor_style: table
+                .get::<_, Option<String>>("cursor_style")?
+                .unwrap_or_else(|| "block".to_string()),
+            scrollback_lines: table
+                .get::<_, Option<usize>>("scrollback_lines")?
+                .unwrap_or(10000),
+            hardware_acceleration: table
+                .get::<_, Option<bool>>("hardware_acceleration")?
+                .unwrap_or(true),
         })
     }
 }
@@ -354,7 +375,9 @@ impl BackgroundConfig {
             image_path: table.get::<_, Option<String>>("image_path")?,
             color: table.get::<_, Option<String>>("color")?,
             opacity: table.get::<_, Option<f32>>("opacity")?.unwrap_or(1.0),
-            mode: table.get::<_, Option<String>>("mode")?.unwrap_or_else(|| "fill".to_string()),
+            mode: table
+                .get::<_, Option<String>>("mode")?
+                .unwrap_or_else(|| "fill".to_string()),
             blur: table.get::<_, Option<f32>>("blur")?.unwrap_or(0.0),
         })
     }
@@ -365,22 +388,38 @@ impl CursorTrailConfig {
         Ok(Self {
             enabled: table.get::<_, Option<bool>>("enabled")?.unwrap_or(false),
             length: table.get::<_, Option<usize>>("length")?.unwrap_or(10),
-            color: table.get::<_, Option<String>>("color")?.unwrap_or_else(|| "#00FF0080".to_string()),
-            fade_mode: table.get::<_, Option<String>>("fade_mode")?.unwrap_or_else(|| "exponential".to_string()),
+            color: table
+                .get::<_, Option<String>>("color")?
+                .unwrap_or_else(|| "#00FF0080".to_string()),
+            fade_mode: table
+                .get::<_, Option<String>>("fade_mode")?
+                .unwrap_or_else(|| "exponential".to_string()),
             width: table.get::<_, Option<f32>>("width")?.unwrap_or(1.0),
-            animation_speed: table.get::<_, Option<u64>>("animation_speed")?.unwrap_or(16),
+            animation_speed: table
+                .get::<_, Option<u64>>("animation_speed")?
+                .unwrap_or(16),
         })
     }
 }
 
 impl ThemeConfig {
     fn from_lua_table(table: &Table) -> Result<Self> {
-        let name = table.get::<_, Option<String>>("name")?.unwrap_or_else(|| "default".to_string());
-        let foreground = table.get::<_, Option<String>>("foreground")?.unwrap_or_else(|| "#FFFFFF".to_string());
-        let background = table.get::<_, Option<String>>("background")?.unwrap_or_else(|| "#1E1E1E".to_string());
-        let cursor = table.get::<_, Option<String>>("cursor")?.unwrap_or_else(|| "#00FF00".to_string());
-        let selection = table.get::<_, Option<String>>("selection")?.unwrap_or_else(|| "#264F78".to_string());
-        
+        let name = table
+            .get::<_, Option<String>>("name")?
+            .unwrap_or_else(|| "default".to_string());
+        let foreground = table
+            .get::<_, Option<String>>("foreground")?
+            .unwrap_or_else(|| "#FFFFFF".to_string());
+        let background = table
+            .get::<_, Option<String>>("background")?
+            .unwrap_or_else(|| "#1E1E1E".to_string());
+        let cursor = table
+            .get::<_, Option<String>>("cursor")?
+            .unwrap_or_else(|| "#00FF00".to_string());
+        let selection = table
+            .get::<_, Option<String>>("selection")?
+            .unwrap_or_else(|| "#264F78".to_string());
+
         let colors = if let Ok(colors_table) = table.get::<_, Table>("colors") {
             AnsiColors::from_lua_table(&colors_table)?
         } else {
@@ -438,22 +477,54 @@ impl Default for AnsiColors {
 impl AnsiColors {
     fn from_lua_table(table: &Table) -> Result<Self> {
         Ok(Self {
-            black: table.get::<_, Option<String>>("black")?.unwrap_or_else(|| "#000000".to_string()),
-            red: table.get::<_, Option<String>>("red")?.unwrap_or_else(|| "#FF0000".to_string()),
-            green: table.get::<_, Option<String>>("green")?.unwrap_or_else(|| "#00FF00".to_string()),
-            yellow: table.get::<_, Option<String>>("yellow")?.unwrap_or_else(|| "#FFFF00".to_string()),
-            blue: table.get::<_, Option<String>>("blue")?.unwrap_or_else(|| "#0000FF".to_string()),
-            magenta: table.get::<_, Option<String>>("magenta")?.unwrap_or_else(|| "#FF00FF".to_string()),
-            cyan: table.get::<_, Option<String>>("cyan")?.unwrap_or_else(|| "#00FFFF".to_string()),
-            white: table.get::<_, Option<String>>("white")?.unwrap_or_else(|| "#FFFFFF".to_string()),
-            bright_black: table.get::<_, Option<String>>("bright_black")?.unwrap_or_else(|| "#808080".to_string()),
-            bright_red: table.get::<_, Option<String>>("bright_red")?.unwrap_or_else(|| "#FF8080".to_string()),
-            bright_green: table.get::<_, Option<String>>("bright_green")?.unwrap_or_else(|| "#80FF80".to_string()),
-            bright_yellow: table.get::<_, Option<String>>("bright_yellow")?.unwrap_or_else(|| "#FFFF80".to_string()),
-            bright_blue: table.get::<_, Option<String>>("bright_blue")?.unwrap_or_else(|| "#8080FF".to_string()),
-            bright_magenta: table.get::<_, Option<String>>("bright_magenta")?.unwrap_or_else(|| "#FF80FF".to_string()),
-            bright_cyan: table.get::<_, Option<String>>("bright_cyan")?.unwrap_or_else(|| "#80FFFF".to_string()),
-            bright_white: table.get::<_, Option<String>>("bright_white")?.unwrap_or_else(|| "#FFFFFF".to_string()),
+            black: table
+                .get::<_, Option<String>>("black")?
+                .unwrap_or_else(|| "#000000".to_string()),
+            red: table
+                .get::<_, Option<String>>("red")?
+                .unwrap_or_else(|| "#FF0000".to_string()),
+            green: table
+                .get::<_, Option<String>>("green")?
+                .unwrap_or_else(|| "#00FF00".to_string()),
+            yellow: table
+                .get::<_, Option<String>>("yellow")?
+                .unwrap_or_else(|| "#FFFF00".to_string()),
+            blue: table
+                .get::<_, Option<String>>("blue")?
+                .unwrap_or_else(|| "#0000FF".to_string()),
+            magenta: table
+                .get::<_, Option<String>>("magenta")?
+                .unwrap_or_else(|| "#FF00FF".to_string()),
+            cyan: table
+                .get::<_, Option<String>>("cyan")?
+                .unwrap_or_else(|| "#00FFFF".to_string()),
+            white: table
+                .get::<_, Option<String>>("white")?
+                .unwrap_or_else(|| "#FFFFFF".to_string()),
+            bright_black: table
+                .get::<_, Option<String>>("bright_black")?
+                .unwrap_or_else(|| "#808080".to_string()),
+            bright_red: table
+                .get::<_, Option<String>>("bright_red")?
+                .unwrap_or_else(|| "#FF8080".to_string()),
+            bright_green: table
+                .get::<_, Option<String>>("bright_green")?
+                .unwrap_or_else(|| "#80FF80".to_string()),
+            bright_yellow: table
+                .get::<_, Option<String>>("bright_yellow")?
+                .unwrap_or_else(|| "#FFFF80".to_string()),
+            bright_blue: table
+                .get::<_, Option<String>>("bright_blue")?
+                .unwrap_or_else(|| "#8080FF".to_string()),
+            bright_magenta: table
+                .get::<_, Option<String>>("bright_magenta")?
+                .unwrap_or_else(|| "#FF80FF".to_string()),
+            bright_cyan: table
+                .get::<_, Option<String>>("bright_cyan")?
+                .unwrap_or_else(|| "#80FFFF".to_string()),
+            bright_white: table
+                .get::<_, Option<String>>("bright_white")?
+                .unwrap_or_else(|| "#FFFFFF".to_string()),
         })
     }
 }
@@ -478,16 +549,36 @@ impl Default for KeyBindings {
 impl KeyBindings {
     fn from_lua_table(table: &Table) -> Result<Self> {
         Ok(Self {
-            new_tab: table.get::<_, Option<String>>("new_tab")?.unwrap_or_else(|| "Ctrl+T".to_string()),
-            close_tab: table.get::<_, Option<String>>("close_tab")?.unwrap_or_else(|| "Ctrl+W".to_string()),
-            next_tab: table.get::<_, Option<String>>("next_tab")?.unwrap_or_else(|| "Ctrl+Tab".to_string()),
-            prev_tab: table.get::<_, Option<String>>("prev_tab")?.unwrap_or_else(|| "Ctrl+Shift+Tab".to_string()),
-            split_vertical: table.get::<_, Option<String>>("split_vertical")?.unwrap_or_else(|| "Ctrl+Shift+V".to_string()),
-            split_horizontal: table.get::<_, Option<String>>("split_horizontal")?.unwrap_or_else(|| "Ctrl+Shift+H".to_string()),
-            copy: table.get::<_, Option<String>>("copy")?.unwrap_or_else(|| "Ctrl+Shift+C".to_string()),
-            paste: table.get::<_, Option<String>>("paste")?.unwrap_or_else(|| "Ctrl+Shift+V".to_string()),
-            search: table.get::<_, Option<String>>("search")?.unwrap_or_else(|| "Ctrl+F".to_string()),
-            clear: table.get::<_, Option<String>>("clear")?.unwrap_or_else(|| "Ctrl+L".to_string()),
+            new_tab: table
+                .get::<_, Option<String>>("new_tab")?
+                .unwrap_or_else(|| "Ctrl+T".to_string()),
+            close_tab: table
+                .get::<_, Option<String>>("close_tab")?
+                .unwrap_or_else(|| "Ctrl+W".to_string()),
+            next_tab: table
+                .get::<_, Option<String>>("next_tab")?
+                .unwrap_or_else(|| "Ctrl+Tab".to_string()),
+            prev_tab: table
+                .get::<_, Option<String>>("prev_tab")?
+                .unwrap_or_else(|| "Ctrl+Shift+Tab".to_string()),
+            split_vertical: table
+                .get::<_, Option<String>>("split_vertical")?
+                .unwrap_or_else(|| "Ctrl+Shift+V".to_string()),
+            split_horizontal: table
+                .get::<_, Option<String>>("split_horizontal")?
+                .unwrap_or_else(|| "Ctrl+Shift+H".to_string()),
+            copy: table
+                .get::<_, Option<String>>("copy")?
+                .unwrap_or_else(|| "Ctrl+Shift+C".to_string()),
+            paste: table
+                .get::<_, Option<String>>("paste")?
+                .unwrap_or_else(|| "Ctrl+Shift+V".to_string()),
+            search: table
+                .get::<_, Option<String>>("search")?
+                .unwrap_or_else(|| "Ctrl+F".to_string()),
+            clear: table
+                .get::<_, Option<String>>("clear")?
+                .unwrap_or_else(|| "Ctrl+L".to_string()),
         })
     }
 }
@@ -515,7 +606,7 @@ impl Config {
     /// - The Lua code is invalid or has syntax errors
     /// - The Lua code does not define a 'config' table
     /// - The config table has invalid structure or data types
-    /// 
+    ///
     /// # Security
     /// This executes Lua code from the configuration file. Only load trusted
     /// configuration files. The Lua environment has access to the full Lua standard
@@ -524,12 +615,16 @@ impl Config {
         let contents = fs::read_to_string(path.as_ref()).context("Failed to read config file")?;
 
         let lua = Lua::new();
-        lua.load(&contents).exec().context("Failed to execute Lua config")?;
+        lua.load(&contents)
+            .exec()
+            .context("Failed to execute Lua config")?;
 
         let globals = lua.globals();
-        let config_table: Table = globals.get("config").context("Config table not found in Lua file")?;
+        let config_table: Table = globals
+            .get("config")
+            .context("Config table not found in Lua file")?;
 
-        Ok(Self::from_lua_table(&config_table)?)
+        Self::from_lua_table(&config_table)
     }
 
     /// Parse configuration from a Lua table

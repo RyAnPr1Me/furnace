@@ -15,9 +15,7 @@ pub mod ansi_parser;
 use anyhow::Result;
 use crossterm::{
     cursor::{Hide, Show},
-    event::{
-        self, Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent,
-    },
+    event::{self, Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -102,10 +100,12 @@ pub struct Terminal {
     should_quit: bool,
     command_palette: Option<CommandPalette>,
     resource_monitor: Option<ResourceMonitor>,
+    #[allow(dead_code)] // Feature not yet implemented
     autocomplete: Option<Autocomplete>,
     show_resources: bool,
     #[allow(dead_code)]
     keybindings: KeybindingManager,
+    #[allow(dead_code)] // Feature not yet implemented
     session_manager: Option<SessionManager>,
     #[allow(dead_code)]
     color_palette: TrueColorPalette,
@@ -442,7 +442,7 @@ impl Terminal {
                                 } else {
                                     false
                                 };
-                                
+
                                 if should_stop_progress {
                                     if let Some(ref mut pb) = self.progress_bar {
                                         pb.stop();
@@ -776,8 +776,7 @@ impl Terminal {
                     let theme_name = &cmd["theme ".len()..];
                     let theme_name = theme_name.trim();
                     if tm.switch_theme(theme_name) {
-                        self.notification_message =
-                            Some(format!("Theme: {}", tm.current().name));
+                        self.notification_message = Some(format!("Theme: {}", tm.current().name));
                         self.notification_frames = TARGET_FPS * NOTIFICATION_DURATION_SECS;
                         self.dirty = true;
                         // Invalidate all render caches
@@ -866,8 +865,8 @@ impl Terminal {
 
     /// Render UI with hardware acceleration (Bug #3: zero-copy rendering)
     fn render(&mut self, f: &mut ratatui::Frame) {
-        let progress_visible = self.progress_bar.as_ref().map_or(false, |pb| pb.visible);
-        
+        let progress_visible = self.progress_bar.as_ref().is_some_and(|pb| pb.visible);
+
         let main_chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
@@ -877,7 +876,11 @@ impl Terminal {
                 Constraint::Length(u16::from(self.notification_message.is_some())),
                 Constraint::Length(u16::from(progress_visible)),
                 Constraint::Min(0),
-                Constraint::Length(if self.show_resources && self.resource_monitor.is_some() { 3 } else { 0 }),
+                Constraint::Length(if self.show_resources && self.resource_monitor.is_some() {
+                    3
+                } else {
+                    0
+                }),
             ])
             .split(f.size());
 
@@ -1167,7 +1170,7 @@ impl Terminal {
         let Some(ref mut monitor) = self.resource_monitor else {
             return;
         };
-        
+
         let stats = monitor.get_stats();
 
         let text = format!(
