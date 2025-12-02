@@ -15,14 +15,6 @@ pub struct Config {
     pub theme: ThemeConfig,
     #[serde(default)]
     pub keybindings: KeyBindings,
-    #[serde(default)]
-    pub plugins: Vec<String>,
-    #[serde(default)]
-    pub command_translation: CommandTranslationConfig,
-    #[serde(default)]
-    pub ssh_manager: SshManagerConfig,
-    #[serde(default)]
-    pub url_handler: UrlHandlerConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -40,11 +32,11 @@ pub struct TerminalConfig {
     pub max_history: usize,
 
     /// Enable tabs for multiple sessions
-    #[serde(default = "default_true")]
+    #[serde(default = "default_false")]
     pub enable_tabs: bool,
 
     /// Enable split panes
-    #[serde(default = "default_true")]
+    #[serde(default = "default_false")]
     pub enable_split_pane: bool,
 
     /// Font size
@@ -108,35 +100,6 @@ pub struct KeyBindings {
     pub clear: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CommandTranslationConfig {
-    /// Enable automatic command translation between Linux and Windows
-    #[serde(default = "default_true")]
-    pub enabled: bool,
-
-    /// Show visual notification when commands are translated
-    #[serde(default = "default_true")]
-    pub show_notifications: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SshManagerConfig {
-    /// Enable SSH connection manager
-    #[serde(default = "default_true")]
-    pub enabled: bool,
-
-    /// Auto-show SSH manager when typing ssh command
-    #[serde(default = "default_true")]
-    pub auto_show: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UrlHandlerConfig {
-    /// Enable clickable URLs with Ctrl+Click
-    #[serde(default = "default_true")]
-    pub enabled: bool,
-}
-
 // Default value functions for serde - use const where possible for compile-time evaluation
 const fn default_max_history() -> usize {
     10_000
@@ -144,6 +107,10 @@ const fn default_max_history() -> usize {
 
 const fn default_true() -> bool {
     true
+}
+
+const fn default_false() -> bool {
+    false
 }
 
 const fn default_font_size() -> u16 {
@@ -172,8 +139,8 @@ impl Default for TerminalConfig {
     fn default() -> Self {
         Self {
             max_history: 10000,
-            enable_tabs: true,
-            enable_split_pane: true,
+            enable_tabs: false,
+            enable_split_pane: false,
             font_size: 12,
             cursor_style: "block".to_string(),
             scrollback_lines: 10000,
@@ -232,30 +199,6 @@ impl Default for KeyBindings {
             search: "Ctrl+F".to_string(),
             clear: "Ctrl+L".to_string(),
         }
-    }
-}
-
-impl Default for CommandTranslationConfig {
-    fn default() -> Self {
-        Self {
-            enabled: true,
-            show_notifications: true,
-        }
-    }
-}
-
-impl Default for SshManagerConfig {
-    fn default() -> Self {
-        Self {
-            enabled: true,
-            auto_show: true,
-        }
-    }
-}
-
-impl Default for UrlHandlerConfig {
-    fn default() -> Self {
-        Self { enabled: true }
     }
 }
 
@@ -344,28 +287,22 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_default_command_translation_config() {
-        let config = CommandTranslationConfig::default();
-        assert!(config.enabled);
-        assert!(config.show_notifications);
-    }
-
-    #[test]
-    fn test_config_with_command_translation() {
+    fn test_default_config_values() {
         let config = Config::default();
-        assert!(config.command_translation.enabled);
-        assert!(config.command_translation.show_notifications);
+        assert!(!config.terminal.enable_tabs);
+        assert!(!config.terminal.enable_split_pane);
+        assert!(config.terminal.hardware_acceleration);
     }
 
     #[test]
     fn test_config_deserialization() {
         let yaml = r"
-command_translation:
-  enabled: false
-  show_notifications: false
+terminal:
+  enable_tabs: true
+  enable_split_pane: true
 ";
         let config: Config = serde_yaml::from_str(yaml).unwrap();
-        assert!(!config.command_translation.enabled);
-        assert!(!config.command_translation.show_notifications);
+        assert!(config.terminal.enable_tabs);
+        assert!(config.terminal.enable_split_pane);
     }
 }

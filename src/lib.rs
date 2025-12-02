@@ -9,28 +9,20 @@
 //! - [`terminal`]: Main terminal logic and event loop
 //! - [`shell`]: PTY and shell session management
 //! - [`ui`]: UI components (command palette, resource monitor, themes)
-//! - [`plugins`]: Plugin system for extensibility
 //! - [`session`]: Session save/restore functionality
 //! - [`keybindings`]: Keyboard shortcut handling
 //! - [`colors`]: 24-bit true color support
-//! - [`translator`]: Cross-platform command translation
-//! - [`ssh_manager`]: SSH connection management
-//! - [`url_handler`]: URL detection and opening
 //! - [`progress_bar`]: Command execution progress tracking
 //! - [`gpu`]: GPU-accelerated rendering (optional, requires `gpu` feature)
 
 pub mod colors;
 pub mod config;
 pub mod keybindings;
-pub mod plugins;
 pub mod progress_bar;
 pub mod session;
 pub mod shell;
-pub mod ssh_manager;
 pub mod terminal;
-pub mod translator;
 pub mod ui;
-pub mod url_handler;
 
 /// GPU-accelerated rendering module
 ///

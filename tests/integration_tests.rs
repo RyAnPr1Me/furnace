@@ -6,8 +6,8 @@ mod config_tests {
     #[test]
     fn test_default_config() {
         let config = Config::default();
-        assert!(config.terminal.enable_tabs);
-        assert!(config.terminal.enable_split_pane);
+        assert!(!config.terminal.enable_tabs);
+        assert!(!config.terminal.enable_split_pane);
         assert_eq!(config.terminal.scrollback_lines, 10000);
         assert!(config.terminal.hardware_acceleration);
     }

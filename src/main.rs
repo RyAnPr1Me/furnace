@@ -6,15 +6,11 @@ use tracing_subscriber::FmtSubscriber;
 mod colors;
 mod config;
 mod keybindings;
-mod plugins;
 mod progress_bar;
 mod session;
 mod shell;
-mod ssh_manager;
 mod terminal;
-mod translator;
 mod ui;
-mod url_handler;
 
 use config::Config;
 use terminal::Terminal;

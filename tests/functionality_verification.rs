@@ -139,11 +139,10 @@ mod config_tests {
         let config = Config::default();
 
         // Verify default values
-        assert!(config.terminal.enable_tabs);
-        assert!(config.terminal.enable_split_pane);
+        assert!(!config.terminal.enable_tabs);
+        assert!(!config.terminal.enable_split_pane);
         assert_eq!(config.terminal.scrollback_lines, 10000);
         assert!(config.terminal.hardware_acceleration);
-        assert!(config.command_translation.enabled);
     }
 
     #[test]
@@ -159,111 +158,6 @@ mod config_tests {
         // Load and verify
         let loaded = Config::load_from_file(&config_path).unwrap();
         assert_eq!(loaded.terminal.max_history, 5000);
-    }
-}
-
-/// Test translator functionality
-#[cfg(test)]
-mod translator_tests {
-    use furnace::translator::CommandTranslator;
-
-    #[test]
-    fn test_translator_enabled() {
-        let translator = CommandTranslator::new(true);
-        assert!(translator.is_enabled());
-    }
-
-    #[test]
-    fn test_translator_disabled() {
-        let translator = CommandTranslator::new(false);
-        assert!(!translator.is_enabled());
-    }
-
-    #[test]
-    #[cfg(target_os = "linux")]
-    fn test_linux_command_translation() {
-        let translator = CommandTranslator::new(true);
-
-        // Test Windows to Linux translation
-        let result = translator.translate("dir");
-        assert!(result.translated);
-        assert_eq!(result.final_command, "ls");
-
-        let result = translator.translate("type file.txt");
-        assert!(result.translated);
-        assert_eq!(result.final_command, "cat file.txt");
-    }
-
-    #[test]
-    #[cfg(target_os = "windows")]
-    fn test_windows_command_translation() {
-        let translator = CommandTranslator::new(true);
-
-        // Test Linux to Windows translation
-        let result = translator.translate("ls");
-        assert!(result.translated);
-        assert_eq!(result.final_command, "dir");
-
-        let result = translator.translate("cat file.txt");
-        assert!(result.translated);
-        assert_eq!(result.final_command, "type file.txt");
-    }
-}
-
-/// Test SSH manager functionality
-#[cfg(test)]
-mod ssh_manager_tests {
-    use furnace::ssh_manager::SshManager;
-
-    #[test]
-    fn test_ssh_manager_creation() {
-        let manager = SshManager::new();
-        assert!(manager.is_ok(), "Failed to create SSH manager");
-    }
-
-    #[test]
-    fn test_ssh_manager_visibility() {
-        let mut manager = SshManager::new().unwrap();
-        assert!(!manager.visible);
-
-        manager.toggle();
-        assert!(manager.visible);
-
-        manager.toggle();
-        assert!(!manager.visible);
-    }
-}
-
-/// Test URL handler functionality
-#[cfg(test)]
-mod url_handler_tests {
-    use furnace::url_handler::UrlHandler;
-
-    #[test]
-    fn test_url_handler_detection() {
-        let text = "Check out https://github.com/RyAnPr1Me/furnace for more info!";
-        let urls = UrlHandler::detect_urls(text);
-
-        assert!(!urls.is_empty(), "Failed to detect URLs");
-        assert_eq!(urls.len(), 1);
-        assert!(urls[0].url.contains("github.com"));
-    }
-
-    #[test]
-    fn test_url_handler_multiple_urls() {
-        let text = "Visit https://github.com and http://example.com";
-        let urls = UrlHandler::detect_urls(text);
-
-        assert_eq!(urls.len(), 2);
-    }
-
-    #[test]
-    fn test_url_handler_enabled() {
-        let handler = UrlHandler::new(true);
-        assert!(handler.is_enabled());
-
-        let handler = UrlHandler::new(false);
-        assert!(!handler.is_enabled());
     }
 }
 
@@ -321,20 +215,6 @@ mod session_tests {
     fn test_session_manager_creation() {
         let manager = SessionManager::new();
         assert!(manager.is_ok(), "Failed to create session manager");
-    }
-}
-
-/// Test plugin system
-#[cfg(test)]
-mod plugin_tests {
-    use furnace::plugins::PluginManager;
-
-    #[test]
-    fn test_plugin_manager_creation() {
-        let manager = PluginManager::new();
-        // Should create without errors - no public methods to check count
-        // Just verify it can be created
-        drop(manager);
     }
 }
 

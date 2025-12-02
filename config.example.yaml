@@ -20,11 +20,11 @@ terminal:
   # Maximum number of commands in history (circular buffer for efficiency)
   max_history: 10000
   
-  # Enable multiple tabs
-  enable_tabs: true
+  # Enable multiple tabs (disabled by default)
+  enable_tabs: false
   
-  # Enable split panes
-  enable_split_pane: true
+  # Enable split panes (disabled by default)
+  enable_split_pane: false
   
   # Font size
   font_size: 12
@@ -36,7 +36,7 @@ terminal:
   # Higher values use more memory but allow more history
   scrollback_lines: 10000
   
-  # Enable hardware acceleration for rendering (recommended)
+  # Enable hardware acceleration for rendering (enabled by default, recommended)
   hardware_acceleration: true
 
 # Theme and colors
@@ -81,34 +81,3 @@ keybindings:
   paste: "Ctrl+Shift+V"
   search: "Ctrl+F"
   clear: "Ctrl+L"
-
-# Plugins to load (optional)
-plugins: []
-  # - "~/.furnace/plugins/my_plugin.so"
-
-# Command translation (cross-platform compatibility)
-command_translation:
-  # Enable automatic translation of commands between Linux and Windows
-  # When enabled on Windows: translates Linux commands (ls, cat, etc.) to Windows equivalents (dir, type, etc.)
-  # When enabled on Linux/Mac: translates Windows commands (dir, cls, etc.) to Linux equivalents (ls, clear, etc.)
-  enabled: true
-  
-  # Show visual notification when commands are translated
-  # Displays a green notification bar showing the translation that occurred
-  show_notifications: true
-
-# SSH Connection Manager
-ssh_manager:
-  # Enable built-in SSH connection manager
-  # Stores SSH connections for quick access
-  enabled: true
-  
-  # Auto-show SSH manager when typing 'ssh' command
-  # Allows quick selection of saved connections
-  auto_show: true
-
-# URL Handler
-url_handler:
-  # Enable clickable URLs with Ctrl+Click
-  # Automatically detects URLs in terminal output
-  enabled: true
