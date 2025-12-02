@@ -206,8 +206,10 @@ impl TrueColorPalette {
         palette
     }
 
-    /// Get color by 256-color index
+    /// Get color by 256-color index (optimized with inline and match)
     #[allow(dead_code)] // Public API
+    #[must_use]
+    #[inline]
     pub fn get_256(&self, index: u8) -> TrueColor {
         match index {
             0 => self.black,
@@ -228,7 +230,7 @@ impl TrueColorPalette {
             15 => self.bright_white,
             i => self
                 .extended
-                .get(i as usize)
+                .get(usize::from(i))
                 .copied()
                 .unwrap_or(TrueColor::new(0, 0, 0)),
         }
