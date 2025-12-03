@@ -36,14 +36,18 @@ struct Args {
 async fn main() -> Result<()> {
     let args = Args::parse();
 
-    // Initialize logging
+    // Initialize logging to stderr instead of stdout
+    // This prevents log messages from appearing in the terminal UI
     let log_level = if args.debug {
         Level::DEBUG
     } else {
         Level::INFO
     };
 
-    let subscriber = FmtSubscriber::builder().with_max_level(log_level).finish();
+    let subscriber = FmtSubscriber::builder()
+        .with_max_level(log_level)
+        .with_writer(std::io::stderr) // Write to stderr, not stdout
+        .finish();
 
     tracing::subscriber::set_global_default(subscriber)
         .context("Failed to set global default subscriber")?;
