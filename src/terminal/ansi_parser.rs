@@ -377,18 +377,20 @@ impl Perform for AnsiParser {
             // Erase in Display (J) - clear screen
             'J' => {
                 self.flush_text();
-                self.flush_line();
                 let param = params.iter().next().and_then(|p| p.first().copied()).unwrap_or(0);
                 match param {
                     // 0: Clear from cursor to end of display
                     0 => {
-                        // Just clear current line for simplicity
+                        // Flush current line if it has content, then clear remaining
+                        if !self.current_line_spans.is_empty() {
+                            self.flush_line();
+                        }
                         self.current_line_spans.clear();
                         self.current_text.clear();
                     }
                     // 1: Clear from start of display to cursor
                     1 => {
-                        // Clear all previous lines
+                        // Clear all previous lines but preserve current line if it has content
                         self.lines.clear();
                         self.current_line_spans.clear();
                         self.current_text.clear();
