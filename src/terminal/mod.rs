@@ -31,6 +31,7 @@ use std::borrow::Cow;
 use std::io;
 use tokio::time::{interval, Duration};
 use tracing::{debug, info, warn};
+use unicode_width::UnicodeWidthStr;
 
 use crate::colors::TrueColorPalette;
 use crate::config::Config;
@@ -1040,40 +1041,43 @@ impl Terminal {
             .unwrap_or_default();
 
         // If no content yet, show a welcome message so the terminal isn't blank
-        let text = if styled_lines.is_empty() {
-            Text::from(vec![
-                Line::from(""),
-                Line::from(Span::styled(
-                    "Furnace Terminal Emulator",
-                    Style::default()
-                        .fg(Color::Rgb(
-                            COLOR_COOL_RED.0,
-                            COLOR_COOL_RED.1,
-                            COLOR_COOL_RED.2,
-                        ))
-                        .add_modifier(Modifier::BOLD),
-                )),
-                Line::from(""),
-                Line::from(Span::styled(
-                    "Waiting for shell to start...",
-                    Style::default().fg(Color::Rgb(
-                        COLOR_REDDISH_GRAY.0,
-                        COLOR_REDDISH_GRAY.1,
-                        COLOR_REDDISH_GRAY.2,
+        let (text, has_real_content) = if styled_lines.is_empty() {
+            (
+                Text::from(vec![
+                    Line::from(""),
+                    Line::from(Span::styled(
+                        "Furnace Terminal Emulator",
+                        Style::default()
+                            .fg(Color::Rgb(
+                                COLOR_COOL_RED.0,
+                                COLOR_COOL_RED.1,
+                                COLOR_COOL_RED.2,
+                            ))
+                            .add_modifier(Modifier::BOLD),
                     )),
-                )),
-                Line::from(""),
-                Line::from(Span::styled(
-                    "(Press Ctrl+C to quit)",
-                    Style::default().fg(Color::Rgb(
-                        COLOR_DARK_GRAY.0,
-                        COLOR_DARK_GRAY.1,
-                        COLOR_DARK_GRAY.2,
+                    Line::from(""),
+                    Line::from(Span::styled(
+                        "Waiting for shell to start...",
+                        Style::default().fg(Color::Rgb(
+                            COLOR_REDDISH_GRAY.0,
+                            COLOR_REDDISH_GRAY.1,
+                            COLOR_REDDISH_GRAY.2,
+                        )),
                     )),
-                )),
-            ])
+                    Line::from(""),
+                    Line::from(Span::styled(
+                        "(Press Ctrl+C to quit)",
+                        Style::default().fg(Color::Rgb(
+                            COLOR_DARK_GRAY.0,
+                            COLOR_DARK_GRAY.1,
+                            COLOR_DARK_GRAY.2,
+                        )),
+                    )),
+                ]),
+                false,
+            )
         } else {
-            Text::from(styled_lines)
+            (Text::from(styled_lines.clone()), true)
         };
 
         let paragraph = Paragraph::new(text)
@@ -1095,39 +1099,34 @@ impl Terminal {
         f.render_widget(paragraph, area);
 
         // Set cursor position at the end of the visible content
-        // This makes it clear where the user can type
-        if let Some(last_line) = self
-            .cached_styled_lines
-            .get(self.active_session)
-            .and_then(|lines| lines.last())
-        {
-            // Calculate cursor position using display width, not byte count
-            // Use unicode-width to handle multibyte characters correctly
-            use unicode_width::UnicodeWidthStr;
-            
-            let line_width: u16 = last_line
-                .spans
-                .iter()
-                .map(|span| span.content.width() as u16)
-                .sum();
-            
-            let line_count = self
-                .cached_styled_lines
-                .get(self.active_session)
-                .map_or(0, |lines| lines.len()) as u16;
+        // Only position based on actual shell content, not welcome message
+        if has_real_content {
+            if let Some(last_line) = styled_lines.last() {
+                // Calculate cursor position using display width, not byte count
+                let line_width: u16 = last_line
+                    .spans
+                    .iter()
+                    .map(|span| span.content.width() as u16)
+                    .sum();
 
-            // Position cursor at the end of the last line
-            // Ensure we stay within the visible area bounds
-            let cursor_x = (area.x + line_width).min(area.x + area.width.saturating_sub(1));
-            
-            // Y position should be relative to the visible lines, not total lines
-            // Since we already filtered visible_lines to fit in the area, we use line_count - 1
-            let cursor_y = (area.y + line_count.saturating_sub(1))
-                .min(area.y + area.height.saturating_sub(1));
+                let line_count = styled_lines.len() as u16;
 
-            f.set_cursor(cursor_x, cursor_y);
+                // Position cursor at the end of the last line
+                // Ensure we stay within the visible area bounds
+                let cursor_x = (area.x + line_width).min(area.x + area.width.saturating_sub(1));
+
+                // Y position should be relative to the visible lines
+                // Since we already filtered visible_lines to fit in the area, we use line_count - 1
+                let cursor_y = (area.y + line_count.saturating_sub(1))
+                    .min(area.y + area.height.saturating_sub(1));
+
+                f.set_cursor(cursor_x, cursor_y);
+            } else {
+                // Shouldn't happen, but fallback to start of area
+                f.set_cursor(area.x, area.y);
+            }
         } else {
-            // No content yet, position cursor at start of content area
+            // No real content yet, position cursor at start of content area
             f.set_cursor(area.x, area.y);
         }
     }
