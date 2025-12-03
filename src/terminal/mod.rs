@@ -1094,7 +1094,7 @@ impl Terminal {
         // This prevents confusion when the shell is slow to start
         let (text, has_real_content) = if styled_lines.is_empty() {
             // Create a simple prompt-like line to indicate where the user can type
-            // This looks more like a traditional terminal than a blank screen
+            // Use theme colors for consistency with other UI elements
             let prompt_line = Line::from(vec![
                 Span::styled(
                     "> ",
@@ -1110,7 +1110,10 @@ impl Terminal {
             
             (
                 Text::from(vec![prompt_line]),
-                true, // Treat as real content so cursor appears at the prompt
+                // Set to true so the placeholder prompt is treated as real content
+                // This ensures the cursor is positioned at the end of the prompt (after "> ")
+                // instead of at the top-left corner, making it clear where the user should type
+                true,
             )
         } else {
             (Text::from(styled_lines.clone()), true)
