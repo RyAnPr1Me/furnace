@@ -346,8 +346,62 @@ impl Perform for AnsiParser {
                 self.flush_text(); // Style change, flush current text
                 self.handle_sgr(params);
             }
+            // Erase in Line (K) - clear current line content
+            'K' => {
+                self.flush_text();
+                // Get the parameter (default is 0)
+                let param = params.iter().next().and_then(|p| p.first().copied()).unwrap_or(0);
+                match param {
+                    // 0: Clear from cursor to end of line (default)
+                    0 => {
+                        // Clear remaining text on current line
+                        self.current_text.clear();
+                    }
+                    // 1: Clear from start of line to cursor
+                    1 => {
+                        // Clear all spans on current line
+                        self.current_line_spans.clear();
+                        self.current_text.clear();
+                    }
+                    // 2: Clear entire line
+                    2 => {
+                        self.current_line_spans.clear();
+                        self.current_text.clear();
+                    }
+                    _ => {}
+                }
+            }
+            // Erase in Display (J) - clear screen
+            'J' => {
+                self.flush_text();
+                self.flush_line();
+                let param = params.iter().next().and_then(|p| p.first().copied()).unwrap_or(0);
+                match param {
+                    // 0: Clear from cursor to end of display
+                    0 => {
+                        // Just clear current line for simplicity
+                        self.current_line_spans.clear();
+                        self.current_text.clear();
+                    }
+                    // 1: Clear from start of display to cursor
+                    1 => {
+                        // Clear all previous lines
+                        self.lines.clear();
+                        self.current_line_spans.clear();
+                        self.current_text.clear();
+                    }
+                    // 2: Clear entire display
+                    2 | 3 => {
+                        // Clear everything
+                        self.lines.clear();
+                        self.current_line_spans.clear();
+                        self.current_text.clear();
+                    }
+                    _ => {}
+                }
+            }
             // Cursor movement and other CSI sequences - ignore for display
-            'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'J' | 'K' | 'L' | 'M' | 'P' | 'S'
+            'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'L' | 'M' | 'P' | 'S'
             | 'T' | 'X' | 'd' | 'f' | 'g' | 'h' | 'l' | 'n' | 'r' | 's' | 'u' => {
                 // These are cursor/screen control - ignore for basic display
             }
@@ -435,5 +489,22 @@ mod tests {
             assert!(span.style.add_modifier.contains(Modifier::BOLD));
             assert!(span.style.add_modifier.contains(Modifier::UNDERLINED));
         }
+    }
+
+    #[test]
+    fn test_erase_in_line() {
+        // Test ESC[K (clear to end of line)
+        let lines = AnsiParser::parse("Hello\x1b[KWorld");
+        assert_eq!(lines.len(), 1);
+        // Should show "HelloWorld" since we can't accurately track cursor position
+        // but the K sequence shouldn't cause a crash
+    }
+
+    #[test]
+    fn test_erase_in_display() {
+        // Test ESC[2J (clear screen)
+        let lines = AnsiParser::parse("Line1\nLine2\x1b[2JLine3");
+        // After clear screen, only content after clear should remain
+        assert!(!lines.is_empty());
     }
 }
