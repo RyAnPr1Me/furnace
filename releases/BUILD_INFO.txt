@@ -3,12 +3,20 @@ Furnace Terminal Emulator v1.0.0
 
 Build Information
 -----------------
-Build Date: 2025-12-02
+Build Date: 2025-12-03
 Rust Version: 1.91.1 (ed61e7d7e 2025-11-07)
 
 Available Platforms:
 - Windows x86_64 (furnace-windows-x86_64.exe) - 1.9MB
 - Linux x86_64 (furnace-linux-x86_64) - 2.2MB
+
+Latest Changes (2025-12-03)
+---------------------------
+✅ Fixed terminal blank screen on startup
+✅ Added visible cursor for clear input indication
+✅ Added welcome message when shell is starting
+✅ Improved cursor positioning with Unicode support
+✅ Better user feedback and visual clarity
 
 Optimization: Release with LTO
 
