@@ -1090,41 +1090,30 @@ impl Terminal {
             }
         }
 
-        // If no content yet, show a welcome message so the terminal isn't blank
+        // If no content yet, show a placeholder prompt so users know where to type
+        // This prevents confusion when the shell is slow to start
         let (text, has_real_content) = if styled_lines.is_empty() {
+            // Create a simple prompt-like line to indicate where the user can type
+            // Use theme colors for consistency with other UI elements
+            let prompt_line = Line::from(vec![
+                Span::styled(
+                    "> ",
+                    Style::default()
+                        .fg(Color::Rgb(
+                            COLOR_COOL_RED.0,
+                            COLOR_COOL_RED.1,
+                            COLOR_COOL_RED.2,
+                        ))
+                        .add_modifier(Modifier::BOLD),
+                ),
+            ]);
+            
             (
-                Text::from(vec![
-                    Line::from(""),
-                    Line::from(Span::styled(
-                        "Furnace Terminal Emulator",
-                        Style::default()
-                            .fg(Color::Rgb(
-                                COLOR_COOL_RED.0,
-                                COLOR_COOL_RED.1,
-                                COLOR_COOL_RED.2,
-                            ))
-                            .add_modifier(Modifier::BOLD),
-                    )),
-                    Line::from(""),
-                    Line::from(Span::styled(
-                        "Waiting for shell to start...",
-                        Style::default().fg(Color::Rgb(
-                            COLOR_REDDISH_GRAY.0,
-                            COLOR_REDDISH_GRAY.1,
-                            COLOR_REDDISH_GRAY.2,
-                        )),
-                    )),
-                    Line::from(""),
-                    Line::from(Span::styled(
-                        "(Press Ctrl+C to quit)",
-                        Style::default().fg(Color::Rgb(
-                            COLOR_DARK_GRAY.0,
-                            COLOR_DARK_GRAY.1,
-                            COLOR_DARK_GRAY.2,
-                        )),
-                    )),
-                ]),
-                false,
+                Text::from(vec![prompt_line]),
+                // Set to true so the placeholder prompt is treated as real content
+                // This ensures the cursor is positioned at the end of the prompt (after "> ")
+                // instead of at the top-left corner, making it clear where the user should type
+                true,
             )
         } else {
             (Text::from(styled_lines.clone()), true)
