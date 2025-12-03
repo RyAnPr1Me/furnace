@@ -1034,11 +1034,61 @@ impl Terminal {
         }
 
         // Use cached styled lines
-        let styled_lines = self
+        let mut styled_lines = self
             .cached_styled_lines
             .get(self.active_session)
             .cloned()
             .unwrap_or_default();
+
+        // LOCAL ECHO FIX: Append pending command buffer to show user input immediately
+        // This fixes the issue where typed characters are not visible until shell echoes them back
+        // This is especially important on Windows where PTY echo may be delayed or not working
+        if let Some(cmd_buf) = self.command_buffers.get(self.active_session) {
+            if !cmd_buf.is_empty() {
+                // Convert command buffer to string for display (local echo)
+                let pending_input = String::from_utf8_lossy(cmd_buf);
+                
+                // Check if the last line already ends with this input (shell echo is working)
+                // to avoid duplicate display
+                let should_display = if let Some(last_line) = styled_lines.last() {
+                    let last_line_text: String = last_line
+                        .spans
+                        .iter()
+                        .map(|span| span.content.as_ref())
+                        .collect();
+                    // Only show local echo if the shell hasn't echoed it yet
+                    !last_line_text.ends_with(pending_input.as_ref())
+                } else {
+                    true
+                };
+
+                if should_display {
+                    // If we have lines already, append to the last line
+                    if let Some(last_line) = styled_lines.last_mut() {
+                        // Add the pending input as a new span to the last line
+                        // Use the same color as normal text for consistency
+                        last_line.spans.push(Span::styled(
+                            pending_input.into_owned(),
+                            Style::default().fg(Color::Rgb(
+                                COLOR_REDDISH_GRAY.0,
+                                COLOR_REDDISH_GRAY.1,
+                                COLOR_REDDISH_GRAY.2,
+                            )),
+                        ));
+                    } else {
+                        // No lines yet, create a new line with the pending input
+                        styled_lines.push(Line::from(Span::styled(
+                            pending_input.into_owned(),
+                            Style::default().fg(Color::Rgb(
+                                COLOR_REDDISH_GRAY.0,
+                                COLOR_REDDISH_GRAY.1,
+                                COLOR_REDDISH_GRAY.2,
+                            )),
+                        )));
+                    }
+                }
+            }
+        }
 
         // If no content yet, show a welcome message so the terminal isn't blank
         let (text, has_real_content) = if styled_lines.is_empty() {

@@ -353,7 +353,11 @@ impl Perform for AnsiParser {
             'K' => {
                 self.flush_text();
                 // Get the parameter (default is 0)
-                let param = params.iter().next().and_then(|p| p.first().copied()).unwrap_or(0);
+                let param = params
+                    .iter()
+                    .next()
+                    .and_then(|p| p.first().copied())
+                    .unwrap_or(0);
                 match param {
                     // 0: Clear from cursor to end of line (default)
                     0 => {
@@ -377,7 +381,11 @@ impl Perform for AnsiParser {
             // Erase in Display (J) - clear screen
             'J' => {
                 self.flush_text();
-                let param = params.iter().next().and_then(|p| p.first().copied()).unwrap_or(0);
+                let param = params
+                    .iter()
+                    .next()
+                    .and_then(|p| p.first().copied())
+                    .unwrap_or(0);
                 match param {
                     // 0: Clear from cursor to end of display
                     0 => {
@@ -406,8 +414,8 @@ impl Perform for AnsiParser {
                 }
             }
             // Cursor movement and other CSI sequences - ignore for display
-            'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'L' | 'M' | 'P' | 'S'
-            | 'T' | 'X' | 'd' | 'f' | 'g' | 'h' | 'l' | 'n' | 'r' | 's' | 'u' => {
+            'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'L' | 'M' | 'P' | 'S' | 'T' | 'X'
+            | 'd' | 'f' | 'g' | 'h' | 'l' | 'n' | 'r' | 's' | 'u' => {
                 // These are cursor/screen control - ignore for basic display
             }
             _ => {}
@@ -519,10 +527,10 @@ mod tests {
         // PowerShell typically does: ESC[2J (clear), ESC[H (home), then prompt
         let output = "Windows PowerShell\r\nCopyright (C) Microsoft Corporation.\r\n\x1b[2JPS C:\\Users\\Test> ";
         let lines = AnsiParser::parse(output);
-        
+
         // Should have the prompt
         assert!(!lines.is_empty(), "Should have at least the prompt line");
-        
+
         // The last line should contain the prompt
         if let Some(last_line) = lines.last() {
             let text: String = last_line.spans.iter().map(|s| s.content.as_ref()).collect();
@@ -536,7 +544,7 @@ mod tests {
         // For scrollback simplicity, we ignore \r and let text accumulate
         let output = "Initial text\rOverwritten";
         let lines = AnsiParser::parse(output);
-        
+
         assert_eq!(lines.len(), 1, "Should have one line");
         // In our simplified model, both texts appear (no true cursor positioning)
         // This is acceptable for a scrollback-focused terminal
@@ -547,7 +555,7 @@ mod tests {
         // Test \r\n (Windows line ending) - should work correctly
         let output = "Line 1\r\nLine 2\r\nLine 3";
         let lines = AnsiParser::parse(output);
-        
+
         assert_eq!(lines.len(), 3, "Should have three lines");
         let text0: String = lines[0].spans.iter().map(|s| s.content.as_ref()).collect();
         let text1: String = lines[1].spans.iter().map(|s| s.content.as_ref()).collect();
