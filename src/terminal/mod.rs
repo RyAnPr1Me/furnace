@@ -14,7 +14,7 @@ pub mod ansi_parser;
 
 use anyhow::Result;
 use crossterm::{
-    cursor::{Hide, Show},
+    cursor::Show,
     event::{self, Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
@@ -275,12 +275,12 @@ impl Terminal {
         execute!(stdout, EnterAlternateScreen)?;
 
         // Enable mouse capture and bracketed paste mode (Bug #21)
-        // Hide cursor initially - ratatui manages its own cursor
+        // Show cursor so user knows where to type
         execute!(
             stdout,
             crossterm::event::EnableMouseCapture,
             crossterm::event::EnableBracketedPaste,
-            Hide
+            Show
         )?;
 
         let backend = CrosstermBackend::new(stdout);
@@ -1039,7 +1039,39 @@ impl Terminal {
             .cloned()
             .unwrap_or_default();
 
-        let text = Text::from(styled_lines);
+        // If no content yet, show a welcome message so the terminal isn't blank
+        let text = if styled_lines.is_empty() {
+            Text::from(vec![
+                Line::from(""),
+                Line::from(Span::styled(
+                    "Furnace Terminal Emulator",
+                    Style::default()
+                        .fg(Color::Rgb(COLOR_COOL_RED.0, COLOR_COOL_RED.1, COLOR_COOL_RED.2))
+                        .add_modifier(Modifier::BOLD),
+                )),
+                Line::from(""),
+                Line::from(Span::styled(
+                    "Waiting for shell to start...",
+                    Style::default().fg(Color::Rgb(
+                        COLOR_REDDISH_GRAY.0,
+                        COLOR_REDDISH_GRAY.1,
+                        COLOR_REDDISH_GRAY.2,
+                    )),
+                )),
+                Line::from(""),
+                Line::from(Span::styled(
+                    "(Press Ctrl+C to quit)",
+                    Style::default().fg(Color::Rgb(
+                        COLOR_DARK_GRAY.0,
+                        COLOR_DARK_GRAY.1,
+                        COLOR_DARK_GRAY.2,
+                    )),
+                )),
+            ])
+        } else {
+            Text::from(styled_lines)
+        };
+
         let paragraph = Paragraph::new(text)
             .style(
                 Style::default()
@@ -1057,6 +1089,34 @@ impl Terminal {
             .block(Block::default().borders(Borders::NONE));
 
         f.render_widget(paragraph, area);
+
+        // Set cursor position at the end of the visible content
+        // This makes it clear where the user can type
+        if let Some(last_line) = self
+            .cached_styled_lines
+            .get(self.active_session)
+            .and_then(|lines| lines.last())
+        {
+            // Calculate cursor position: area.x + line width, area.y + (number of lines - 1)
+            let line_width: u16 = last_line
+                .spans
+                .iter()
+                .map(|span| span.content.len() as u16)
+                .sum();
+            let line_count = self
+                .cached_styled_lines
+                .get(self.active_session)
+                .map_or(0, |lines| lines.len()) as u16;
+
+            // Position cursor at the end of the last line
+            let cursor_x = area.x + line_width.min(area.width.saturating_sub(1));
+            let cursor_y = area.y + line_count.saturating_sub(1).min(area.height.saturating_sub(1));
+
+            f.set_cursor(cursor_x, cursor_y);
+        } else {
+            // No content yet, position cursor at start of content area
+            f.set_cursor(area.x, area.y);
+        }
     }
 
     /// Render command palette overlay (Bug #4: don't wipe terminal)
