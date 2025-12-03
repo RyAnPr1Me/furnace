@@ -300,8 +300,11 @@ impl Perform for AnsiParser {
             b'\n' => {
                 self.flush_line();
             }
-            // Carriage return - typically ignore, handled with newline
-            b'\r' => {}
+            // Carriage return - in most cases part of \r\n, so we ignore it
+            // True cursor positioning for bare \r is complex for scrollback
+            b'\r' => {
+                // Ignore - most terminals use \r\n together
+            }
             // Tab
             b'\t' => {
                 self.current_text.push_str("    "); // 4-space tab
@@ -506,5 +509,47 @@ mod tests {
         let lines = AnsiParser::parse("Line1\nLine2\x1b[2JLine3");
         // After clear screen, only content after clear should remain
         assert!(!lines.is_empty());
+    }
+
+    #[test]
+    fn test_powershell_clear_and_prompt() {
+        // Simulate PowerShell clearing screen and showing prompt
+        // PowerShell typically does: ESC[2J (clear), ESC[H (home), then prompt
+        let output = "Windows PowerShell\r\nCopyright (C) Microsoft Corporation.\r\n\x1b[2JPS C:\\Users\\Test> ";
+        let lines = AnsiParser::parse(output);
+        
+        // Should have the prompt
+        assert!(!lines.is_empty(), "Should have at least the prompt line");
+        
+        // The last line should contain the prompt
+        if let Some(last_line) = lines.last() {
+            let text: String = last_line.spans.iter().map(|s| s.content.as_ref()).collect();
+            assert!(text.contains("PS"), "Last line should contain prompt");
+        }
+    }
+
+    #[test]
+    fn test_carriage_return_overwrite() {
+        // Test that \r with text (without \n) in a line
+        // For scrollback simplicity, we ignore \r and let text accumulate
+        let output = "Initial text\rOverwritten";
+        let lines = AnsiParser::parse(output);
+        
+        assert_eq!(lines.len(), 1, "Should have one line");
+        // In our simplified model, both texts appear (no true cursor positioning)
+        // This is acceptable for a scrollback-focused terminal
+    }
+
+    #[test]
+    fn test_carriage_return_with_newline() {
+        // Test \r\n (Windows line ending) - should work correctly
+        let output = "Line 1\r\nLine 2\r\nLine 3";
+        let lines = AnsiParser::parse(output);
+        
+        assert_eq!(lines.len(), 3, "Should have three lines");
+        let text0: String = lines[0].spans.iter().map(|s| s.content.as_ref()).collect();
+        let text1: String = lines[1].spans.iter().map(|s| s.content.as_ref()).collect();
+        assert_eq!(text0, "Line 1", "First line should be complete");
+        assert_eq!(text1, "Line 2", "Second line should be complete");
     }
 }
