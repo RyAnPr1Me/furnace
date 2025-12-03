@@ -1068,7 +1068,7 @@ impl Terminal {
                         // Add the pending input as a new span to the last line
                         // Use the same color as normal text for consistency
                         last_line.spans.push(Span::styled(
-                            pending_input.to_string(),
+                            pending_input.into_owned(),
                             Style::default().fg(Color::Rgb(
                                 COLOR_REDDISH_GRAY.0,
                                 COLOR_REDDISH_GRAY.1,
@@ -1078,7 +1078,7 @@ impl Terminal {
                     } else {
                         // No lines yet, create a new line with the pending input
                         styled_lines.push(Line::from(Span::styled(
-                            pending_input.to_string(),
+                            pending_input.into_owned(),
                             Style::default().fg(Color::Rgb(
                                 COLOR_REDDISH_GRAY.0,
                                 COLOR_REDDISH_GRAY.1,
