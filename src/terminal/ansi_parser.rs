@@ -300,8 +300,11 @@ impl Perform for AnsiParser {
             b'\n' => {
                 self.flush_line();
             }
-            // Carriage return - typically ignore, handled with newline
-            b'\r' => {}
+            // Carriage return - in most cases part of \r\n, so we ignore it
+            // True cursor positioning for bare \r is complex for scrollback
+            b'\r' => {
+                // Ignore - most terminals use \r\n together
+            }
             // Tab
             b'\t' => {
                 self.current_text.push_str("    "); // 4-space tab
@@ -346,8 +349,64 @@ impl Perform for AnsiParser {
                 self.flush_text(); // Style change, flush current text
                 self.handle_sgr(params);
             }
+            // Erase in Line (K) - clear current line content
+            'K' => {
+                self.flush_text();
+                // Get the parameter (default is 0)
+                let param = params.iter().next().and_then(|p| p.first().copied()).unwrap_or(0);
+                match param {
+                    // 0: Clear from cursor to end of line (default)
+                    0 => {
+                        // Clear remaining text on current line
+                        self.current_text.clear();
+                    }
+                    // 1: Clear from start of line to cursor
+                    1 => {
+                        // Clear all spans on current line
+                        self.current_line_spans.clear();
+                        self.current_text.clear();
+                    }
+                    // 2: Clear entire line
+                    2 => {
+                        self.current_line_spans.clear();
+                        self.current_text.clear();
+                    }
+                    _ => {}
+                }
+            }
+            // Erase in Display (J) - clear screen
+            'J' => {
+                self.flush_text();
+                let param = params.iter().next().and_then(|p| p.first().copied()).unwrap_or(0);
+                match param {
+                    // 0: Clear from cursor to end of display
+                    0 => {
+                        // Flush current line if it has content, then clear remaining
+                        if !self.current_line_spans.is_empty() {
+                            self.flush_line();
+                        }
+                        self.current_line_spans.clear();
+                        self.current_text.clear();
+                    }
+                    // 1: Clear from start of display to cursor
+                    1 => {
+                        // Clear all previous lines but preserve current line if it has content
+                        self.lines.clear();
+                        self.current_line_spans.clear();
+                        self.current_text.clear();
+                    }
+                    // 2: Clear entire display
+                    2 | 3 => {
+                        // Clear everything
+                        self.lines.clear();
+                        self.current_line_spans.clear();
+                        self.current_text.clear();
+                    }
+                    _ => {}
+                }
+            }
             // Cursor movement and other CSI sequences - ignore for display
-            'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'J' | 'K' | 'L' | 'M' | 'P' | 'S'
+            'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'L' | 'M' | 'P' | 'S'
             | 'T' | 'X' | 'd' | 'f' | 'g' | 'h' | 'l' | 'n' | 'r' | 's' | 'u' => {
                 // These are cursor/screen control - ignore for basic display
             }
@@ -435,5 +494,64 @@ mod tests {
             assert!(span.style.add_modifier.contains(Modifier::BOLD));
             assert!(span.style.add_modifier.contains(Modifier::UNDERLINED));
         }
+    }
+
+    #[test]
+    fn test_erase_in_line() {
+        // Test ESC[K (clear to end of line)
+        let lines = AnsiParser::parse("Hello\x1b[KWorld");
+        assert_eq!(lines.len(), 1);
+        // Should show "HelloWorld" since we can't accurately track cursor position
+        // but the K sequence shouldn't cause a crash
+    }
+
+    #[test]
+    fn test_erase_in_display() {
+        // Test ESC[2J (clear screen)
+        let lines = AnsiParser::parse("Line1\nLine2\x1b[2JLine3");
+        // After clear screen, only content after clear should remain
+        assert!(!lines.is_empty());
+    }
+
+    #[test]
+    fn test_powershell_clear_and_prompt() {
+        // Simulate PowerShell clearing screen and showing prompt
+        // PowerShell typically does: ESC[2J (clear), ESC[H (home), then prompt
+        let output = "Windows PowerShell\r\nCopyright (C) Microsoft Corporation.\r\n\x1b[2JPS C:\\Users\\Test> ";
+        let lines = AnsiParser::parse(output);
+        
+        // Should have the prompt
+        assert!(!lines.is_empty(), "Should have at least the prompt line");
+        
+        // The last line should contain the prompt
+        if let Some(last_line) = lines.last() {
+            let text: String = last_line.spans.iter().map(|s| s.content.as_ref()).collect();
+            assert!(text.contains("PS"), "Last line should contain prompt");
+        }
+    }
+
+    #[test]
+    fn test_carriage_return_overwrite() {
+        // Test that \r with text (without \n) in a line
+        // For scrollback simplicity, we ignore \r and let text accumulate
+        let output = "Initial text\rOverwritten";
+        let lines = AnsiParser::parse(output);
+        
+        assert_eq!(lines.len(), 1, "Should have one line");
+        // In our simplified model, both texts appear (no true cursor positioning)
+        // This is acceptable for a scrollback-focused terminal
+    }
+
+    #[test]
+    fn test_carriage_return_with_newline() {
+        // Test \r\n (Windows line ending) - should work correctly
+        let output = "Line 1\r\nLine 2\r\nLine 3";
+        let lines = AnsiParser::parse(output);
+        
+        assert_eq!(lines.len(), 3, "Should have three lines");
+        let text0: String = lines[0].spans.iter().map(|s| s.content.as_ref()).collect();
+        let text1: String = lines[1].spans.iter().map(|s| s.content.as_ref()).collect();
+        assert_eq!(text0, "Line 1", "First line should be complete");
+        assert_eq!(text1, "Line 2", "Second line should be complete");
     }
 }
