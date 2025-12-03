@@ -1046,7 +1046,11 @@ impl Terminal {
                 Line::from(Span::styled(
                     "Furnace Terminal Emulator",
                     Style::default()
-                        .fg(Color::Rgb(COLOR_COOL_RED.0, COLOR_COOL_RED.1, COLOR_COOL_RED.2))
+                        .fg(Color::Rgb(
+                            COLOR_COOL_RED.0,
+                            COLOR_COOL_RED.1,
+                            COLOR_COOL_RED.2,
+                        ))
                         .add_modifier(Modifier::BOLD),
                 )),
                 Line::from(""),
@@ -1097,20 +1101,29 @@ impl Terminal {
             .get(self.active_session)
             .and_then(|lines| lines.last())
         {
-            // Calculate cursor position: area.x + line width, area.y + (number of lines - 1)
+            // Calculate cursor position using display width, not byte count
+            // Use unicode-width to handle multibyte characters correctly
+            use unicode_width::UnicodeWidthStr;
+            
             let line_width: u16 = last_line
                 .spans
                 .iter()
-                .map(|span| span.content.len() as u16)
+                .map(|span| span.content.width() as u16)
                 .sum();
+            
             let line_count = self
                 .cached_styled_lines
                 .get(self.active_session)
                 .map_or(0, |lines| lines.len()) as u16;
 
             // Position cursor at the end of the last line
-            let cursor_x = area.x + line_width.min(area.width.saturating_sub(1));
-            let cursor_y = area.y + line_count.saturating_sub(1).min(area.height.saturating_sub(1));
+            // Ensure we stay within the visible area bounds
+            let cursor_x = (area.x + line_width).min(area.x + area.width.saturating_sub(1));
+            
+            // Y position should be relative to the visible lines, not total lines
+            // Since we already filtered visible_lines to fit in the area, we use line_count - 1
+            let cursor_y = (area.y + line_count.saturating_sub(1))
+                .min(area.y + area.height.saturating_sub(1));
 
             f.set_cursor(cursor_x, cursor_y);
         } else {
