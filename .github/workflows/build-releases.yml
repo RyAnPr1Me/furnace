@@ -1,0 +1,226 @@
+name: Build Release Binaries
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  build-releases:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            binary_name: furnace
+            output_name: furnace-linux-x86_64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            binary_name: furnace.exe
+            output_name: furnace-windows-x86_64.exe
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: ${{ matrix.target }}
+    
+    - name: Cache cargo registry
+      uses: actions/cache@v3
+      with:
+        path: ~/.cargo/registry
+        key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+        
+    - name: Cache cargo index
+      uses: actions/cache@v3
+      with:
+        path: ~/.cargo/git
+        key: ${{ runner.os }}-cargo-git-${{ hashFiles('**/Cargo.lock') }}
+        
+    - name: Cache cargo build
+      uses: actions/cache@v3
+      with:
+        path: target
+        key: ${{ runner.os }}-cargo-build-release-${{ hashFiles('**/Cargo.lock') }}
+    
+    - name: Build release binary
+      run: cargo build --release --target ${{ matrix.target }}
+      
+    - name: Prepare binary
+      shell: bash
+      run: |
+        mkdir -p releases-temp
+        if [ "${{ runner.os }}" == "Windows" ]; then
+          cp target/${{ matrix.target }}/release/${{ matrix.binary_name }} releases-temp/${{ matrix.output_name }}
+        else
+          cp target/${{ matrix.target }}/release/${{ matrix.binary_name }} releases-temp/${{ matrix.output_name }}
+          chmod +x releases-temp/${{ matrix.output_name }}
+        fi
+    
+    - name: Upload binary artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: ${{ matrix.output_name }}
+        path: releases-temp/${{ matrix.output_name }}
+        retention-days: 1
+
+  update-releases:
+    name: Update Releases Folder
+    needs: build-releases
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Download all artifacts
+      uses: actions/download-artifact@v3
+      with:
+        path: artifacts
+    
+    - name: Update releases folder
+      shell: bash
+      run: |
+        # Create releases folder if it doesn't exist
+        mkdir -p releases
+        
+        # Function to check if file is different
+        is_different() {
+          local new_file="$1"
+          local old_file="$2"
+          
+          if [ ! -f "$old_file" ]; then
+            return 0  # Old file doesn't exist, so it's different
+          fi
+          
+          # Compare file sizes first (quick check)
+          local new_size=$(stat -c%s "$new_file" 2>/dev/null || stat -f%z "$new_file")
+          local old_size=$(stat -c%s "$old_file" 2>/dev/null || stat -f%z "$old_file")
+          
+          if [ "$new_size" != "$old_size" ]; then
+            return 0  # Different sizes
+          fi
+          
+          # Compare checksums
+          local new_hash=$(sha256sum "$new_file" | awk '{print $1}')
+          local old_hash=$(sha256sum "$old_file" | awk '{print $1}')
+          
+          if [ "$new_hash" != "$old_hash" ]; then
+            return 0  # Different checksums
+          fi
+          
+          return 1  # Files are identical
+        }
+        
+        # Track if any files were updated
+        updated=false
+        
+        # Process Linux binary
+        if [ -f "artifacts/furnace-linux-x86_64/furnace-linux-x86_64" ]; then
+          if is_different "artifacts/furnace-linux-x86_64/furnace-linux-x86_64" "releases/furnace-linux-x86_64"; then
+            echo "Updating Linux binary..."
+            cp artifacts/furnace-linux-x86_64/furnace-linux-x86_64 releases/furnace-linux-x86_64
+            chmod +x releases/furnace-linux-x86_64
+            # Also update the -latest symlink
+            cp artifacts/furnace-linux-x86_64/furnace-linux-x86_64 releases/furnace-linux-x86_64-latest
+            chmod +x releases/furnace-linux-x86_64-latest
+            updated=true
+          else
+            echo "Linux binary unchanged, skipping..."
+          fi
+        fi
+        
+        # Process Windows binary
+        if [ -f "artifacts/furnace-windows-x86_64.exe/furnace-windows-x86_64.exe" ]; then
+          if is_different "artifacts/furnace-windows-x86_64.exe/furnace-windows-x86_64.exe" "releases/furnace-windows-x86_64.exe"; then
+            echo "Updating Windows binary..."
+            cp artifacts/furnace-windows-x86_64.exe/furnace-windows-x86_64.exe releases/furnace-windows-x86_64.exe
+            chmod +x releases/furnace-windows-x86_64.exe
+            updated=true
+          else
+            echo "Windows binary unchanged, skipping..."
+          fi
+        fi
+        
+        # Update checksums if files were updated
+        if [ "$updated" = true ]; then
+          echo "Generating checksums..."
+          cd releases
+          sha256sum furnace-linux-x86_64 furnace-windows-x86_64.exe > SHA256SUMS
+          cd ..
+          
+          # Update BUILD_INFO.txt
+          echo "Updating build info..."
+          cat > releases/BUILD_INFO.txt << EOF
+        Furnace Terminal Emulator - Build Information
+        =============================================
+        
+        Build Date: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+        Git Commit: ${{ github.sha }}
+        Git Branch: ${{ github.ref_name }}
+        
+        Binaries:
+        - furnace-linux-x86_64 (Linux x86_64)
+        - furnace-windows-x86_64.exe (Windows x86_64)
+        
+        Build Configuration:
+        - Optimization: Release (Level 3)
+        - LTO: Fat (Full Link-Time Optimization)
+        - Strip: Yes (Debug symbols removed)
+        - Rust Version: $(rustc --version 2>/dev/null || echo "N/A")
+        
+        Checksums: See SHA256SUMS file
+        EOF
+          
+          echo "✓ Releases folder updated"
+        else
+          echo "✓ No updates needed - all binaries are current"
+        fi
+    
+    - name: Check for changes
+      id: check_changes
+      run: |
+        if git diff --quiet releases/; then
+          echo "has_changes=false" >> $GITHUB_OUTPUT
+        else
+          echo "has_changes=true" >> $GITHUB_OUTPUT
+        fi
+    
+    - name: Commit and push if changed
+      if: steps.check_changes.outputs.has_changes == 'true'
+      run: |
+        git config --local user.email "github-actions[bot]@users.noreply.github.com"
+        git config --local user.name "github-actions[bot]"
+        git add releases/
+        git commit -m "Update release binaries [skip ci]
+
+        - Built from commit ${{ github.sha }}
+        - Updated: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+        - Checksums and build info updated"
+        git push
+      
+    - name: Summary
+      run: |
+        echo "========================================="
+        echo "✓ BUILD COMPLETE"
+        echo "========================================="
+        echo ""
+        echo "Binaries built and placed in releases/ folder:"
+        ls -lh releases/ | grep -E "(furnace-linux|furnace-windows)" || true
+        echo ""
+        if [ -f releases/SHA256SUMS ]; then
+          echo "Checksums:"
+          cat releases/SHA256SUMS
+        fi
+        echo ""
+        echo "Release binaries are ready! 🔥"
