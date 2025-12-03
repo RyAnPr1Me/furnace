@@ -1,4 +1,6 @@
 name: Build Release Binaries
+permissions:
+  contents: read
 
 on:
   push:
