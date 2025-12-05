@@ -264,10 +264,10 @@ mod local_echo_tests {
         // Create a terminal with default config
         let config = Config::default();
         let terminal = Terminal::new(config);
-        
+
         // Should create successfully with local echo support
         assert!(terminal.is_ok(), "Terminal creation failed");
-        
+
         // The terminal should be able to handle command buffers for local echo
         // This is verified by the successful creation and internal structure
     }
@@ -278,7 +278,10 @@ mod local_echo_tests {
         // This is an indirect test since command_buffers is private
         let config = Config::default();
         let terminal = Terminal::new(config);
-        
-        assert!(terminal.is_ok(), "Terminal should track command buffers internally");
+
+        assert!(
+            terminal.is_ok(),
+            "Terminal should track command buffers internally"
+        );
     }
 }

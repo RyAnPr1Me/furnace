@@ -1047,7 +1047,7 @@ impl Terminal {
             if !cmd_buf.is_empty() {
                 // Convert command buffer to string for display (local echo)
                 let pending_input = String::from_utf8_lossy(cmd_buf);
-                
+
                 // Check if the last line already ends with this input (shell echo is working)
                 // to avoid duplicate display
                 let should_display = if let Some(last_line) = styled_lines.last() {
@@ -1095,19 +1095,17 @@ impl Terminal {
         let (text, has_real_content) = if styled_lines.is_empty() {
             // Create a simple prompt-like line to indicate where the user can type
             // Use theme colors for consistency with other UI elements
-            let prompt_line = Line::from(vec![
-                Span::styled(
-                    "> ",
-                    Style::default()
-                        .fg(Color::Rgb(
-                            COLOR_COOL_RED.0,
-                            COLOR_COOL_RED.1,
-                            COLOR_COOL_RED.2,
-                        ))
-                        .add_modifier(Modifier::BOLD),
-                ),
-            ]);
-            
+            let prompt_line = Line::from(vec![Span::styled(
+                "> ",
+                Style::default()
+                    .fg(Color::Rgb(
+                        COLOR_COOL_RED.0,
+                        COLOR_COOL_RED.1,
+                        COLOR_COOL_RED.2,
+                    ))
+                    .add_modifier(Modifier::BOLD),
+            )]);
+
             (
                 Text::from(vec![prompt_line]),
                 // Set to true so the placeholder prompt is treated as real content
