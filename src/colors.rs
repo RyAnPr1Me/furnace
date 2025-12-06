@@ -12,6 +12,7 @@ pub struct TrueColor {
 
 impl TrueColor {
     /// Create a new true color from RGB values
+    #[must_use]
     pub const fn new(r: u8, g: u8, b: u8) -> Self {
         Self { r, g, b }
     }
@@ -77,6 +78,7 @@ impl TrueColor {
     /// let blue = TrueColor::new(0, 0, 255);
     /// let purple = red.blend(blue, 0.5);  // 50% blend = purple
     /// ```
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     #[allow(dead_code)] // Public API
     #[must_use]
     pub fn blend(self, other: Self, factor: f32) -> Self {
@@ -85,6 +87,7 @@ impl TrueColor {
             // Use mul_add for efficient FMA (Fused Multiply-Add) instruction
             // Formula: self * (1 - factor) + other * factor
             // Restructured as: (other - self) * factor + self for proper FMA usage
+            // Note: Casts are safe because we clamp factor and round before casting
             r: (f32::from(other.r) - f32::from(self.r))
                 .mul_add(factor, f32::from(self.r))
                 .round() as u8,

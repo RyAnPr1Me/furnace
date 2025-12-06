@@ -184,13 +184,13 @@ impl KeybindingManager {
         match feature {
             ShellIntegrationFeature::OscSequences => self.shell_integration.osc_sequences = enabled,
             ShellIntegrationFeature::PromptDetection => {
-                self.shell_integration.prompt_detection = enabled
+                self.shell_integration.prompt_detection = enabled;
             }
             ShellIntegrationFeature::DirectoryTracking => {
-                self.shell_integration.directory_tracking = enabled
+                self.shell_integration.directory_tracking = enabled;
             }
             ShellIntegrationFeature::CommandTracking => {
-                self.shell_integration.command_tracking = enabled
+                self.shell_integration.command_tracking = enabled;
             }
         }
     }

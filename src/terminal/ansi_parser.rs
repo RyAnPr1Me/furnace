@@ -16,6 +16,7 @@ use vte::{Params, Parser, Perform};
 /// This is marked inline to allow the compiler to optimize it away when possible
 #[inline]
 #[must_use]
+#[allow(clippy::cast_possible_truncation)] // Intentional: we clamp to 0-255
 const fn to_color_u8(value: u16) -> u8 {
     if value > 255 {
         255
@@ -38,6 +39,7 @@ pub struct AnsiParser {
 
 impl AnsiParser {
     /// Create a new ANSI parser
+    #[must_use]
     pub fn new() -> Self {
         Self {
             current_style: Style::default().fg(Color::White).bg(Color::Black),
@@ -76,6 +78,7 @@ impl AnsiParser {
     /// ```ignore
     /// let lines = AnsiParser::parse("\x1b[31mRed text\x1b[0m");
     /// ```
+    #[must_use]
     pub fn parse(text: &str) -> Vec<Line<'static>> {
         let mut parser = Parser::new();
         let mut performer = AnsiParser::new();

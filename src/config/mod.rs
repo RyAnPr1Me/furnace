@@ -724,14 +724,14 @@ mod tests {
 
     #[test]
     fn test_lua_config_deserialization() {
-        let lua_config = r#"
+        let lua_config = r"
 config = {
     terminal = {
         enable_tabs = true,
         enable_split_pane = true
     }
 }
-"#;
+";
         let lua = Lua::new();
         lua.load(lua_config).exec().unwrap();
         let globals = lua.globals();

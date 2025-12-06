@@ -163,6 +163,7 @@ fn format_duration_secs(secs: u64) -> String {
 }
 
 /// Format duration for display (legacy API)
+#[must_use]
 #[allow(dead_code)]
 pub fn format_duration(duration: Duration) -> String {
     format_duration_secs(duration.as_secs())

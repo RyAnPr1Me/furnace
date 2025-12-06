@@ -150,7 +150,7 @@ impl ShellSession {
             pixel_width: 0,
             pixel_height: 0,
         })
-        .context(format!("Failed to resize PTY to {}x{}", rows, cols))?;
+        .context(format!("Failed to resize PTY to {rows}x{cols}"))?;
 
         debug!("Resized PTY to {}x{}", rows, cols);
         Ok(())

@@ -46,6 +46,11 @@ impl SessionManager {
     }
 
     /// Save a session
+    ///
+    /// # Errors
+    /// Returns an error if:
+    /// - JSON serialization fails
+    /// - The session file cannot be written
     #[allow(dead_code)] // Public API
     pub fn save_session(&self, session: &SavedSession) -> Result<()> {
         let session_file = self.sessions_dir.join(format!("{}.json", session.id));
@@ -57,6 +62,12 @@ impl SessionManager {
     }
 
     /// Load a session by ID
+    ///
+    /// # Errors
+    /// Returns an error if:
+    /// - The session file doesn't exist
+    /// - The file cannot be read
+    /// - JSON deserialization fails
     #[allow(dead_code)] // Public API
     pub fn load_session(&self, id: &str) -> Result<SavedSession> {
         let session_file = self.sessions_dir.join(format!("{id}.json"));
@@ -69,6 +80,9 @@ impl SessionManager {
     }
 
     /// List all saved sessions
+    ///
+    /// # Errors
+    /// Returns an error if the sessions directory cannot be read
     #[allow(dead_code)] // Public API
     pub fn list_sessions(&self) -> Result<Vec<SavedSession>> {
         let mut sessions = Vec::new();
@@ -93,6 +107,9 @@ impl SessionManager {
     }
 
     /// Delete a session
+    ///
+    /// # Errors
+    /// Returns an error if the session file cannot be deleted
     #[allow(dead_code)] // Public API
     pub fn delete_session(&self, id: &str) -> Result<()> {
         let session_file = self.sessions_dir.join(format!("{id}.json"));
@@ -116,14 +133,13 @@ impl Default for SessionManager {
     /// the system's temporary directory.
     fn default() -> Self {
         // Try to create with graceful fallback
-        match Self::new() {
-            Ok(manager) => manager,
-            Err(_) => {
-                // Fallback: use temp directory if home is unavailable
-                let sessions_dir = std::env::temp_dir().join("furnace_sessions");
-                let _ = std::fs::create_dir_all(&sessions_dir);
-                Self { sessions_dir }
-            }
+        if let Ok(manager) = Self::new() {
+            manager
+        } else {
+            // Fallback: use temp directory if home is unavailable
+            let sessions_dir = std::env::temp_dir().join("furnace_sessions");
+            let _ = std::fs::create_dir_all(&sessions_dir);
+            Self { sessions_dir }
         }
     }
 }
