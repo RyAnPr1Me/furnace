@@ -32,7 +32,7 @@ If applicable, add screenshots to help explain your problem.
 Please share relevant parts of your `config.lua` file if applicable.
 
 ```lua
-# Paste your config here
+-- Paste your config here
 ```
 
 **Logs**

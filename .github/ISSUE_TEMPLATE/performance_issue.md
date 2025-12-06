@@ -36,7 +36,7 @@ A clear and concise description of what performance you expected.
 Relevant parts of your `config.lua`:
 
 ```lua
-# Paste your config here
+-- Paste your config here
 ```
 
 **Profiling data**
