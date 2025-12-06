@@ -44,7 +44,6 @@ pub enum Action {
     SearchPrev,
 
     // Command palette
-    CommandPalette,
 
     // Resource monitor
     ToggleResourceMonitor,
@@ -123,7 +122,6 @@ impl KeybindingManager {
         self.add_binding("N", vec!["Ctrl", "Shift"], Action::SearchPrev);
 
         // Features
-        self.add_binding("p", vec!["Ctrl"], Action::CommandPalette);
         self.add_binding("r", vec!["Ctrl"], Action::ToggleResourceMonitor);
 
         // Session management

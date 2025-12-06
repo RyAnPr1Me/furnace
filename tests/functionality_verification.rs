@@ -170,15 +170,9 @@ config = {
 #[cfg(test)]
 mod ui_tests {
     use furnace::ui::{
-        autocomplete::Autocomplete, command_palette::CommandPalette,
+        autocomplete::Autocomplete,
         resource_monitor::ResourceMonitor, themes::ThemeManager,
     };
-
-    #[test]
-    fn test_command_palette_creation() {
-        let palette = CommandPalette::new();
-        assert!(!palette.visible);
-    }
 
     #[test]
     fn test_resource_monitor_creation() {

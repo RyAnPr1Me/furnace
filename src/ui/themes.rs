@@ -312,6 +312,7 @@ impl ThemeManager {
 
     /// Get the current theme
     #[must_use]
+    #[allow(dead_code)] // Public API for theme management
     pub fn current(&self) -> &Theme {
         &self.current_theme
     }
@@ -327,6 +328,7 @@ impl ThemeManager {
     /// Switch to a different theme by name
     ///
     /// Returns true if the theme was switched successfully, false if the theme was not found
+    #[allow(dead_code)] // Public API for theme management
     pub fn switch_theme(&mut self, name: &str) -> bool {
         let name_lower = name.to_lowercase();
         if let Some(theme) = self.available_themes.get(&name_lower) {
@@ -338,6 +340,7 @@ impl ThemeManager {
     }
 
     /// Cycle to the next theme in alphabetical order
+    #[allow(dead_code)] // Public API for theme management
     pub fn next_theme(&mut self) {
         let names = self.available_theme_names();
         if names.is_empty() {

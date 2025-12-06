@@ -213,8 +213,6 @@ pub struct KeyBindings {
 
 #[derive(Debug, Clone, Default)]
 pub struct FeaturesConfig {
-    /// Enable command palette (Ctrl+P)
-    pub command_palette: bool,
     /// Enable resource monitor (Ctrl+R)
     pub resource_monitor: bool,
     /// Enable autocomplete suggestions
@@ -230,9 +228,6 @@ pub struct FeaturesConfig {
 impl FeaturesConfig {
     fn from_lua_table(table: &Table) -> Result<Self> {
         Ok(Self {
-            command_palette: table
-                .get::<_, Option<bool>>("command_palette")?
-                .unwrap_or(false),
             resource_monitor: table
                 .get::<_, Option<bool>>("resource_monitor")?
                 .unwrap_or(false),

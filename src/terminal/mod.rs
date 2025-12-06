@@ -24,7 +24,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span, Text},
-    widgets::{Block, Borders, Clear, Paragraph, Tabs},
+    widgets::{Block, Borders, Paragraph, Tabs},
     Terminal as RatatuiTerminal,
 };
 use std::borrow::Cow;
@@ -40,7 +40,7 @@ use crate::progress_bar::ProgressBar;
 use crate::session::SessionManager;
 use crate::shell::ShellSession;
 use crate::ui::{
-    autocomplete::Autocomplete, command_palette::CommandPalette, resource_monitor::ResourceMonitor,
+    autocomplete::Autocomplete, resource_monitor::ResourceMonitor,
     themes::ThemeManager,
 };
 
@@ -54,6 +54,7 @@ const TARGET_FPS: u64 = 170;
 const READ_BUFFER_SIZE: usize = 4 * 1024;
 
 /// Notification display duration in seconds
+#[allow(dead_code)] // May be used for notifications feature
 const NOTIFICATION_DURATION_SECS: u64 = 2;
 
 /// Minimum popup size to prevent collapse (Bug #19)
@@ -90,6 +91,7 @@ const COLOR_REDDISH_GRAY: (u8, u8, u8) = (0xC0, 0xB0, 0xB0); // Reddish-gray tex
 const COLOR_PURE_BLACK: (u8, u8, u8) = (0x00, 0x00, 0x00); // Pure black background
 const COLOR_MUTED_GREEN: (u8, u8, u8) = (0x6A, 0x9A, 0x7A); // Muted green
 const COLOR_MAGENTA_RED: (u8, u8, u8) = (0xB0, 0x5A, 0x7A); // Magenta-red
+#[allow(dead_code)] // May be used for future UI features
 const COLOR_DARK_GRAY: (u8, u8, u8) = (0x5A, 0x4A, 0x4A); // Dark gray for comments
 
 /// High-performance terminal with GPU-accelerated rendering at 170 FPS
@@ -99,7 +101,6 @@ pub struct Terminal {
     active_session: usize,
     output_buffers: Vec<Vec<u8>>,
     should_quit: bool,
-    command_palette: Option<CommandPalette>,
     resource_monitor: Option<ResourceMonitor>,
     #[allow(dead_code)] // Feature not yet implemented
     autocomplete: Option<Autocomplete>,
@@ -111,6 +112,7 @@ pub struct Terminal {
     #[allow(dead_code)]
     color_palette: TrueColorPalette,
     // Theme manager for dynamic theme switching
+    #[allow(dead_code)] // May be used for future theming features
     theme_manager: Option<ThemeManager>,
     // Performance optimization: track if redraw is needed
     dirty: bool,
@@ -178,7 +180,6 @@ impl Terminal {
         };
 
         // Capture feature flags before moving config
-        let enable_command_palette = config.features.command_palette;
         let enable_resource_monitor = config.features.resource_monitor;
         let enable_autocomplete = config.features.autocomplete;
         let enable_progress_bar = config.features.progress_bar;
@@ -189,11 +190,6 @@ impl Terminal {
             active_session: 0,
             output_buffers: Vec::with_capacity(8),
             should_quit: false,
-            command_palette: if enable_command_palette {
-                Some(CommandPalette::new())
-            } else {
-                None
-            },
             resource_monitor: if enable_resource_monitor {
                 Some(ResourceMonitor::new())
             } else {
@@ -570,21 +566,7 @@ impl Terminal {
 
     /// Handle keyboard events with optimal input processing
     async fn handle_key_event(&mut self, key: KeyEvent) -> Result<()> {
-        // Command palette takes priority
-        if let Some(ref palette) = self.command_palette {
-            if palette.visible {
-                return self.handle_command_palette_input(key).await;
-            }
-        }
-
         match (key.code, key.modifiers) {
-            // Command palette (Ctrl+P)
-            (KeyCode::Char('p'), KeyModifiers::CONTROL) => {
-                if let Some(ref mut palette) = self.command_palette {
-                    palette.toggle();
-                }
-            }
-
             // Toggle resource monitor (Ctrl+R)
             (KeyCode::Char('r'), KeyModifiers::CONTROL) => {
                 if self.resource_monitor.is_some() {
@@ -727,112 +709,6 @@ impl Terminal {
             // Clear command buffer
             if let Some(cmd_buf) = self.command_buffers.get_mut(self.active_session) {
                 cmd_buf.clear();
-            }
-        }
-        Ok(())
-    }
-
-    /// Handle command palette input
-    async fn handle_command_palette_input(&mut self, key: KeyEvent) -> Result<()> {
-        let Some(ref mut palette) = self.command_palette else {
-            return Ok(());
-        };
-
-        match key.code {
-            KeyCode::Esc => {
-                palette.toggle();
-            }
-            KeyCode::Enter => {
-                if let Some(command) = palette.execute_selected() {
-                    self.execute_command(&command).await?;
-                }
-            }
-            KeyCode::Up => {
-                palette.select_previous();
-            }
-            KeyCode::Down => {
-                palette.select_next();
-            }
-            KeyCode::Char(c) => {
-                palette.input.push(c);
-                // Rebuild suggestions without cloning the entire input
-                palette.refresh_suggestions();
-            }
-            KeyCode::Backspace => {
-                palette.input.pop();
-                palette.refresh_suggestions();
-            }
-            _ => {}
-        }
-        Ok(())
-    }
-
-    /// Execute a command from the palette
-    async fn execute_command(&mut self, command: &str) -> Result<()> {
-        match command {
-            "new-tab" => self.create_new_tab().await?,
-            "close-tab" => {
-                if self.sessions.len() > 1 {
-                    self.sessions.remove(self.active_session);
-                    self.output_buffers.remove(self.active_session);
-                    self.command_buffers.remove(self.active_session);
-                    self.cached_styled_lines.remove(self.active_session);
-                    self.cached_buffer_lens.remove(self.active_session);
-                    if self.active_session >= self.sessions.len() {
-                        self.active_session = self.sessions.len().saturating_sub(1);
-                    }
-                }
-            }
-            "clear" => {
-                if let Some(buffer) = self.output_buffers.get_mut(self.active_session) {
-                    buffer.clear();
-                }
-                // Invalidate render cache
-                if let Some(len) = self.cached_buffer_lens.get_mut(self.active_session) {
-                    *len = 0;
-                }
-            }
-            "theme" => {
-                // Cycle to next theme
-                if let Some(ref mut tm) = self.theme_manager {
-                    tm.next_theme();
-                    let theme_name = tm.current().name.clone();
-                    self.notification_message = Some(format!("Theme: {theme_name}"));
-                    self.notification_frames = TARGET_FPS * NOTIFICATION_DURATION_SECS;
-                    // Force redraw with new theme
-                    self.dirty = true;
-                    // Invalidate all render caches to apply new theme
-                    for len in &mut self.cached_buffer_lens {
-                        *len = 0;
-                    }
-                }
-            }
-            "quit" => {
-                self.should_quit = true;
-            }
-            cmd if cmd.starts_with("theme ") => {
-                // Switch to specific theme by name
-                if let Some(ref mut tm) = self.theme_manager {
-                    let theme_name = &cmd["theme ".len()..];
-                    let theme_name = theme_name.trim();
-                    if tm.switch_theme(theme_name) {
-                        self.notification_message = Some(format!("Theme: {}", tm.current().name));
-                        self.notification_frames = TARGET_FPS * NOTIFICATION_DURATION_SECS;
-                        self.dirty = true;
-                        // Invalidate all render caches
-                        for len in &mut self.cached_buffer_lens {
-                            *len = 0;
-                        }
-                    } else {
-                        // Show available themes
-                        let available = tm.available_theme_names().join(", ");
-                        self.notification_message = Some(format!("Available themes: {available}"));
-                        self.notification_frames = TARGET_FPS * NOTIFICATION_DURATION_SECS;
-                    }
-                }
-            }
-            _ => {
-                debug!("Unknown command: {}", command);
             }
         }
         Ok(())
@@ -1016,17 +892,6 @@ impl Terminal {
                     )
                     .block(Block::default().borders(Borders::NONE));
                 f.render_widget(progress_widget, progress_area);
-            }
-        }
-
-        // Render command palette if visible (Bug #4: don't wipe terminal)
-        if let Some(ref palette) = self.command_palette {
-            if palette.visible {
-                // First render terminal output underneath
-                self.render_terminal_output(f, content_area);
-                // Then render command palette overlay
-                self.render_command_palette(f, content_area);
-                return;
             }
         }
 
@@ -1217,111 +1082,6 @@ impl Terminal {
     }
 
     /// Render command palette overlay (Bug #4: don't wipe terminal)
-    fn render_command_palette(&self, f: &mut ratatui::Frame, area: Rect) {
-        let Some(ref palette) = self.command_palette else {
-            return;
-        };
-
-        let popup_area = centered_popup(area, 80, 20);
-
-        // Bug #4: Clear only the popup area, not the entire screen
-        f.render_widget(Clear, popup_area);
-
-        let palette_chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Length(3), Constraint::Min(0)])
-            .split(popup_area);
-
-        // Input box
-        let input = Paragraph::new(format!("> {}", palette.input))
-            .style(
-                Style::default()
-                    .fg(Color::Rgb(
-                        COLOR_MAGENTA_RED.0,
-                        COLOR_MAGENTA_RED.1,
-                        COLOR_MAGENTA_RED.2,
-                    ))
-                    .bg(Color::Rgb(
-                        COLOR_PURE_BLACK.0,
-                        COLOR_PURE_BLACK.1,
-                        COLOR_PURE_BLACK.2,
-                    )),
-            )
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .title("Command Palette (Esc to close)")
-                    .border_style(Style::default().fg(Color::Rgb(
-                        COLOR_MAGENTA_RED.0,
-                        COLOR_MAGENTA_RED.1,
-                        COLOR_MAGENTA_RED.2,
-                    )))
-                    .style(Style::default().bg(Color::Rgb(
-                        COLOR_PURE_BLACK.0,
-                        COLOR_PURE_BLACK.1,
-                        COLOR_PURE_BLACK.2,
-                    ))),
-            );
-        f.render_widget(input, palette_chunks[0]);
-
-        // Suggestions
-        let suggestions: Vec<Line> = palette
-            .suggestions
-            .iter()
-            .enumerate()
-            .map(|(i, s)| {
-                let style = if i == palette.selected_index {
-                    Style::default()
-                        .fg(Color::Rgb(
-                            COLOR_COOL_RED.0,
-                            COLOR_COOL_RED.1,
-                            COLOR_COOL_RED.2,
-                        ))
-                        .add_modifier(Modifier::BOLD)
-                } else {
-                    Style::default().fg(Color::Rgb(
-                        COLOR_REDDISH_GRAY.0,
-                        COLOR_REDDISH_GRAY.1,
-                        COLOR_REDDISH_GRAY.2,
-                    ))
-                };
-                Line::from(vec![
-                    Span::styled(format!("  {} ", s.command), style),
-                    Span::styled(
-                        format!("- {}", s.description),
-                        Style::default().fg(Color::Rgb(
-                            COLOR_DARK_GRAY.0,
-                            COLOR_DARK_GRAY.1,
-                            COLOR_DARK_GRAY.2,
-                        )),
-                    ),
-                ])
-            })
-            .collect();
-
-        let suggestions_widget = Paragraph::new(suggestions)
-            .style(Style::default().bg(Color::Rgb(
-                COLOR_PURE_BLACK.0,
-                COLOR_PURE_BLACK.1,
-                COLOR_PURE_BLACK.2,
-            )))
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::Rgb(
-                        COLOR_MAGENTA_RED.0,
-                        COLOR_MAGENTA_RED.1,
-                        COLOR_MAGENTA_RED.2,
-                    )))
-                    .style(Style::default().bg(Color::Rgb(
-                        COLOR_PURE_BLACK.0,
-                        COLOR_PURE_BLACK.1,
-                        COLOR_PURE_BLACK.2,
-                    ))),
-            );
-        f.render_widget(suggestions_widget, palette_chunks[1]);
-    }
-
     /// Render resource monitor (Bug #23: doesn't need &mut self)
     fn render_resource_monitor(&mut self, f: &mut ratatui::Frame, area: Rect) {
         let Some(ref mut monitor) = self.resource_monitor else {
@@ -1364,6 +1124,7 @@ impl Terminal {
 
 /// Bug #19: Create a centered popup area with minimum size guarantees
 #[must_use]
+#[allow(dead_code)] // May be used for future UI features
 pub fn centered_popup(parent: Rect, max_width: u16, max_height: u16) -> Rect {
     // Enforce minimum size (Bug #19)
     let width = parent.width.min(max_width).max(MIN_POPUP_WIDTH);
