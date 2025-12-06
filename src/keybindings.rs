@@ -64,6 +64,7 @@ pub enum Action {
 /// Shell integration features
 #[derive(Debug, Clone)]
 #[allow(dead_code)] // Public API for shell integration
+#[allow(clippy::struct_excessive_bools)]
 pub struct ShellIntegration {
     /// OSC sequences support
     pub osc_sequences: bool,

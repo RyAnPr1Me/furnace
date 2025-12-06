@@ -135,6 +135,8 @@ impl AnsiParser {
     /// - 48: Extended background color (256-color or RGB)
     /// - 90-97: Bright foreground colors
     /// - 100-107: Bright background colors
+    #[allow(clippy::too_many_lines)]
+    #[allow(clippy::match_same_arms)]
     fn handle_sgr(&mut self, params: &Params) {
         let mut iter = params.iter();
 
@@ -345,6 +347,7 @@ impl Perform for AnsiParser {
         self.current_text.push(c);
     }
 
+    #[allow(clippy::match_same_arms)]
     fn execute(&mut self, byte: u8) {
         match byte {
             // Newline
@@ -387,6 +390,7 @@ impl Perform for AnsiParser {
         // We ignore these for now
     }
 
+    #[allow(clippy::match_same_arms)]
     fn csi_dispatch(
         &mut self,
         params: &Params,

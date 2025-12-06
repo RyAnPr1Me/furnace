@@ -105,8 +105,8 @@ impl ResourceMonitor {
         // Network and disk stats - Basic implementation
         // Note: Advanced network/disk monitoring requires platform-specific APIs
         // Current implementation provides basic disk info available cross-platform
-        let (network_rx, network_tx) = self.get_network_stats();
-        let disk_usage = self.get_disk_info(&system);
+        let (network_rx, network_tx) = Self::get_network_stats();
+        let disk_usage = Self::get_disk_info(&system);
 
         let stats = ResourceStats {
             cpu_usage,
@@ -127,14 +127,14 @@ impl ResourceMonitor {
 
     /// Get basic network statistics (placeholder for cross-platform implementation)
     /// Returns `(rx_bytes, tx_bytes)`
-    fn get_network_stats(&self) -> (u64, u64) {
+    fn get_network_stats() -> (u64, u64) {
         // Basic implementation - can be extended with platform-specific code
         // For now, returns 0 to maintain API compatibility
         (0, 0)
     }
 
     /// Get disk usage information
-    fn get_disk_info(&self, _system: &System) -> Vec<DiskInfo> {
+    fn get_disk_info(_system: &System) -> Vec<DiskInfo> {
         // Get disk information using sysinfo's Disks API
         let disks = Disks::new_with_refreshed_list();
 

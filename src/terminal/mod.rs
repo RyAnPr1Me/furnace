@@ -94,6 +94,7 @@ const COLOR_MAGENTA_RED: (u8, u8, u8) = (0xB0, 0x5A, 0x7A); // Magenta-red
 const COLOR_DARK_GRAY: (u8, u8, u8) = (0x5A, 0x4A, 0x4A); // Dark gray for comments
 
 /// High-performance terminal with GPU-accelerated rendering at 170 FPS
+#[allow(clippy::struct_field_names)]
 pub struct Terminal {
     config: Config,
     sessions: Vec<ShellSession>,
@@ -281,6 +282,7 @@ impl Terminal {
     ///
     /// # Errors
     /// Returns an error if terminal setup, shell session creation, or event handling fails
+    #[allow(clippy::too_many_lines)]
     pub async fn run(&mut self) -> Result<()> {
         // Set up terminal
         enable_raw_mode()?;
@@ -406,7 +408,7 @@ impl Terminal {
                                 self.dirty = true;
                             }
                             Ok(Event::Mouse(mouse)) => {
-                                self.handle_mouse_event(mouse).await?;
+                                self.handle_mouse_event(mouse);
                                 self.dirty = true;
                             }
                             Ok(Event::Resize(new_cols, new_rows)) => {
@@ -558,9 +560,10 @@ impl Terminal {
     }
 
     /// Handle mouse events
-    async fn handle_mouse_event(&mut self, _mouse: MouseEvent) -> Result<()> {
+    #[allow(clippy::unused_self)]
+    fn handle_mouse_event(&mut self, _mouse: MouseEvent) {
         // Mouse events currently not handled
-        Ok(())
+        // Keeping &mut self for future implementation
     }
 
     /// Handle keyboard events with optimal input processing
@@ -585,7 +588,7 @@ impl Terminal {
 
             // New tab (Bug #7: use current terminal size)
             (KeyCode::Char('t'), KeyModifiers::CONTROL) if self.config.terminal.enable_tabs => {
-                self.create_new_tab().await?;
+                self.create_new_tab()?;
             }
 
             // Next tab
@@ -714,7 +717,7 @@ impl Terminal {
     }
 
     /// Create a new tab (Bug #7: use current terminal size)
-    async fn create_new_tab(&mut self) -> Result<()> {
+    fn create_new_tab(&mut self) -> Result<()> {
         info!(
             "Creating new tab with size {}x{}",
             self.terminal_cols, self.terminal_rows
@@ -779,6 +782,7 @@ impl Terminal {
     }
 
     /// Render UI with hardware acceleration (Bug #3: zero-copy rendering)
+    #[allow(clippy::too_many_lines)]
     fn render(&mut self, f: &mut ratatui::Frame) {
         let progress_visible = self.progress_bar.as_ref().is_some_and(|pb| pb.visible);
 
@@ -904,6 +908,7 @@ impl Terminal {
     }
 
     /// Bug #3: Render terminal output with zero-copy caching
+    #[allow(clippy::too_many_lines)]
     fn render_terminal_output(&mut self, f: &mut ratatui::Frame, area: Rect) {
         let buffer_len = self
             .output_buffers

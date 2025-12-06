@@ -25,6 +25,7 @@ pub use renderer::GpuRenderer;
 
 /// GPU rendering configuration
 #[derive(Debug, Clone)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct GpuConfig {
     /// Enable GPU acceleration (falls back to CPU if unavailable)
     pub enabled: bool,
