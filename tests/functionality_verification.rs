@@ -170,8 +170,7 @@ config = {
 #[cfg(test)]
 mod ui_tests {
     use furnace::ui::{
-        autocomplete::Autocomplete,
-        resource_monitor::ResourceMonitor, themes::ThemeManager,
+        autocomplete::Autocomplete, resource_monitor::ResourceMonitor, themes::ThemeManager,
     };
 
     #[test]

@@ -40,8 +40,7 @@ use crate::progress_bar::ProgressBar;
 use crate::session::SessionManager;
 use crate::shell::ShellSession;
 use crate::ui::{
-    autocomplete::Autocomplete, resource_monitor::ResourceMonitor,
-    themes::ThemeManager,
+    autocomplete::Autocomplete, resource_monitor::ResourceMonitor, themes::ThemeManager,
 };
 
 use self::ansi_parser::AnsiParser;
@@ -948,19 +947,20 @@ impl Terminal {
         // This fixes the issue where typed characters are not visible until shell echoes them back
         // This is especially important on Windows where PTY echo may be delayed or not working
         // Pre-allocate with +1 capacity only if we'll actually need it
-        let needs_local_echo = self.command_buffers
+        let needs_local_echo = self
+            .command_buffers
             .get(self.active_session)
             .is_some_and(|buf| !buf.is_empty());
-        
+
         let capacity = if needs_local_echo {
             styled_lines.len() + 1
         } else {
             styled_lines.len()
         };
-        
+
         let mut display_lines = Vec::with_capacity(capacity);
         display_lines.extend_from_slice(styled_lines);
-        
+
         if let Some(cmd_buf) = self.command_buffers.get(self.active_session) {
             if !cmd_buf.is_empty() {
                 // Convert command buffer to string for display (local echo)
