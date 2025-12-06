@@ -73,7 +73,7 @@ libloading = "0.8"
 # Session management
 serde_json = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
-uuid = { version = "1.6", features = ["v4", "serde"] }
+uuid = { version = "1.19", features = ["v4", "serde"] }
 
 # Utility
 dirs = "5.0"
