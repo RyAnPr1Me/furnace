@@ -130,7 +130,7 @@ jobs:
         run: cargo build --release --verbose
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: furnace-${{ matrix.os }}
           path: |
