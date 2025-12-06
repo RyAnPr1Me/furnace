@@ -55,13 +55,34 @@ impl TrueColor {
         format!("\x1b[48;2;{};{};{}m", self.r, self.g, self.b)
     }
 
-    /// Blend with another color (uses rounding instead of truncation for accuracy)
+    /// Blend two colors together using linear interpolation
+    ///
+    /// This function performs color blending with sub-pixel accuracy using
+    /// proper rounding. It's optimized to use FMA (Fused Multiply-Add) when
+    /// available on the CPU for better performance.
+    ///
+    /// # Arguments
+    /// * `other` - The color to blend with
+    /// * `factor` - Blend factor (0.0 = all self, 1.0 = all other)
+    ///
+    /// # Returns
+    /// Blended color
+    ///
+    /// # Formula
+    /// `result = self * (1 - factor) + other * factor`
+    ///
+    /// # Example
+    /// ```ignore
+    /// let red = TrueColor::new(255, 0, 0);
+    /// let blue = TrueColor::new(0, 0, 255);
+    /// let purple = red.blend(blue, 0.5);  // 50% blend = purple
+    /// ```
     #[allow(dead_code)] // Public API
     #[must_use]
     pub fn blend(self, other: Self, factor: f32) -> Self {
         let factor = factor.clamp(0.0, 1.0);
         Self {
-            // Use mul_add for more efficient and accurate calculation
+            // Use mul_add for efficient FMA (Fused Multiply-Add) instruction
             // Formula: self * (1 - factor) + other * factor
             // Restructured as: (other - self) * factor + self for proper FMA usage
             r: (f32::from(other.r) - f32::from(self.r))

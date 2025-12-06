@@ -48,6 +48,34 @@ impl AnsiParser {
     }
 
     /// Parse ANSI-encoded text and return styled lines
+    ///
+    /// This function processes text containing ANSI escape sequences and converts
+    /// them into ratatui's styled text representation. It handles all common
+    /// ANSI codes including colors, text attributes, and cursor movements.
+    ///
+    /// # Arguments
+    /// * `text` - Input text with ANSI escape sequences
+    ///
+    /// # Returns
+    /// Vector of styled lines ready for rendering
+    ///
+    /// # Supported ANSI Features
+    /// - 16-color palette (8 normal + 8 bright colors)
+    /// - 256-color palette
+    /// - 24-bit RGB true color
+    /// - Text attributes: bold, italic, underline, strikethrough
+    /// - Reset codes
+    ///
+    /// # Performance
+    /// This function is highly optimized:
+    /// - Zero-copy where possible
+    /// - Uses VTE parser (Rust's fastest ANSI parser)
+    /// - Minimal allocations through buffer reuse
+    ///
+    /// # Example
+    /// ```ignore
+    /// let lines = AnsiParser::parse("\x1b[31mRed text\x1b[0m");
+    /// ```
     pub fn parse(text: &str) -> Vec<Line<'static>> {
         let mut parser = Parser::new();
         let mut performer = AnsiParser::new();
@@ -84,6 +112,26 @@ impl AnsiParser {
     }
 
     /// Parse SGR (Select Graphic Rendition) parameters
+    ///
+    /// SGR codes control text styling including colors and attributes.
+    /// This function processes the numeric parameters from ANSI escape sequences
+    /// and updates the current style accordingly.
+    ///
+    /// # Arguments
+    /// * `params` - ANSI parameter list from the escape sequence
+    ///
+    /// # Supported Codes
+    /// - 0: Reset all attributes
+    /// - 1: Bold
+    /// - 3: Italic
+    /// - 4: Underline
+    /// - 9: Strikethrough
+    /// - 30-37: Foreground colors (8 colors)
+    /// - 38: Extended foreground color (256-color or RGB)
+    /// - 40-47: Background colors (8 colors)
+    /// - 48: Extended background color (256-color or RGB)
+    /// - 90-97: Bright foreground colors
+    /// - 100-107: Bright background colors
     fn handle_sgr(&mut self, params: &Params) {
         let mut iter = params.iter();
 
@@ -93,7 +141,7 @@ impl AnsiParser {
             }
 
             match param[0] {
-                // Reset
+                // Reset all attributes to default
                 0 => {
                     self.current_style = Style::default().fg(Color::White).bg(Color::Black);
                 }

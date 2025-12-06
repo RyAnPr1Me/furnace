@@ -98,24 +98,48 @@ impl ShellSession {
         }
     }
 
-    /// Write input to shell (optimized for minimal latency)
+    /// Write input to shell with minimal latency
+    ///
+    /// This function writes data to the shell and immediately flushes to ensure
+    /// low latency. This is critical for interactive terminal responsiveness.
+    ///
+    /// # Arguments
+    /// * `data` - Bytes to write to the shell (typically user input or commands)
+    ///
+    /// # Returns
+    /// Number of bytes written on success
     ///
     /// # Errors
-    /// Returns an error if the write or flush operation fails
+    /// Returns an error if:
+    /// - The write operation fails (e.g., shell terminated)
+    /// - The flush operation fails (e.g., broken pipe)
     pub async fn write_input(&self, data: &[u8]) -> Result<usize> {
         let mut writer = self.writer.lock().await;
 
-        writer.write_all(data).context("Failed to write to shell")?;
+        writer
+            .write_all(data)
+            .context(format!("Failed to write {} bytes to shell", data.len()))?;
 
-        writer.flush().context("Failed to flush shell input")?;
+        writer
+            .flush()
+            .context("Failed to flush shell input buffer")?;
 
+        debug!("Wrote {} bytes to shell", data.len());
         Ok(data.len())
     }
 
-    /// Resize the PTY (important for responsive terminal)
+    /// Resize the PTY to match terminal dimensions
+    ///
+    /// This function must be called when the terminal window is resized to ensure
+    /// proper text wrapping and display. Without resizing, the shell will not know
+    /// the actual terminal dimensions and may produce incorrectly wrapped output.
+    ///
+    /// # Arguments
+    /// * `rows` - New number of rows (lines)
+    /// * `cols` - New number of columns (characters per line)
     ///
     /// # Errors
-    /// Returns an error if the PTY resize operation fails
+    /// Returns an error if the PTY resize operation fails (e.g., invalid dimensions)
     #[allow(dead_code)] // Public API for future use
     pub async fn resize(&self, rows: u16, cols: u16) -> Result<()> {
         let pty = self.pty.lock().await;
@@ -126,7 +150,7 @@ impl ShellSession {
             pixel_width: 0,
             pixel_height: 0,
         })
-        .context("Failed to resize PTY")?;
+        .context(format!("Failed to resize PTY to {}x{}", rows, cols))?;
 
         debug!("Resized PTY to {}x{}", rows, cols);
         Ok(())

@@ -228,11 +228,28 @@ impl Terminal {
     }
 
     /// Helper method to read shell output and store it in the buffer
-    /// Returns the total number of bytes read
+    ///
+    /// This function attempts to read from the shell multiple times with delays
+    /// to capture all available output. This is particularly useful for:
+    /// - Initial shell startup (capturing the prompt)
+    /// - After sending commands (capturing output)
+    /// - Handling slow or buffered output
+    ///
+    /// # Arguments
+    /// * `max_attempts` - Maximum number of read attempts to make
+    /// * `delay_ms` - Milliseconds to wait between read attempts
+    ///
+    /// # Returns
+    /// Total number of bytes read across all attempts
+    ///
+    /// # Performance Note
+    /// Each read is non-blocking, so this won't hang if there's no output.
+    /// The delay allows time for the shell to produce output between reads.
     async fn read_and_store_output(&mut self, max_attempts: usize, delay_ms: u64) -> usize {
         let mut total_bytes = 0;
 
-        // Bounds check to prevent panic - ensure both vectors are in sync
+        // Safety check: Ensure both vectors are in sync to prevent index out of bounds
+        // This can happen if sessions are created/destroyed but buffers aren't updated
         if self.active_session >= self.sessions.len()
             || self.active_session >= self.output_buffers.len()
         {
@@ -508,20 +525,41 @@ impl Terminal {
     }
 
     /// Bug #9: Detect shell prompts from various shells
+    /// Detects shell prompts in terminal output
+    ///
+    /// This function identifies common shell prompt patterns to determine when
+    /// a command has finished executing. It supports various shells and themes:
+    ///
+    /// # Supported Shells
+    /// - Bash: `$ `, `# `
+    /// - Zsh: `% `, `❯`, `➜`, `λ`
+    /// - Fish: `❯`, `> `
+    /// - PowerShell: `PS>`, `PS `
+    /// - Python REPL: `>>>`, `...`
+    ///
+    /// # Detection Strategy
+    /// 1. Check for explicit prompt characters
+    /// 2. Heuristic: Short lines ending with newline are likely prompts
+    ///
+    /// # Arguments
+    /// * `output` - Recent shell output to check for prompts
+    ///
+    /// # Returns
+    /// `true` if a prompt pattern is detected, `false` otherwise
     fn detect_prompt(&self, output: &str) -> bool {
-        // Common prompt patterns
-        output.contains("$ ")
-            || output.contains("> ")
-            || output.contains("# ")
-            || output.contains("% ")
-            || output.contains("❯") // fish/starship
-            || output.contains("➜") // oh-my-zsh
-            || output.contains("λ") // some zsh themes
-            || output.contains("PS>") // PowerShell
-            || output.contains("PS ") // PowerShell
-            || output.contains(">>>") // Python REPL
-            || output.contains("...") // Python continuation
-            || (output.ends_with('\n') && output.len() < 100) // Short line likely prompt
+        // Check for common prompt patterns across different shells
+        output.contains("$ ")   // Bash default
+            || output.contains("> ")   // Generic shell
+            || output.contains("# ")   // Root prompt
+            || output.contains("% ")   // Zsh default
+            || output.contains("❯")    // fish/starship
+            || output.contains("➜")    // oh-my-zsh
+            || output.contains("λ")    // some zsh themes
+            || output.contains("PS>")  // PowerShell
+            || output.contains("PS ")  // PowerShell alternative
+            || output.contains(">>>")  // Python REPL
+            || output.contains("...")  // Python continuation
+            || (output.ends_with('\n') && output.len() < 100) // Heuristic: short line likely a prompt
     }
 
     /// Handle mouse events
