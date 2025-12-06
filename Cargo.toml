@@ -52,7 +52,7 @@ unicode-segmentation = "1.10"
 rustyline = "13.0"
 
 # GPU rendering (optional, for high-performance rendering)
-wgpu = { version = "0.19", optional = true }
+wgpu = { version = "0.20", optional = true }
 # GPU text rendering
 glyphon = { version = "0.5", optional = true }
 # Window creation for GPU context
