@@ -45,7 +45,7 @@ impl AnsiParser {
             current_style: Style::default().fg(Color::White).bg(Color::Black),
             current_text: String::with_capacity(256), // Pre-allocate for typical line length
             current_line_spans: Vec::with_capacity(8), // Pre-allocate for typical spans per line
-            lines: Vec::with_capacity(24), // Pre-allocate for typical terminal height
+            lines: Vec::with_capacity(24),            // Pre-allocate for typical terminal height
         }
     }
 
