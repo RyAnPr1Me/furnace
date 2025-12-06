@@ -1081,7 +1081,6 @@ impl Terminal {
         }
     }
 
-    /// Render command palette overlay (Bug #4: don't wipe terminal)
     /// Render resource monitor (Bug #23: doesn't need &mut self)
     fn render_resource_monitor(&mut self, f: &mut ratatui::Frame, area: Rect) {
         let Some(ref mut monitor) = self.resource_monitor else {
