@@ -212,6 +212,7 @@ pub struct KeyBindings {
 }
 
 #[derive(Debug, Clone, Default)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct FeaturesConfig {
     /// Enable resource monitor (Ctrl+R)
     pub resource_monitor: bool,

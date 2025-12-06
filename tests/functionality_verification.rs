@@ -151,13 +151,13 @@ mod config_tests {
         let config_path = dir.path().join("test_config.lua");
 
         // Create a Lua config
-        let lua_config = r##"
+        let lua_config = r"
 config = {
     terminal = {
         max_history = 5000
     }
 }
-"##;
+";
         std::fs::write(&config_path, lua_config).unwrap();
 
         // Load and verify

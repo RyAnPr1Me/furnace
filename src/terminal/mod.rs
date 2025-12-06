@@ -94,6 +94,7 @@ const COLOR_MAGENTA_RED: (u8, u8, u8) = (0xB0, 0x5A, 0x7A); // Magenta-red
 const COLOR_DARK_GRAY: (u8, u8, u8) = (0x5A, 0x4A, 0x4A); // Dark gray for comments
 
 /// High-performance terminal with GPU-accelerated rendering at 170 FPS
+#[allow(clippy::struct_field_names)]
 pub struct Terminal {
     config: Config,
     sessions: Vec<ShellSession>,
@@ -281,6 +282,7 @@ impl Terminal {
     ///
     /// # Errors
     /// Returns an error if terminal setup, shell session creation, or event handling fails
+    #[allow(clippy::too_many_lines)]
     pub async fn run(&mut self) -> Result<()> {
         // Set up terminal
         enable_raw_mode()?;
@@ -406,7 +408,7 @@ impl Terminal {
                                 self.dirty = true;
                             }
                             Ok(Event::Mouse(mouse)) => {
-                                self.handle_mouse_event(mouse).await?;
+                                self.handle_mouse_event(mouse);
                                 self.dirty = true;
                             }
                             Ok(Event::Resize(new_cols, new_rows)) => {
@@ -437,7 +439,7 @@ impl Terminal {
                 }
 
                 // Read shell output (non-blocking)
-                _ = async {
+                () = async {
                     if let Some(session) = self.sessions.get(self.active_session) {
                         if let Ok(n) = session.read_output(&mut self.read_buffer).await {
                             if n > 0 && self.active_session < self.output_buffers.len() {
@@ -448,7 +450,7 @@ impl Terminal {
                                 let should_stop_progress = if let Some(ref pb) = self.progress_bar {
                                     if pb.visible {
                                         let recent_output = String::from_utf8_lossy(&self.read_buffer[..n]);
-                                        self.detect_prompt(&recent_output)
+                                        Self::detect_prompt(&recent_output)
                                     } else {
                                         false
                                     }
@@ -529,7 +531,7 @@ impl Terminal {
     /// - Bash: `$ `, `# `
     /// - Zsh: `% `, `❯`, `➜`, `λ`
     /// - Fish: `❯`, `> `
-    /// - PowerShell: `PS>`, `PS `
+    /// - `PowerShell`: `PS>`, `PS `
     /// - Python REPL: `>>>`, `...`
     ///
     /// # Detection Strategy
@@ -541,7 +543,7 @@ impl Terminal {
     ///
     /// # Returns
     /// `true` if a prompt pattern is detected, `false` otherwise
-    fn detect_prompt(&self, output: &str) -> bool {
+    fn detect_prompt(output: &str) -> bool {
         // Check for common prompt patterns across different shells
         output.contains("$ ")   // Bash default
             || output.contains("> ")   // Generic shell
@@ -558,9 +560,10 @@ impl Terminal {
     }
 
     /// Handle mouse events
-    async fn handle_mouse_event(&mut self, _mouse: MouseEvent) -> Result<()> {
+    #[allow(clippy::unused_self)]
+    fn handle_mouse_event(&mut self, _mouse: MouseEvent) {
         // Mouse events currently not handled
-        Ok(())
+        // Keeping &mut self for future implementation
     }
 
     /// Handle keyboard events with optimal input processing
@@ -585,7 +588,7 @@ impl Terminal {
 
             // New tab (Bug #7: use current terminal size)
             (KeyCode::Char('t'), KeyModifiers::CONTROL) if self.config.terminal.enable_tabs => {
-                self.create_new_tab().await?;
+                self.create_new_tab()?;
             }
 
             // Next tab
@@ -714,7 +717,7 @@ impl Terminal {
     }
 
     /// Create a new tab (Bug #7: use current terminal size)
-    async fn create_new_tab(&mut self) -> Result<()> {
+    fn create_new_tab(&mut self) -> Result<()> {
         info!(
             "Creating new tab with size {}x{}",
             self.terminal_cols, self.terminal_rows
@@ -779,6 +782,7 @@ impl Terminal {
     }
 
     /// Render UI with hardware acceleration (Bug #3: zero-copy rendering)
+    #[allow(clippy::too_many_lines)]
     fn render(&mut self, f: &mut ratatui::Frame) {
         let progress_visible = self.progress_bar.as_ref().is_some_and(|pb| pb.visible);
 
@@ -904,6 +908,7 @@ impl Terminal {
     }
 
     /// Bug #3: Render terminal output with zero-copy caching
+    #[allow(clippy::too_many_lines)]
     fn render_terminal_output(&mut self, f: &mut ratatui::Frame, area: Rect) {
         let buffer_len = self
             .output_buffers
@@ -937,11 +942,11 @@ impl Terminal {
         }
 
         // Use cached styled lines - avoid clone by taking reference
-        let styled_lines = self
-            .cached_styled_lines
-            .get(self.active_session)
-            .map(|lines| lines.as_slice())
-            .unwrap_or(&[]);
+        let styled_lines = if let Some(lines) = self.cached_styled_lines.get(self.active_session) {
+            lines.as_slice()
+        } else {
+            &[]
+        };
 
         // LOCAL ECHO FIX: Append pending command buffer to show user input immediately
         // This fixes the issue where typed characters are not visible until shell echoes them back
@@ -1053,12 +1058,14 @@ impl Terminal {
         if has_content && !styled_lines.is_empty() {
             if let Some(last_line) = styled_lines.last() {
                 // Calculate cursor position using display width, not byte count
+                #[allow(clippy::cast_possible_truncation)]
                 let line_width: u16 = last_line
                     .spans
                     .iter()
                     .map(|span| span.content.width() as u16)
                     .sum();
 
+                #[allow(clippy::cast_possible_truncation)]
                 let line_count = styled_lines.len() as u16;
 
                 // Position cursor at the end of the last line

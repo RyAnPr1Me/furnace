@@ -86,11 +86,13 @@ impl ResourceMonitor {
         // CPU usage (average across all cores) - optimized calculation
         let cpus = system.cpus();
         let cpu_count = cpus.len().max(1);
-        let cpu_usage = cpus.iter().map(|cpu| cpu.cpu_usage()).sum::<f32>() / cpu_count as f32;
+        #[allow(clippy::cast_precision_loss)]
+        let cpu_usage = cpus.iter().map(sysinfo::Cpu::cpu_usage).sum::<f32>() / cpu_count as f32;
 
         // Memory usage
         let memory_used = system.used_memory();
         let memory_total = system.total_memory();
+        #[allow(clippy::cast_precision_loss)]
         let memory_percent = if memory_total > 0 {
             (memory_used as f32 / memory_total as f32) * 100.0
         } else {
@@ -103,8 +105,8 @@ impl ResourceMonitor {
         // Network and disk stats - Basic implementation
         // Note: Advanced network/disk monitoring requires platform-specific APIs
         // Current implementation provides basic disk info available cross-platform
-        let (network_rx, network_tx) = self.get_network_stats();
-        let disk_usage = self.get_disk_info(&system);
+        let (network_rx, network_tx) = Self::get_network_stats();
+        let disk_usage = Self::get_disk_info(&system);
 
         let stats = ResourceStats {
             cpu_usage,
@@ -125,14 +127,14 @@ impl ResourceMonitor {
 
     /// Get basic network statistics (placeholder for cross-platform implementation)
     /// Returns `(rx_bytes, tx_bytes)`
-    fn get_network_stats(&self) -> (u64, u64) {
+    fn get_network_stats() -> (u64, u64) {
         // Basic implementation - can be extended with platform-specific code
         // For now, returns 0 to maintain API compatibility
         (0, 0)
     }
 
     /// Get disk usage information
-    fn get_disk_info(&self, _system: &System) -> Vec<DiskInfo> {
+    fn get_disk_info(_system: &System) -> Vec<DiskInfo> {
         // Get disk information using sysinfo's Disks API
         let disks = Disks::new_with_refreshed_list();
 
@@ -142,6 +144,7 @@ impl ResourceMonitor {
                 let total = disk.total_space();
                 let available = disk.available_space();
                 let used = total.saturating_sub(available);
+                #[allow(clippy::cast_precision_loss)]
                 let percent = if total > 0 {
                     (used as f32 / total as f32) * 100.0
                 } else {
@@ -165,6 +168,7 @@ impl ResourceMonitor {
         const UNITS: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
         const DIVISOR: f64 = 1024.0;
 
+        #[allow(clippy::cast_precision_loss)]
         let mut size = bytes as f64;
         let mut unit_index = 0;
 

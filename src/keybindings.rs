@@ -64,6 +64,7 @@ pub enum Action {
 /// Shell integration features
 #[derive(Debug, Clone)]
 #[allow(dead_code)] // Public API for shell integration
+#[allow(clippy::struct_excessive_bools)]
 pub struct ShellIntegration {
     /// OSC sequences support
     pub osc_sequences: bool,
@@ -100,37 +101,37 @@ impl KeybindingManager {
     /// Load default keybindings
     fn load_defaults(&mut self) {
         // Tab management
-        self.add_binding("t", vec!["Ctrl"], Action::NewTab);
-        self.add_binding("w", vec!["Ctrl"], Action::CloseTab);
-        self.add_binding("Tab", vec!["Ctrl"], Action::NextTab);
-        self.add_binding("Tab", vec!["Ctrl", "Shift"], Action::PrevTab);
+        self.add_binding("t", &["Ctrl"], Action::NewTab);
+        self.add_binding("w", &["Ctrl"], Action::CloseTab);
+        self.add_binding("Tab", &["Ctrl"], Action::NextTab);
+        self.add_binding("Tab", &["Ctrl", "Shift"], Action::PrevTab);
 
         // Pane management
-        self.add_binding("h", vec!["Ctrl", "Shift"], Action::SplitHorizontal);
-        self.add_binding("v", vec!["Ctrl", "Shift"], Action::SplitVertical);
-        self.add_binding("o", vec!["Ctrl"], Action::FocusNextPane);
+        self.add_binding("h", &["Ctrl", "Shift"], Action::SplitHorizontal);
+        self.add_binding("v", &["Ctrl", "Shift"], Action::SplitVertical);
+        self.add_binding("o", &["Ctrl"], Action::FocusNextPane);
 
         // Editing
-        self.add_binding("c", vec!["Ctrl", "Shift"], Action::Copy);
-        self.add_binding("v", vec!["Ctrl", "Shift"], Action::Paste);
-        self.add_binding("a", vec!["Ctrl", "Shift"], Action::SelectAll);
-        self.add_binding("l", vec!["Ctrl"], Action::Clear);
+        self.add_binding("c", &["Ctrl", "Shift"], Action::Copy);
+        self.add_binding("v", &["Ctrl", "Shift"], Action::Paste);
+        self.add_binding("a", &["Ctrl", "Shift"], Action::SelectAll);
+        self.add_binding("l", &["Ctrl"], Action::Clear);
 
         // Search
-        self.add_binding("f", vec!["Ctrl"], Action::Search);
-        self.add_binding("n", vec!["Ctrl"], Action::SearchNext);
-        self.add_binding("N", vec!["Ctrl", "Shift"], Action::SearchPrev);
+        self.add_binding("f", &["Ctrl"], Action::Search);
+        self.add_binding("n", &["Ctrl"], Action::SearchNext);
+        self.add_binding("N", &["Ctrl", "Shift"], Action::SearchPrev);
 
         // Features
-        self.add_binding("r", vec!["Ctrl"], Action::ToggleResourceMonitor);
+        self.add_binding("r", &["Ctrl"], Action::ToggleResourceMonitor);
 
         // Session management
-        self.add_binding("s", vec!["Ctrl"], Action::SaveSession);
-        self.add_binding("o", vec!["Ctrl", "Shift"], Action::LoadSession);
+        self.add_binding("s", &["Ctrl"], Action::SaveSession);
+        self.add_binding("o", &["Ctrl", "Shift"], Action::LoadSession);
     }
 
     /// Add a keybinding
-    pub fn add_binding(&mut self, key: &str, modifiers: Vec<&str>, action: Action) {
+    pub fn add_binding(&mut self, key: &str, modifiers: &[&str], action: Action) {
         let binding = KeyBinding {
             key: key.to_string(),
             modifiers: modifiers
@@ -215,6 +216,7 @@ impl KeybindingManager {
 
 /// Shell integration features
 #[allow(dead_code)] // Public API enum
+#[derive(Debug, Clone, Copy)]
 pub enum ShellIntegrationFeature {
     OscSequences,
     PromptDetection,

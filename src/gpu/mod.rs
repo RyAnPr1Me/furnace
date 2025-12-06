@@ -25,6 +25,7 @@ pub use renderer::GpuRenderer;
 
 /// GPU rendering configuration
 #[derive(Debug, Clone)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct GpuConfig {
     /// Enable GPU acceleration (falls back to CPU if unavailable)
     pub enabled: bool,
@@ -158,6 +159,7 @@ pub struct GpuStats {
 
 /// Check if GPU rendering is available
 #[cfg(feature = "gpu")]
+#[must_use]
 pub fn is_gpu_available() -> bool {
     // Try to create an instance to check availability
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
@@ -179,12 +181,14 @@ pub fn is_gpu_available() -> bool {
 }
 
 #[cfg(not(feature = "gpu"))]
+#[must_use]
 pub fn is_gpu_available() -> bool {
     false
 }
 
 /// Get GPU device information
 #[cfg(feature = "gpu")]
+#[must_use]
 pub fn get_gpu_info() -> Option<String> {
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
         backends: wgpu::Backends::all(),
@@ -210,6 +214,7 @@ pub fn get_gpu_info() -> Option<String> {
 }
 
 #[cfg(not(feature = "gpu"))]
+#[must_use]
 pub fn get_gpu_info() -> Option<String> {
     None
 }
