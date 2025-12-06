@@ -237,13 +237,13 @@ impl Autocomplete {
     /// Get previous suggestion as owned String (legacy API)
     #[allow(dead_code)]
     pub fn previous_suggestion_owned(&mut self) -> Option<String> {
-        self.previous_suggestion().map(|s| s.to_string())
+        self.previous_suggestion().map(std::string::ToString::to_string)
     }
 
     /// Get history (for up/down arrow navigation)
     #[allow(dead_code)]
     pub fn get_history(&self) -> impl Iterator<Item = &str> {
-        self.history.iter().map(|s| s.as_ref())
+        self.history.iter().map(std::convert::AsRef::as_ref)
     }
 
     /// Get history length

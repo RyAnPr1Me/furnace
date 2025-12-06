@@ -293,7 +293,7 @@ impl ThemeManager {
                         }
                         Err(e) => {
                             // Log warning but continue loading other themes
-                            eprintln!("Warning: Failed to load theme from {path:?}: {e}");
+                            eprintln!("Warning: Failed to load theme from {}: {e}", path.display());
                         }
                     }
                 }

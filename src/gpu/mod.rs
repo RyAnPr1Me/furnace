@@ -179,6 +179,7 @@ pub fn is_gpu_available() -> bool {
 }
 
 #[cfg(not(feature = "gpu"))]
+#[must_use]
 pub fn is_gpu_available() -> bool {
     false
 }
@@ -210,6 +211,7 @@ pub fn get_gpu_info() -> Option<String> {
 }
 
 #[cfg(not(feature = "gpu"))]
+#[must_use]
 pub fn get_gpu_info() -> Option<String> {
     None
 }
