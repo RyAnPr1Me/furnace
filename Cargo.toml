@@ -68,7 +68,7 @@ nucleo = "0.5"
 fuzzy-matcher = "0.3"
 
 # Plugin system
-libloading = "0.8"
+libloading = "0.9"
 
 # Session management
 serde_json = "1.0"
