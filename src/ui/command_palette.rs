@@ -126,8 +126,8 @@ impl CommandPalette {
     }
 
     /// Update input and refresh suggestions (optimized)
-    pub fn update_input(&mut self, input: String) {
-        self.input = input;
+    pub fn update_input(&mut self, input: &str) {
+        self.input = input.to_string();
         self.refresh_suggestions();
     }
 
@@ -274,7 +274,7 @@ mod tests {
     #[test]
     fn test_fuzzy_search() {
         let mut palette = CommandPalette::new();
-        palette.update_input("nt".to_string());
+        palette.update_input("nt");
 
         assert!(!palette.suggestions.is_empty());
         assert!(palette.suggestions[0].command.contains("new-tab"));
@@ -283,7 +283,7 @@ mod tests {
     #[test]
     fn test_navigation() {
         let mut palette = CommandPalette::new();
-        palette.update_input("t".to_string());
+        palette.update_input("t");
 
         assert_eq!(palette.selected_index, 0);
         palette.select_next();

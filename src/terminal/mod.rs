@@ -754,12 +754,18 @@ impl Terminal {
                 palette.select_next();
             }
             KeyCode::Char(c) => {
-                palette.input.push(c);
-                palette.update_input(palette.input.clone());
+                let input_clone = {
+                    palette.input.push(c);
+                    palette.input.clone()
+                };
+                palette.update_input(&input_clone);
             }
             KeyCode::Backspace => {
-                palette.input.pop();
-                palette.update_input(palette.input.clone());
+                let input_clone = {
+                    palette.input.pop();
+                    palette.input.clone()
+                };
+                palette.update_input(&input_clone);
             }
             _ => {}
         }
@@ -1071,16 +1077,19 @@ impl Terminal {
             }
         }
 
-        // Use cached styled lines
-        let mut styled_lines = self
+        // Use cached styled lines - avoid clone by taking reference
+        let styled_lines = self
             .cached_styled_lines
             .get(self.active_session)
-            .cloned()
-            .unwrap_or_default();
+            .map(|lines| lines.as_slice())
+            .unwrap_or(&[]);
 
         // LOCAL ECHO FIX: Append pending command buffer to show user input immediately
         // This fixes the issue where typed characters are not visible until shell echoes them back
         // This is especially important on Windows where PTY echo may be delayed or not working
+        let mut display_lines = Vec::with_capacity(styled_lines.len() + 1);
+        display_lines.extend_from_slice(styled_lines);
+        
         if let Some(cmd_buf) = self.command_buffers.get(self.active_session) {
             if !cmd_buf.is_empty() {
                 // Convert command buffer to string for display (local echo)
@@ -1088,7 +1097,7 @@ impl Terminal {
 
                 // Check if the last line already ends with this input (shell echo is working)
                 // to avoid duplicate display
-                let should_display = if let Some(last_line) = styled_lines.last() {
+                let should_display = if let Some(last_line) = display_lines.last() {
                     let last_line_text: String = last_line
                         .spans
                         .iter()
@@ -1102,7 +1111,7 @@ impl Terminal {
 
                 if should_display {
                     // If we have lines already, append to the last line
-                    if let Some(last_line) = styled_lines.last_mut() {
+                    if let Some(last_line) = display_lines.last_mut() {
                         // Add the pending input as a new span to the last line
                         // Use the same color as normal text for consistency
                         last_line.spans.push(Span::styled(
@@ -1115,7 +1124,7 @@ impl Terminal {
                         ));
                     } else {
                         // No lines yet, create a new line with the pending input
-                        styled_lines.push(Line::from(Span::styled(
+                        display_lines.push(Line::from(Span::styled(
                             pending_input.into_owned(),
                             Style::default().fg(Color::Rgb(
                                 COLOR_REDDISH_GRAY.0,
@@ -1130,7 +1139,10 @@ impl Terminal {
 
         // If no content yet, show a placeholder prompt so users know where to type
         // This prevents confusion when the shell is slow to start
-        let (text, has_real_content) = if styled_lines.is_empty() {
+        let has_content = !display_lines.is_empty();
+        let text = if has_content {
+            Text::from(display_lines)
+        } else {
             // Create a simple prompt-like line to indicate where the user can type
             // Use theme colors for consistency with other UI elements
             let prompt_line = Line::from(vec![Span::styled(
@@ -1144,15 +1156,7 @@ impl Terminal {
                     .add_modifier(Modifier::BOLD),
             )]);
 
-            (
-                Text::from(vec![prompt_line]),
-                // Set to true so the placeholder prompt is treated as real content
-                // This ensures the cursor is positioned at the end of the prompt (after "> ")
-                // instead of at the top-left corner, making it clear where the user should type
-                true,
-            )
-        } else {
-            (Text::from(styled_lines.clone()), true)
+            Text::from(vec![prompt_line])
         };
 
         let paragraph = Paragraph::new(text)
@@ -1174,8 +1178,8 @@ impl Terminal {
         f.render_widget(paragraph, area);
 
         // Set cursor position at the end of the visible content
-        // Only position based on actual shell content, not welcome message
-        if has_real_content {
+        // Only position cursor if we have real content (not just placeholder)
+        if has_content && !styled_lines.is_empty() {
             if let Some(last_line) = styled_lines.last() {
                 // Calculate cursor position using display width, not byte count
                 let line_width: u16 = last_line
