@@ -1,0 +1,15 @@
+---
+name: Configuration
+labels: ''
+about: Issue tracker configuration
+
+---
+
+blank_issues_enabled: true
+contact_links:
+  - name: 💬 Discussions
+    url: https://github.com/RyAnPr1Me/furnace/discussions
+    about: Ask questions and discuss ideas with the community
+  - name: 📖 Documentation
+    url: https://github.com/RyAnPr1Me/furnace#readme
+    about: Read the documentation for help and guidance
