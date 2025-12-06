@@ -44,7 +44,6 @@ pub enum Action {
     SearchPrev,
 
     // Command palette
-    CommandPalette,
 
     // Resource monitor
     ToggleResourceMonitor,
@@ -123,7 +122,6 @@ impl KeybindingManager {
         self.add_binding("N", vec!["Ctrl", "Shift"], Action::SearchPrev);
 
         // Features
-        self.add_binding("p", vec!["Ctrl"], Action::CommandPalette);
         self.add_binding("r", vec!["Ctrl"], Action::ToggleResourceMonitor);
 
         // Session management
@@ -184,13 +182,13 @@ impl KeybindingManager {
         match feature {
             ShellIntegrationFeature::OscSequences => self.shell_integration.osc_sequences = enabled,
             ShellIntegrationFeature::PromptDetection => {
-                self.shell_integration.prompt_detection = enabled
+                self.shell_integration.prompt_detection = enabled;
             }
             ShellIntegrationFeature::DirectoryTracking => {
-                self.shell_integration.directory_tracking = enabled
+                self.shell_integration.directory_tracking = enabled;
             }
             ShellIntegrationFeature::CommandTracking => {
-                self.shell_integration.command_tracking = enabled
+                self.shell_integration.command_tracking = enabled;
             }
         }
     }

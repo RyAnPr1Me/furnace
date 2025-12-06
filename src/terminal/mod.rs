@@ -24,7 +24,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span, Text},
-    widgets::{Block, Borders, Clear, Paragraph, Tabs},
+    widgets::{Block, Borders, Paragraph, Tabs},
     Terminal as RatatuiTerminal,
 };
 use std::borrow::Cow;
@@ -40,7 +40,7 @@ use crate::progress_bar::ProgressBar;
 use crate::session::SessionManager;
 use crate::shell::ShellSession;
 use crate::ui::{
-    autocomplete::Autocomplete, command_palette::CommandPalette, resource_monitor::ResourceMonitor,
+    autocomplete::Autocomplete, resource_monitor::ResourceMonitor,
     themes::ThemeManager,
 };
 
@@ -54,6 +54,7 @@ const TARGET_FPS: u64 = 170;
 const READ_BUFFER_SIZE: usize = 4 * 1024;
 
 /// Notification display duration in seconds
+#[allow(dead_code)] // May be used for notifications feature
 const NOTIFICATION_DURATION_SECS: u64 = 2;
 
 /// Minimum popup size to prevent collapse (Bug #19)
@@ -90,6 +91,7 @@ const COLOR_REDDISH_GRAY: (u8, u8, u8) = (0xC0, 0xB0, 0xB0); // Reddish-gray tex
 const COLOR_PURE_BLACK: (u8, u8, u8) = (0x00, 0x00, 0x00); // Pure black background
 const COLOR_MUTED_GREEN: (u8, u8, u8) = (0x6A, 0x9A, 0x7A); // Muted green
 const COLOR_MAGENTA_RED: (u8, u8, u8) = (0xB0, 0x5A, 0x7A); // Magenta-red
+#[allow(dead_code)] // May be used for future UI features
 const COLOR_DARK_GRAY: (u8, u8, u8) = (0x5A, 0x4A, 0x4A); // Dark gray for comments
 
 /// High-performance terminal with GPU-accelerated rendering at 170 FPS
@@ -99,7 +101,6 @@ pub struct Terminal {
     active_session: usize,
     output_buffers: Vec<Vec<u8>>,
     should_quit: bool,
-    command_palette: Option<CommandPalette>,
     resource_monitor: Option<ResourceMonitor>,
     #[allow(dead_code)] // Feature not yet implemented
     autocomplete: Option<Autocomplete>,
@@ -111,6 +112,7 @@ pub struct Terminal {
     #[allow(dead_code)]
     color_palette: TrueColorPalette,
     // Theme manager for dynamic theme switching
+    #[allow(dead_code)] // May be used for future theming features
     theme_manager: Option<ThemeManager>,
     // Performance optimization: track if redraw is needed
     dirty: bool,
@@ -178,7 +180,6 @@ impl Terminal {
         };
 
         // Capture feature flags before moving config
-        let enable_command_palette = config.features.command_palette;
         let enable_resource_monitor = config.features.resource_monitor;
         let enable_autocomplete = config.features.autocomplete;
         let enable_progress_bar = config.features.progress_bar;
@@ -189,11 +190,6 @@ impl Terminal {
             active_session: 0,
             output_buffers: Vec::with_capacity(8),
             should_quit: false,
-            command_palette: if enable_command_palette {
-                Some(CommandPalette::new())
-            } else {
-                None
-            },
             resource_monitor: if enable_resource_monitor {
                 Some(ResourceMonitor::new())
             } else {
@@ -228,11 +224,28 @@ impl Terminal {
     }
 
     /// Helper method to read shell output and store it in the buffer
-    /// Returns the total number of bytes read
+    ///
+    /// This function attempts to read from the shell multiple times with delays
+    /// to capture all available output. This is particularly useful for:
+    /// - Initial shell startup (capturing the prompt)
+    /// - After sending commands (capturing output)
+    /// - Handling slow or buffered output
+    ///
+    /// # Arguments
+    /// * `max_attempts` - Maximum number of read attempts to make
+    /// * `delay_ms` - Milliseconds to wait between read attempts
+    ///
+    /// # Returns
+    /// Total number of bytes read across all attempts
+    ///
+    /// # Performance Note
+    /// Each read is non-blocking, so this won't hang if there's no output.
+    /// The delay allows time for the shell to produce output between reads.
     async fn read_and_store_output(&mut self, max_attempts: usize, delay_ms: u64) -> usize {
         let mut total_bytes = 0;
 
-        // Bounds check to prevent panic - ensure both vectors are in sync
+        // Safety check: Ensure both vectors are in sync to prevent index out of bounds
+        // This can happen if sessions are created/destroyed but buffers aren't updated
         if self.active_session >= self.sessions.len()
             || self.active_session >= self.output_buffers.len()
         {
@@ -508,20 +521,41 @@ impl Terminal {
     }
 
     /// Bug #9: Detect shell prompts from various shells
+    /// Detects shell prompts in terminal output
+    ///
+    /// This function identifies common shell prompt patterns to determine when
+    /// a command has finished executing. It supports various shells and themes:
+    ///
+    /// # Supported Shells
+    /// - Bash: `$ `, `# `
+    /// - Zsh: `% `, `❯`, `➜`, `λ`
+    /// - Fish: `❯`, `> `
+    /// - PowerShell: `PS>`, `PS `
+    /// - Python REPL: `>>>`, `...`
+    ///
+    /// # Detection Strategy
+    /// 1. Check for explicit prompt characters
+    /// 2. Heuristic: Short lines ending with newline are likely prompts
+    ///
+    /// # Arguments
+    /// * `output` - Recent shell output to check for prompts
+    ///
+    /// # Returns
+    /// `true` if a prompt pattern is detected, `false` otherwise
     fn detect_prompt(&self, output: &str) -> bool {
-        // Common prompt patterns
-        output.contains("$ ")
-            || output.contains("> ")
-            || output.contains("# ")
-            || output.contains("% ")
-            || output.contains("❯") // fish/starship
-            || output.contains("➜") // oh-my-zsh
-            || output.contains("λ") // some zsh themes
-            || output.contains("PS>") // PowerShell
-            || output.contains("PS ") // PowerShell
-            || output.contains(">>>") // Python REPL
-            || output.contains("...") // Python continuation
-            || (output.ends_with('\n') && output.len() < 100) // Short line likely prompt
+        // Check for common prompt patterns across different shells
+        output.contains("$ ")   // Bash default
+            || output.contains("> ")   // Generic shell
+            || output.contains("# ")   // Root prompt
+            || output.contains("% ")   // Zsh default
+            || output.contains("❯")    // fish/starship
+            || output.contains("➜")    // oh-my-zsh
+            || output.contains("λ")    // some zsh themes
+            || output.contains("PS>")  // PowerShell
+            || output.contains("PS ")  // PowerShell alternative
+            || output.contains(">>>")  // Python REPL
+            || output.contains("...")  // Python continuation
+            || (output.ends_with('\n') && output.len() < 100) // Heuristic: short line likely a prompt
     }
 
     /// Handle mouse events
@@ -532,21 +566,7 @@ impl Terminal {
 
     /// Handle keyboard events with optimal input processing
     async fn handle_key_event(&mut self, key: KeyEvent) -> Result<()> {
-        // Command palette takes priority
-        if let Some(ref palette) = self.command_palette {
-            if palette.visible {
-                return self.handle_command_palette_input(key).await;
-            }
-        }
-
         match (key.code, key.modifiers) {
-            // Command palette (Ctrl+P)
-            (KeyCode::Char('p'), KeyModifiers::CONTROL) => {
-                if let Some(ref mut palette) = self.command_palette {
-                    palette.toggle();
-                }
-            }
-
             // Toggle resource monitor (Ctrl+R)
             (KeyCode::Char('r'), KeyModifiers::CONTROL) => {
                 if self.resource_monitor.is_some() {
@@ -689,111 +709,6 @@ impl Terminal {
             // Clear command buffer
             if let Some(cmd_buf) = self.command_buffers.get_mut(self.active_session) {
                 cmd_buf.clear();
-            }
-        }
-        Ok(())
-    }
-
-    /// Handle command palette input
-    async fn handle_command_palette_input(&mut self, key: KeyEvent) -> Result<()> {
-        let Some(ref mut palette) = self.command_palette else {
-            return Ok(());
-        };
-
-        match key.code {
-            KeyCode::Esc => {
-                palette.toggle();
-            }
-            KeyCode::Enter => {
-                if let Some(command) = palette.execute_selected() {
-                    self.execute_command(&command).await?;
-                }
-            }
-            KeyCode::Up => {
-                palette.select_previous();
-            }
-            KeyCode::Down => {
-                palette.select_next();
-            }
-            KeyCode::Char(c) => {
-                palette.input.push(c);
-                palette.update_input(palette.input.clone());
-            }
-            KeyCode::Backspace => {
-                palette.input.pop();
-                palette.update_input(palette.input.clone());
-            }
-            _ => {}
-        }
-        Ok(())
-    }
-
-    /// Execute a command from the palette
-    async fn execute_command(&mut self, command: &str) -> Result<()> {
-        match command {
-            "new-tab" => self.create_new_tab().await?,
-            "close-tab" => {
-                if self.sessions.len() > 1 {
-                    self.sessions.remove(self.active_session);
-                    self.output_buffers.remove(self.active_session);
-                    self.command_buffers.remove(self.active_session);
-                    self.cached_styled_lines.remove(self.active_session);
-                    self.cached_buffer_lens.remove(self.active_session);
-                    if self.active_session >= self.sessions.len() {
-                        self.active_session = self.sessions.len().saturating_sub(1);
-                    }
-                }
-            }
-            "clear" => {
-                if let Some(buffer) = self.output_buffers.get_mut(self.active_session) {
-                    buffer.clear();
-                }
-                // Invalidate render cache
-                if let Some(len) = self.cached_buffer_lens.get_mut(self.active_session) {
-                    *len = 0;
-                }
-            }
-            "theme" => {
-                // Cycle to next theme
-                if let Some(ref mut tm) = self.theme_manager {
-                    tm.next_theme();
-                    let theme_name = tm.current().name.clone();
-                    self.notification_message = Some(format!("Theme: {theme_name}"));
-                    self.notification_frames = TARGET_FPS * NOTIFICATION_DURATION_SECS;
-                    // Force redraw with new theme
-                    self.dirty = true;
-                    // Invalidate all render caches to apply new theme
-                    for len in &mut self.cached_buffer_lens {
-                        *len = 0;
-                    }
-                }
-            }
-            "quit" => {
-                self.should_quit = true;
-            }
-            cmd if cmd.starts_with("theme ") => {
-                // Switch to specific theme by name
-                if let Some(ref mut tm) = self.theme_manager {
-                    let theme_name = &cmd["theme ".len()..];
-                    let theme_name = theme_name.trim();
-                    if tm.switch_theme(theme_name) {
-                        self.notification_message = Some(format!("Theme: {}", tm.current().name));
-                        self.notification_frames = TARGET_FPS * NOTIFICATION_DURATION_SECS;
-                        self.dirty = true;
-                        // Invalidate all render caches
-                        for len in &mut self.cached_buffer_lens {
-                            *len = 0;
-                        }
-                    } else {
-                        // Show available themes
-                        let available = tm.available_theme_names().join(", ");
-                        self.notification_message = Some(format!("Available themes: {available}"));
-                        self.notification_frames = TARGET_FPS * NOTIFICATION_DURATION_SECS;
-                    }
-                }
-            }
-            _ => {
-                debug!("Unknown command: {}", command);
             }
         }
         Ok(())
@@ -980,17 +895,6 @@ impl Terminal {
             }
         }
 
-        // Render command palette if visible (Bug #4: don't wipe terminal)
-        if let Some(ref palette) = self.command_palette {
-            if palette.visible {
-                // First render terminal output underneath
-                self.render_terminal_output(f, content_area);
-                // Then render command palette overlay
-                self.render_command_palette(f, content_area);
-                return;
-            }
-        }
-
         // Render terminal output (Bug #3: use cached styled lines)
         self.render_terminal_output(f, content_area);
 
@@ -1033,24 +937,38 @@ impl Terminal {
             }
         }
 
-        // Use cached styled lines
-        let mut styled_lines = self
+        // Use cached styled lines - avoid clone by taking reference
+        let styled_lines = self
             .cached_styled_lines
             .get(self.active_session)
-            .cloned()
-            .unwrap_or_default();
+            .map(|lines| lines.as_slice())
+            .unwrap_or(&[]);
 
         // LOCAL ECHO FIX: Append pending command buffer to show user input immediately
         // This fixes the issue where typed characters are not visible until shell echoes them back
         // This is especially important on Windows where PTY echo may be delayed or not working
+        // Pre-allocate with +1 capacity only if we'll actually need it
+        let needs_local_echo = self.command_buffers
+            .get(self.active_session)
+            .is_some_and(|buf| !buf.is_empty());
+        
+        let capacity = if needs_local_echo {
+            styled_lines.len() + 1
+        } else {
+            styled_lines.len()
+        };
+        
+        let mut display_lines = Vec::with_capacity(capacity);
+        display_lines.extend_from_slice(styled_lines);
+        
         if let Some(cmd_buf) = self.command_buffers.get(self.active_session) {
             if !cmd_buf.is_empty() {
                 // Convert command buffer to string for display (local echo)
                 let pending_input = String::from_utf8_lossy(cmd_buf);
-                
+
                 // Check if the last line already ends with this input (shell echo is working)
                 // to avoid duplicate display
-                let should_display = if let Some(last_line) = styled_lines.last() {
+                let should_display = if let Some(last_line) = display_lines.last() {
                     let last_line_text: String = last_line
                         .spans
                         .iter()
@@ -1064,7 +982,7 @@ impl Terminal {
 
                 if should_display {
                     // If we have lines already, append to the last line
-                    if let Some(last_line) = styled_lines.last_mut() {
+                    if let Some(last_line) = display_lines.last_mut() {
                         // Add the pending input as a new span to the last line
                         // Use the same color as normal text for consistency
                         last_line.spans.push(Span::styled(
@@ -1077,7 +995,7 @@ impl Terminal {
                         ));
                     } else {
                         // No lines yet, create a new line with the pending input
-                        styled_lines.push(Line::from(Span::styled(
+                        display_lines.push(Line::from(Span::styled(
                             pending_input.into_owned(),
                             Style::default().fg(Color::Rgb(
                                 COLOR_REDDISH_GRAY.0,
@@ -1092,31 +1010,24 @@ impl Terminal {
 
         // If no content yet, show a placeholder prompt so users know where to type
         // This prevents confusion when the shell is slow to start
-        let (text, has_real_content) = if styled_lines.is_empty() {
+        let has_content = !display_lines.is_empty();
+        let text = if has_content {
+            Text::from(display_lines)
+        } else {
             // Create a simple prompt-like line to indicate where the user can type
             // Use theme colors for consistency with other UI elements
-            let prompt_line = Line::from(vec![
-                Span::styled(
-                    "> ",
-                    Style::default()
-                        .fg(Color::Rgb(
-                            COLOR_COOL_RED.0,
-                            COLOR_COOL_RED.1,
-                            COLOR_COOL_RED.2,
-                        ))
-                        .add_modifier(Modifier::BOLD),
-                ),
-            ]);
-            
-            (
-                Text::from(vec![prompt_line]),
-                // Set to true so the placeholder prompt is treated as real content
-                // This ensures the cursor is positioned at the end of the prompt (after "> ")
-                // instead of at the top-left corner, making it clear where the user should type
-                true,
-            )
-        } else {
-            (Text::from(styled_lines.clone()), true)
+            let prompt_line = Line::from(vec![Span::styled(
+                "> ",
+                Style::default()
+                    .fg(Color::Rgb(
+                        COLOR_COOL_RED.0,
+                        COLOR_COOL_RED.1,
+                        COLOR_COOL_RED.2,
+                    ))
+                    .add_modifier(Modifier::BOLD),
+            )]);
+
+            Text::from(vec![prompt_line])
         };
 
         let paragraph = Paragraph::new(text)
@@ -1138,8 +1049,8 @@ impl Terminal {
         f.render_widget(paragraph, area);
 
         // Set cursor position at the end of the visible content
-        // Only position based on actual shell content, not welcome message
-        if has_real_content {
+        // Only position cursor if we have real content (not just placeholder)
+        if has_content && !styled_lines.is_empty() {
             if let Some(last_line) = styled_lines.last() {
                 // Calculate cursor position using display width, not byte count
                 let line_width: u16 = last_line
@@ -1168,112 +1079,6 @@ impl Terminal {
             // No real content yet, position cursor at start of content area
             f.set_cursor(area.x, area.y);
         }
-    }
-
-    /// Render command palette overlay (Bug #4: don't wipe terminal)
-    fn render_command_palette(&self, f: &mut ratatui::Frame, area: Rect) {
-        let Some(ref palette) = self.command_palette else {
-            return;
-        };
-
-        let popup_area = centered_popup(area, 80, 20);
-
-        // Bug #4: Clear only the popup area, not the entire screen
-        f.render_widget(Clear, popup_area);
-
-        let palette_chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Length(3), Constraint::Min(0)])
-            .split(popup_area);
-
-        // Input box
-        let input = Paragraph::new(format!("> {}", palette.input))
-            .style(
-                Style::default()
-                    .fg(Color::Rgb(
-                        COLOR_MAGENTA_RED.0,
-                        COLOR_MAGENTA_RED.1,
-                        COLOR_MAGENTA_RED.2,
-                    ))
-                    .bg(Color::Rgb(
-                        COLOR_PURE_BLACK.0,
-                        COLOR_PURE_BLACK.1,
-                        COLOR_PURE_BLACK.2,
-                    )),
-            )
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .title("Command Palette (Esc to close)")
-                    .border_style(Style::default().fg(Color::Rgb(
-                        COLOR_MAGENTA_RED.0,
-                        COLOR_MAGENTA_RED.1,
-                        COLOR_MAGENTA_RED.2,
-                    )))
-                    .style(Style::default().bg(Color::Rgb(
-                        COLOR_PURE_BLACK.0,
-                        COLOR_PURE_BLACK.1,
-                        COLOR_PURE_BLACK.2,
-                    ))),
-            );
-        f.render_widget(input, palette_chunks[0]);
-
-        // Suggestions
-        let suggestions: Vec<Line> = palette
-            .suggestions
-            .iter()
-            .enumerate()
-            .map(|(i, s)| {
-                let style = if i == palette.selected_index {
-                    Style::default()
-                        .fg(Color::Rgb(
-                            COLOR_COOL_RED.0,
-                            COLOR_COOL_RED.1,
-                            COLOR_COOL_RED.2,
-                        ))
-                        .add_modifier(Modifier::BOLD)
-                } else {
-                    Style::default().fg(Color::Rgb(
-                        COLOR_REDDISH_GRAY.0,
-                        COLOR_REDDISH_GRAY.1,
-                        COLOR_REDDISH_GRAY.2,
-                    ))
-                };
-                Line::from(vec![
-                    Span::styled(format!("  {} ", s.command), style),
-                    Span::styled(
-                        format!("- {}", s.description),
-                        Style::default().fg(Color::Rgb(
-                            COLOR_DARK_GRAY.0,
-                            COLOR_DARK_GRAY.1,
-                            COLOR_DARK_GRAY.2,
-                        )),
-                    ),
-                ])
-            })
-            .collect();
-
-        let suggestions_widget = Paragraph::new(suggestions)
-            .style(Style::default().bg(Color::Rgb(
-                COLOR_PURE_BLACK.0,
-                COLOR_PURE_BLACK.1,
-                COLOR_PURE_BLACK.2,
-            )))
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::Rgb(
-                        COLOR_MAGENTA_RED.0,
-                        COLOR_MAGENTA_RED.1,
-                        COLOR_MAGENTA_RED.2,
-                    )))
-                    .style(Style::default().bg(Color::Rgb(
-                        COLOR_PURE_BLACK.0,
-                        COLOR_PURE_BLACK.1,
-                        COLOR_PURE_BLACK.2,
-                    ))),
-            );
-        f.render_widget(suggestions_widget, palette_chunks[1]);
     }
 
     /// Render resource monitor (Bug #23: doesn't need &mut self)
@@ -1318,6 +1123,7 @@ impl Terminal {
 
 /// Bug #19: Create a centered popup area with minimum size guarantees
 #[must_use]
+#[allow(dead_code)] // May be used for future UI features
 pub fn centered_popup(parent: Rect, max_width: u16, max_height: u16) -> Rect {
     // Enforce minimum size (Bug #19)
     let width = parent.width.min(max_width).max(MIN_POPUP_WIDTH);

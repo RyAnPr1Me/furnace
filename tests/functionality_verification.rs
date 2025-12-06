@@ -170,15 +170,9 @@ config = {
 #[cfg(test)]
 mod ui_tests {
     use furnace::ui::{
-        autocomplete::Autocomplete, command_palette::CommandPalette,
+        autocomplete::Autocomplete,
         resource_monitor::ResourceMonitor, themes::ThemeManager,
     };
-
-    #[test]
-    fn test_command_palette_creation() {
-        let palette = CommandPalette::new();
-        assert!(!palette.visible);
-    }
 
     #[test]
     fn test_resource_monitor_creation() {
@@ -264,10 +258,10 @@ mod local_echo_tests {
         // Create a terminal with default config
         let config = Config::default();
         let terminal = Terminal::new(config);
-        
+
         // Should create successfully with local echo support
         assert!(terminal.is_ok(), "Terminal creation failed");
-        
+
         // The terminal should be able to handle command buffers for local echo
         // This is verified by the successful creation and internal structure
     }
@@ -278,7 +272,10 @@ mod local_echo_tests {
         // This is an indirect test since command_buffers is private
         let config = Config::default();
         let terminal = Terminal::new(config);
-        
-        assert!(terminal.is_ok(), "Terminal should track command buffers internally");
+
+        assert!(
+            terminal.is_ok(),
+            "Terminal should track command buffers internally"
+        );
     }
 }
