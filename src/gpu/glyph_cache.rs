@@ -2,6 +2,9 @@
 //!
 //! Caches rasterized glyphs in a texture atlas for efficient GPU rendering.
 
+// Allow pedantic warnings for optional GPU feature code
+#![allow(clippy::pedantic)]
+
 use std::collections::HashMap;
 
 /// Glyph cache for efficient text rendering

@@ -213,7 +213,7 @@ mod tests {
     fn test_spinner_is_ascii() {
         // Bug #15: Ensure all spinner chars are basic ASCII
         for c in SPINNER_CHARS {
-            assert!(c.is_ascii(), "Spinner char '{}' is not ASCII", c);
+            assert!(c.is_ascii(), "Spinner char '{c}' is not ASCII");
         }
     }
 

@@ -2,6 +2,9 @@
 //!
 //! Provides hardware-accelerated rendering for the terminal.
 
+// Allow pedantic warnings for optional GPU feature code
+#![allow(clippy::pedantic)]
+
 use wgpu::util::DeviceExt;
 
 use super::{GpuCell, GpuConfig, GpuStats};

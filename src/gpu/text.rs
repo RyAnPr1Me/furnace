@@ -1,5 +1,8 @@
 //! GPU text rendering utilities
 
+// Allow pedantic warnings for optional GPU feature code
+#![allow(clippy::pedantic)]
+
 use super::{CellStyle, GpuCell};
 
 /// Convert ANSI color code to RGBA

@@ -159,6 +159,7 @@ pub struct GpuStats {
 
 /// Check if GPU rendering is available
 #[cfg(feature = "gpu")]
+#[must_use]
 pub fn is_gpu_available() -> bool {
     // Try to create an instance to check availability
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
@@ -187,6 +188,7 @@ pub fn is_gpu_available() -> bool {
 
 /// Get GPU device information
 #[cfg(feature = "gpu")]
+#[must_use]
 pub fn get_gpu_info() -> Option<String> {
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
         backends: wgpu::Backends::all(),
