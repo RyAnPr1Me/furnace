@@ -113,6 +113,8 @@ jobs:
 
   build-release:
     name: Build Release Binary
+    permissions:
+      contents: read
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
