@@ -126,13 +126,14 @@ impl CommandPalette {
     }
 
     /// Update input and refresh suggestions (optimized)
+    #[allow(dead_code)] // Used in tests
     pub fn update_input(&mut self, input: &str) {
         self.input = input.to_string();
         self.refresh_suggestions();
     }
 
     /// Refresh suggestions based on current input (optimized with early returns)
-    fn refresh_suggestions(&mut self) {
+    pub fn refresh_suggestions(&mut self) {
         self.suggestions.clear(); // Reuse existing vector capacity
 
         if self.input.is_empty() {

@@ -754,18 +754,13 @@ impl Terminal {
                 palette.select_next();
             }
             KeyCode::Char(c) => {
-                let input_clone = {
-                    palette.input.push(c);
-                    palette.input.clone()
-                };
-                palette.update_input(&input_clone);
+                palette.input.push(c);
+                // Rebuild suggestions without cloning the entire input
+                palette.refresh_suggestions();
             }
             KeyCode::Backspace => {
-                let input_clone = {
-                    palette.input.pop();
-                    palette.input.clone()
-                };
-                palette.update_input(&input_clone);
+                palette.input.pop();
+                palette.refresh_suggestions();
             }
             _ => {}
         }
@@ -1087,7 +1082,18 @@ impl Terminal {
         // LOCAL ECHO FIX: Append pending command buffer to show user input immediately
         // This fixes the issue where typed characters are not visible until shell echoes them back
         // This is especially important on Windows where PTY echo may be delayed or not working
-        let mut display_lines = Vec::with_capacity(styled_lines.len() + 1);
+        // Pre-allocate with +1 capacity only if we'll actually need it
+        let needs_local_echo = self.command_buffers
+            .get(self.active_session)
+            .is_some_and(|buf| !buf.is_empty());
+        
+        let capacity = if needs_local_echo {
+            styled_lines.len() + 1
+        } else {
+            styled_lines.len()
+        };
+        
+        let mut display_lines = Vec::with_capacity(capacity);
         display_lines.extend_from_slice(styled_lines);
         
         if let Some(cmd_buf) = self.command_buffers.get(self.active_session) {
