@@ -42,7 +42,7 @@ anyhow = "1.0"
 thiserror = "1.0"
 
 # Colors and themes
-colorgrad = "0.6"
+colorgrad = "0.8"
 
 # Unicode support
 unicode-width = "0.1"
