@@ -237,7 +237,8 @@ impl Autocomplete {
     /// Get previous suggestion as owned String (legacy API)
     #[allow(dead_code)]
     pub fn previous_suggestion_owned(&mut self) -> Option<String> {
-        self.previous_suggestion().map(std::string::ToString::to_string)
+        self.previous_suggestion()
+            .map(std::string::ToString::to_string)
     }
 
     /// Get history (for up/down arrow navigation)
@@ -323,10 +324,14 @@ mod tests {
         let suggestions = autocomplete.get_suggestions("cmd");
         assert!(!suggestions.is_empty());
 
-        let first = autocomplete.next_suggestion().map(std::string::ToString::to_string);
+        let first = autocomplete
+            .next_suggestion()
+            .map(std::string::ToString::to_string);
         assert!(first.is_some());
 
-        let second = autocomplete.next_suggestion().map(std::string::ToString::to_string);
+        let second = autocomplete
+            .next_suggestion()
+            .map(std::string::ToString::to_string);
         assert!(second.is_some());
         assert_ne!(first, second);
     }

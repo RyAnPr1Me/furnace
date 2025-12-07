@@ -43,7 +43,7 @@ async fn main() -> Result<()> {
     let log_level = if args.debug {
         Level::DEBUG
     } else {
-        Level::ERROR  // Only show errors in normal mode, not INFO logs
+        Level::ERROR // Only show errors in normal mode, not INFO logs
     };
 
     let subscriber = FmtSubscriber::builder()
