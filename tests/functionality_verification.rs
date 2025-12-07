@@ -322,15 +322,6 @@ mod powershell_prompt_tests {
         let output = "\x1b[2JPS C:\\Users\\test> ";
         let lines = AnsiParser::parse(output);
         
-        // Debug: print what we got
-        println!("Lines count: {}", lines.len());
-        for (i, line) in lines.iter().enumerate() {
-            let text: String = line.spans.iter()
-                .map(|span| span.content.as_ref())
-                .collect();
-            println!("Line {}: '{}'", i, text);
-        }
-        
         // Should have the prompt visible after clear screen
         assert!(lines.len() >= 1, "Expected prompt to be visible after clear screen");
         
@@ -348,15 +339,6 @@ mod powershell_prompt_tests {
         // With the fix, clear screen should not erase the prompt from scrollback
         let output = "PS C:\\Users\\test> \x1b[2J";
         let lines = AnsiParser::parse(output);
-        
-        // Debug: print what we got
-        println!("Lines count: {}", lines.len());
-        for (i, line) in lines.iter().enumerate() {
-            let text: String = line.spans.iter()
-                .map(|span| span.content.as_ref())
-                .collect();
-            println!("Line {}: '{}'", i, text);
-        }
         
         // After fix: clear screen should preserve the prompt in scrollback
         assert!(lines.len() >= 1, 
