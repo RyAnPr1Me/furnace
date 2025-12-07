@@ -12,7 +12,7 @@
 
 pub mod ansi_parser;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use crossterm::{
     cursor::Show,
     event::{self, Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent},
@@ -284,10 +284,11 @@ impl Terminal {
     /// Returns an error if terminal setup, shell session creation, or event handling fails
     #[allow(clippy::too_many_lines)]
     pub async fn run(&mut self) -> Result<()> {
-        // Set up terminal
-        enable_raw_mode()?;
+        // Set up terminal with automatic cleanup on error
+        enable_raw_mode().context("Failed to enable raw mode. Ensure you're running in a proper terminal emulator.")?;
         let mut stdout = io::stdout();
-        execute!(stdout, EnterAlternateScreen)?;
+        execute!(stdout, EnterAlternateScreen)
+            .context("Failed to enter alternate screen")?;
 
         // Enable mouse capture and bracketed paste mode (Bug #21)
         // Show cursor so user knows where to type
@@ -296,10 +297,11 @@ impl Terminal {
             crossterm::event::EnableMouseCapture,
             crossterm::event::EnableBracketedPaste,
             Show
-        )?;
+        ).context("Failed to setup terminal features")?;
 
         let backend = CrosstermBackend::new(stdout);
-        let mut terminal = RatatuiTerminal::new(backend)?;
+        let mut terminal = RatatuiTerminal::new(backend)
+            .context("Failed to create terminal backend")?;
 
         // Create initial shell session with actual terminal size (Bug #7)
         let (cols, rows) = terminal.size().map(|s| (s.width, s.height))?;
