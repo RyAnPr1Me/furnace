@@ -439,7 +439,7 @@ impl Perform for AnsiParser {
             // Instead, we treat them as visual hints that can be ignored
             'J' => {
                 // For scrollback preservation, we minimize the impact of clear screen commands
-                // Only clear the current line if we're in the middle of building it
+                // We flush (preserve) the current line rather than clearing it
                 self.flush_text();
                 let param = params
                     .iter()
@@ -458,10 +458,10 @@ impl Perform for AnsiParser {
                     1 => {
                         // Ignore this command to preserve scrollback
                     }
-                    // 2 or 3: Clear entire display - preserve scrollback, just flush current line
+                    // 2 or 3: Clear entire display - preserve scrollback by flushing current line
                     2 | 3 => {
-                        // Instead of clearing everything, just flush the current line
-                        // This preserves all scrollback history
+                        // Instead of clearing everything, just flush the current line to preserve it
+                        // This preserves all scrollback history including the current prompt
                         if !self.current_line_spans.is_empty() || !self.current_text.is_empty() {
                             self.flush_line();
                         }

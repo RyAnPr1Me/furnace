@@ -306,7 +306,7 @@ mod powershell_prompt_tests {
         let output = "PS C:\\Users\\test>\n";
         let lines = AnsiParser::parse(output);
         
-        // Should have 2 lines (prompt + empty line after newline)
+        // Should have at least 1 line (the prompt), possibly 2 if empty line is added
         assert!(lines.len() >= 1, "Expected at least 1 line for prompt with newline");
         
         // Verify the prompt is in the first line
@@ -398,10 +398,11 @@ mod powershell_prompt_tests {
         assert!(text1.contains("PS C:\\Users\\test>"), "Prompt with \\r\\n not preserved");
 
         // Test prompt with just carriage return
+        // \r is typically ignored in the parser, but the prompt before it should be preserved
         let output2 = "PS C:\\Users\\test>\r";
         let lines2 = AnsiParser::parse(output2);
         
-        // Should also work (though \r is usually ignored)
+        // Prompt should be preserved even though \r is ignored
         assert!(lines2.len() >= 1, "Expected prompt with \\r");
         let text2: String = lines2[0].spans.iter()
             .map(|span| span.content.as_ref())
