@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use clap::Parser;
+use std::io::IsTerminal;
 use tracing::Level;
 use tracing_subscriber::FmtSubscriber;
 
@@ -38,10 +39,11 @@ async fn main() -> Result<()> {
 
     // Initialize logging to stderr instead of stdout
     // This prevents log messages from appearing in the terminal UI
+    // Only show logs in debug mode, otherwise disable logging
     let log_level = if args.debug {
         Level::DEBUG
     } else {
-        Level::INFO
+        Level::ERROR  // Only show errors in normal mode, not INFO logs
     };
 
     let subscriber = FmtSubscriber::builder()
@@ -65,9 +67,24 @@ async fn main() -> Result<()> {
         config.shell.default_shell = shell;
     }
 
+    // Check if stdout is a TTY
+    if !std::io::stdout().is_terminal() {
+        eprintln!("Error: Furnace must be run in an interactive terminal.");
+        eprintln!("It cannot be run with redirected output or in non-TTY environments.");
+        eprintln!("\nUsage: Run 'furnace' directly in a terminal emulator.");
+        std::process::exit(1);
+    }
+
     // Create and run terminal
     let mut terminal = Terminal::new(config)?;
-    terminal.run().await?;
+    // Run terminal with better error context
+    if let Err(e) = terminal.run().await {
+        // Ensure terminal is cleaned up before showing error
+        eprintln!("\nFurnace encountered an error: {}", e);
+        eprintln!("\nIf the terminal display is corrupted, try running:");
+        eprintln!("  reset");
+        return Err(e);
+    }
 
     Ok(())
 }
