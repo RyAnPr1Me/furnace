@@ -434,7 +434,12 @@ impl Perform for AnsiParser {
                 }
             }
             // Erase in Display (J) - clear screen
+            // NOTE: In a terminal emulator with scrollback, we want to preserve history
+            // Clear screen commands should not erase scrollback content
+            // Instead, we treat them as visual hints that can be ignored
             'J' => {
+                // For scrollback preservation, we minimize the impact of clear screen commands
+                // Only clear the current line if we're in the middle of building it
                 self.flush_text();
                 let param = params
                     .iter()
@@ -442,28 +447,24 @@ impl Perform for AnsiParser {
                     .and_then(|p| p.first().copied())
                     .unwrap_or(0);
                 match param {
-                    // 0: Clear from cursor to end of display
+                    // 0: Clear from cursor to end of display - flush current, ignore clear
                     0 => {
-                        // Flush current line if it has content, then clear remaining
-                        if !self.current_line_spans.is_empty() {
+                        // Flush current line to preserve it, ignore the clear command
+                        if !self.current_line_spans.is_empty() || !self.current_text.is_empty() {
                             self.flush_line();
                         }
-                        self.current_line_spans.clear();
-                        self.current_text.clear();
                     }
-                    // 1: Clear from start of display to cursor
+                    // 1: Clear from start of display to cursor - preserve everything
                     1 => {
-                        // Clear all previous lines but preserve current line if it has content
-                        self.lines.clear();
-                        self.current_line_spans.clear();
-                        self.current_text.clear();
+                        // Ignore this command to preserve scrollback
                     }
-                    // 2: Clear entire display
+                    // 2 or 3: Clear entire display - preserve scrollback, just flush current line
                     2 | 3 => {
-                        // Clear everything
-                        self.lines.clear();
-                        self.current_line_spans.clear();
-                        self.current_text.clear();
+                        // Instead of clearing everything, just flush the current line
+                        // This preserves all scrollback history
+                        if !self.current_line_spans.is_empty() || !self.current_text.is_empty() {
+                            self.flush_line();
+                        }
                     }
                     _ => {}
                 }

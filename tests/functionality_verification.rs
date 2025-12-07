@@ -278,3 +278,127 @@ mod local_echo_tests {
         );
     }
 }
+
+/// Test PowerShell prompt handling with ANSI codes
+#[cfg(test)]
+mod powershell_prompt_tests {
+    use furnace::terminal::ansi_parser::AnsiParser;
+
+    #[test]
+    fn test_simple_prompt_without_newline() {
+        // PowerShell prompt without trailing newline
+        let output = "PS C:\\Users\\test> ";
+        let lines = AnsiParser::parse(output);
+        
+        // Should have 1 line with the prompt
+        assert_eq!(lines.len(), 1, "Expected 1 line for prompt without newline");
+        
+        // Verify the prompt content is preserved
+        let text: String = lines[0].spans.iter()
+            .map(|span| span.content.as_ref())
+            .collect();
+        assert!(text.contains("PS C:\\Users\\test>"), "Prompt content not preserved");
+    }
+
+    #[test]
+    fn test_prompt_with_newline() {
+        // PowerShell prompt with trailing newline
+        let output = "PS C:\\Users\\test>\n";
+        let lines = AnsiParser::parse(output);
+        
+        // Should have 2 lines (prompt + empty line after newline)
+        assert!(lines.len() >= 1, "Expected at least 1 line for prompt with newline");
+        
+        // Verify the prompt is in the first line
+        let text: String = lines[0].spans.iter()
+            .map(|span| span.content.as_ref())
+            .collect();
+        assert!(text.contains("PS C:\\Users\\test>"), "Prompt content not preserved");
+    }
+
+    #[test]
+    fn test_clear_screen_before_prompt() {
+        // Clear screen followed by prompt
+        let output = "\x1b[2JPS C:\\Users\\test> ";
+        let lines = AnsiParser::parse(output);
+        
+        // Debug: print what we got
+        println!("Lines count: {}", lines.len());
+        for (i, line) in lines.iter().enumerate() {
+            let text: String = line.spans.iter()
+                .map(|span| span.content.as_ref())
+                .collect();
+            println!("Line {}: '{}'", i, text);
+        }
+        
+        // Should have the prompt visible after clear screen
+        assert!(lines.len() >= 1, "Expected prompt to be visible after clear screen");
+        
+        // Verify the prompt content is preserved
+        let text: String = lines[0].spans.iter()
+            .map(|span| span.content.as_ref())
+            .collect();
+        assert!(text.contains("PS C:\\Users\\test>"), 
+            "Prompt should be visible after clear screen, got lines: {:?}", lines);
+    }
+
+    #[test]
+    fn test_prompt_followed_by_clear_screen() {
+        // Prompt followed by clear screen
+        // With the fix, clear screen should not erase the prompt from scrollback
+        let output = "PS C:\\Users\\test> \x1b[2J";
+        let lines = AnsiParser::parse(output);
+        
+        // Debug: print what we got
+        println!("Lines count: {}", lines.len());
+        for (i, line) in lines.iter().enumerate() {
+            let text: String = line.spans.iter()
+                .map(|span| span.content.as_ref())
+                .collect();
+            println!("Line {}: '{}'", i, text);
+        }
+        
+        // After fix: clear screen should preserve the prompt in scrollback
+        assert!(lines.len() >= 1, 
+            "Clear screen after prompt should preserve scrollback content");
+        
+        // Verify the prompt content is still there
+        let text: String = lines[0].spans.iter()
+            .map(|span| span.content.as_ref())
+            .collect();
+        assert!(text.contains("PS C:\\Users\\test>"), 
+            "Prompt should be preserved after clear screen, got: '{}'", text);
+    }
+
+    #[test]
+    fn test_multiple_clear_screens() {
+        // Multiple clear screens followed by prompt
+        let output = "\x1b[2J\x1b[2JPS C:\\Users\\test> ";
+        let lines = AnsiParser::parse(output);
+        
+        // Should still have the prompt after multiple clears
+        assert!(lines.len() >= 1, "Expected prompt after multiple clear screens");
+        
+        let text: String = lines[0].spans.iter()
+            .map(|span| span.content.as_ref())
+            .collect();
+        assert!(text.contains("PS C:\\Users\\test>"), 
+            "Prompt should be visible after multiple clear screens");
+    }
+
+    #[test]
+    fn test_prompt_with_colors() {
+        // PowerShell prompt with ANSI color codes
+        let output = "\x1b[32mPS C:\\Users\\test>\x1b[0m ";
+        let lines = AnsiParser::parse(output);
+        
+        // Should have the prompt with color styling
+        assert!(lines.len() >= 1, "Expected colored prompt");
+        
+        let text: String = lines[0].spans.iter()
+            .map(|span| span.content.as_ref())
+            .collect();
+        assert!(text.contains("PS C:\\Users\\test>"), 
+            "Colored prompt content not preserved");
+    }
+}
