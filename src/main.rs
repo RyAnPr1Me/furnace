@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use clap::Parser;
+use std::io::IsTerminal;
 use tracing::Level;
 use tracing_subscriber::FmtSubscriber;
 
@@ -66,7 +67,6 @@ async fn main() -> Result<()> {
     }
 
     // Check if stdout is a TTY
-    use std::io::IsTerminal;
     if !std::io::stdout().is_terminal() {
         eprintln!("Error: Furnace must be run in an interactive terminal.");
         eprintln!("It cannot be run with redirected output or in non-TTY environments.");
@@ -76,7 +76,6 @@ async fn main() -> Result<()> {
 
     // Create and run terminal
     let mut terminal = Terminal::new(config)?;
-    
     // Run terminal with better error context
     if let Err(e) = terminal.run().await {
         // Ensure terminal is cleaned up before showing error
