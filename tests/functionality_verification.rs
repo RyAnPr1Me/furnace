@@ -401,4 +401,29 @@ mod powershell_prompt_tests {
         assert!(text.contains("PS C:\\Users\\test>"), 
             "Colored prompt content not preserved");
     }
+
+    #[test]
+    fn test_carriage_return_handling() {
+        // Test prompt with carriage return (common in Windows terminals)
+        let output1 = "PS C:\\Users\\test>\r\n";
+        let lines1 = AnsiParser::parse(output1);
+        
+        // Should parse correctly
+        assert!(lines1.len() >= 1, "Expected prompt with \\r\\n");
+        let text1: String = lines1[0].spans.iter()
+            .map(|span| span.content.as_ref())
+            .collect();
+        assert!(text1.contains("PS C:\\Users\\test>"), "Prompt with \\r\\n not preserved");
+
+        // Test prompt with just carriage return
+        let output2 = "PS C:\\Users\\test>\r";
+        let lines2 = AnsiParser::parse(output2);
+        
+        // Should also work (though \r is usually ignored)
+        assert!(lines2.len() >= 1, "Expected prompt with \\r");
+        let text2: String = lines2[0].spans.iter()
+            .map(|span| span.content.as_ref())
+            .collect();
+        assert!(text2.contains("PS C:\\Users\\test>"), "Prompt with \\r not preserved");
+    }
 }
