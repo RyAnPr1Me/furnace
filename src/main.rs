@@ -39,10 +39,11 @@ async fn main() -> Result<()> {
 
     // Initialize logging to stderr instead of stdout
     // This prevents log messages from appearing in the terminal UI
+    // Only show logs in debug mode, otherwise disable logging
     let log_level = if args.debug {
         Level::DEBUG
     } else {
-        Level::INFO
+        Level::ERROR  // Only show errors in normal mode, not INFO logs
     };
 
     let subscriber = FmtSubscriber::builder()
