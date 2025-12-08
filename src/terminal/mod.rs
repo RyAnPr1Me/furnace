@@ -285,10 +285,11 @@ impl Terminal {
     #[allow(clippy::too_many_lines)]
     pub async fn run(&mut self) -> Result<()> {
         // Set up terminal with automatic cleanup on error
-        enable_raw_mode().context("Failed to enable raw mode. Ensure you're running in a proper terminal emulator.")?;
+        enable_raw_mode().context(
+            "Failed to enable raw mode. Ensure you're running in a proper terminal emulator.",
+        )?;
         let mut stdout = io::stdout();
-        execute!(stdout, EnterAlternateScreen)
-            .context("Failed to enter alternate screen")?;
+        execute!(stdout, EnterAlternateScreen).context("Failed to enter alternate screen")?;
 
         // Enable mouse capture and bracketed paste mode (Bug #21)
         // Show cursor so user knows where to type
@@ -297,11 +298,12 @@ impl Terminal {
             crossterm::event::EnableMouseCapture,
             crossterm::event::EnableBracketedPaste,
             Show
-        ).context("Failed to setup terminal features")?;
+        )
+        .context("Failed to setup terminal features")?;
 
         let backend = CrosstermBackend::new(stdout);
-        let mut terminal = RatatuiTerminal::new(backend)
-            .context("Failed to create terminal backend")?;
+        let mut terminal =
+            RatatuiTerminal::new(backend).context("Failed to create terminal backend")?;
 
         // Create initial shell session with actual terminal size (Bug #7)
         let (cols, rows) = terminal.size().map(|s| (s.width, s.height))?;
@@ -1018,6 +1020,41 @@ impl Terminal {
         // If no content yet, show a placeholder prompt so users know where to type
         // This prevents confusion when the shell is slow to start
         let has_content = !display_lines.is_empty();
+
+        // Calculate cursor position BEFORE moving display_lines into Text
+        // Use display_lines (includes local echo) instead of styled_lines for proper cursor positioning
+        let (cursor_x, cursor_y) = if has_content {
+            if let Some(last_line) = display_lines.last() {
+                // Calculate cursor position using display width, not byte count
+                #[allow(clippy::cast_possible_truncation)]
+                let line_width: u16 = last_line
+                    .spans
+                    .iter()
+                    .map(|span| span.content.width() as u16)
+                    .sum();
+
+                #[allow(clippy::cast_possible_truncation)]
+                let line_count = display_lines.len() as u16;
+
+                // Position cursor at the end of the last line
+                // Ensure we stay within the visible area bounds
+                let cursor_x = (area.x + line_width).min(area.x + area.width.saturating_sub(1));
+
+                // Y position should be relative to the visible lines
+                // Since we already filtered visible_lines to fit in the area, we use line_count - 1
+                let cursor_y = (area.y + line_count.saturating_sub(1))
+                    .min(area.y + area.height.saturating_sub(1));
+
+                (cursor_x, cursor_y)
+            } else {
+                // Shouldn't happen, but fallback to start of area
+                (area.x, area.y)
+            }
+        } else {
+            // No content yet, position cursor at start of content area
+            (area.x, area.y)
+        };
+
         let text = if has_content {
             Text::from(display_lines)
         } else {
@@ -1055,39 +1092,8 @@ impl Terminal {
 
         f.render_widget(paragraph, area);
 
-        // Set cursor position at the end of the visible content
-        // Only position cursor if we have real content (not just placeholder)
-        if has_content && !styled_lines.is_empty() {
-            if let Some(last_line) = styled_lines.last() {
-                // Calculate cursor position using display width, not byte count
-                #[allow(clippy::cast_possible_truncation)]
-                let line_width: u16 = last_line
-                    .spans
-                    .iter()
-                    .map(|span| span.content.width() as u16)
-                    .sum();
-
-                #[allow(clippy::cast_possible_truncation)]
-                let line_count = styled_lines.len() as u16;
-
-                // Position cursor at the end of the last line
-                // Ensure we stay within the visible area bounds
-                let cursor_x = (area.x + line_width).min(area.x + area.width.saturating_sub(1));
-
-                // Y position should be relative to the visible lines
-                // Since we already filtered visible_lines to fit in the area, we use line_count - 1
-                let cursor_y = (area.y + line_count.saturating_sub(1))
-                    .min(area.y + area.height.saturating_sub(1));
-
-                f.set_cursor(cursor_x, cursor_y);
-            } else {
-                // Shouldn't happen, but fallback to start of area
-                f.set_cursor(area.x, area.y);
-            }
-        } else {
-            // No real content yet, position cursor at start of content area
-            f.set_cursor(area.x, area.y);
-        }
+        // Set cursor position based on the calculated position
+        f.set_cursor(cursor_x, cursor_y);
     }
 
     /// Render resource monitor (Bug #23: doesn't need &mut self)
