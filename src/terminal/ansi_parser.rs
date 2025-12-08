@@ -366,7 +366,8 @@ impl Perform for AnsiParser {
             // Tab - BUG FIX #10: Proper tab stop handling (8 spaces is standard)
             b'\t' => {
                 // Calculate spaces to next tab stop (8-column tabs)
-                let current_len = self.current_text.len();
+                // Use unicode_width to count display columns correctly for UTF-8
+                let current_len = unicode_width::UnicodeWidthStr::width(self.current_text.as_str());
                 let spaces_to_tab = 8 - (current_len % 8);
                 self.current_text.push_str(&" ".repeat(spaces_to_tab));
             }

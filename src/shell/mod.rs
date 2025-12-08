@@ -3,7 +3,7 @@ use portable_pty::{CommandBuilder, NativePtySystem, PtySize, PtySystem};
 use std::io::{Read, Write};
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tracing::{debug, error, info};
+use tracing::{debug, info};
 
 /// High-performance shell session with zero-copy I/O where possible
 pub struct ShellSession {
@@ -62,18 +62,29 @@ impl ShellSession {
     /// # Errors
     /// Returns an error if the read operation fails or the task cannot be spawned
     pub async fn read_output(&self, buffer: &mut [u8]) -> Result<usize> {
-        // BUG FIX #1: Use async lock instead of blocking_lock in spawn_blocking
-        // to avoid concurrent access issues and data corruption
-        let mut reader = self.reader.lock().await;
+        // BUG FIX #1: Use spawn_blocking but write directly to buffer to avoid data corruption
+        // Clone the Arc to move into spawn_blocking, but pass buffer size to avoid lifetime issues
+        let reader = self.reader.clone();
+        let buffer_len = buffer.len();
         
-        match reader.read(buffer) {
-            Ok(n) => Ok(n),
-            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => Ok(0),
-            Err(e) => {
-                error!("Failed to read from shell: {}", e);
-                Err(e.into())
+        let (n, data) = tokio::task::spawn_blocking(move || {
+            let mut reader = reader.blocking_lock();
+            let mut temp = vec![0u8; buffer_len];
+            match reader.read(&mut temp) {
+                Ok(n) => Ok((n, temp)),
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => Ok((0, vec![])),
+                Err(e) => Err(e),
             }
+        })
+        .await
+        .context("Task join error")?
+        .context("Failed to read from shell")?;
+        
+        // Copy data to buffer only once, outside spawn_blocking
+        if n > 0 {
+            buffer[..n].copy_from_slice(&data[..n]);
         }
+        Ok(n)
     }
 
     /// Write input to shell with minimal latency
