@@ -313,7 +313,7 @@ mod powershell_prompt_tests {
 
         // Should have at least 1 line (the prompt), possibly 2 if empty line is added
         assert!(
-            lines.len() >= 1,
+            !lines.is_empty(),
             "Expected at least 1 line for prompt with newline"
         );
 
@@ -337,7 +337,7 @@ mod powershell_prompt_tests {
 
         // Should have the prompt visible after clear screen
         assert!(
-            lines.len() >= 1,
+            !lines.is_empty(),
             "Expected prompt to be visible after clear screen"
         );
 
@@ -363,7 +363,7 @@ mod powershell_prompt_tests {
 
         // After fix: clear screen should preserve the prompt in scrollback
         assert!(
-            lines.len() >= 1,
+            !lines.is_empty(),
             "Clear screen after prompt should preserve scrollback content"
         );
 
@@ -388,7 +388,7 @@ mod powershell_prompt_tests {
 
         // Should still have the prompt after multiple clears
         assert!(
-            lines.len() >= 1,
+            !lines.is_empty(),
             "Expected prompt after multiple clear screens"
         );
 
@@ -410,7 +410,7 @@ mod powershell_prompt_tests {
         let lines = AnsiParser::parse(output);
 
         // Should have the prompt with color styling
-        assert!(lines.len() >= 1, "Expected colored prompt");
+        assert!(!lines.is_empty(), "Expected colored prompt");
 
         let text: String = lines[0]
             .spans
@@ -430,7 +430,7 @@ mod powershell_prompt_tests {
         let lines1 = AnsiParser::parse(output1);
 
         // Should parse correctly
-        assert!(lines1.len() >= 1, "Expected prompt with \\r\\n");
+        assert!(!lines1.is_empty(), "Expected prompt with \\r\\n");
         let text1: String = lines1[0]
             .spans
             .iter()
@@ -447,7 +447,7 @@ mod powershell_prompt_tests {
         let lines2 = AnsiParser::parse(output2);
 
         // Prompt should be preserved even though \r is ignored
-        assert!(lines2.len() >= 1, "Expected prompt with \\r");
+        assert!(!lines2.is_empty(), "Expected prompt with \\r");
         let text2: String = lines2[0]
             .spans
             .iter()
