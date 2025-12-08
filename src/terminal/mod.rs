@@ -565,39 +565,102 @@ impl Terminal {
 
     /// Handle keyboard events with optimal input processing
     async fn handle_key_event(&mut self, key: KeyEvent) -> Result<()> {
-        match (key.code, key.modifiers) {
-            // Toggle resource monitor (Ctrl+R)
-            (KeyCode::Char('r'), KeyModifiers::CONTROL) => {
-                if self.resource_monitor.is_some() {
-                    self.show_resources = !self.show_resources;
-                    debug!(
-                        "Resource monitor: {}",
-                        if self.show_resources { "ON" } else { "OFF" }
-                    );
+        // BUG FIX #27: Use keybinding system to handle actions
+        use crate::keybindings::Action;
+        
+        if let Some(action) = self.keybindings.get_action(key.code, key.modifiers) {
+            match action {
+                Action::NewTab => {
+                    if self.config.terminal.enable_tabs {
+                        self.create_new_tab()?;
+                        return Ok(());
+                    }
+                }
+                Action::CloseTab => {
+                    // Close current tab (implement if multiple tabs exist)
+                    if self.sessions.len() > 1 {
+                        self.close_current_tab();
+                        return Ok(());
+                    }
+                }
+                Action::NextTab => {
+                    if self.config.terminal.enable_tabs {
+                        self.next_tab();
+                        return Ok(());
+                    }
+                }
+                Action::PrevTab => {
+                    if self.config.terminal.enable_tabs {
+                        self.prev_tab();
+                        return Ok(());
+                    }
+                }
+                Action::Copy => {
+                    // Copy selection to clipboard (implement with clipboard crate)
+                    self.show_notification("Copy not yet implemented".to_string());
+                    return Ok(());
+                }
+                Action::Paste => {
+                    // Paste from clipboard (implement with clipboard crate)
+                    self.show_notification("Paste not yet implemented".to_string());
+                    return Ok(());
+                }
+                Action::Search => {
+                    // Open search UI (implement)
+                    self.show_notification("Search not yet implemented".to_string());
+                    return Ok(());
+                }
+                Action::ToggleResourceMonitor => {
+                    if self.resource_monitor.is_some() {
+                        self.show_resources = !self.show_resources;
+                        debug!(
+                            "Resource monitor: {}",
+                            if self.show_resources { "ON" } else { "OFF" }
+                        );
+                        return Ok(());
+                    }
+                }
+                Action::SaveSession => {
+                    // Save current session
+                    if self.session_manager.is_some() {
+                        if let Err(e) = self.try_save_session() {
+                            warn!("Failed to save session: {}", e);
+                            self.show_notification(format!("Save failed: {}", e));
+                        } else {
+                            self.show_notification("Session saved!".to_string());
+                        }
+                        return Ok(());
+                    }
+                }
+                Action::LoadSession => {
+                    if self.session_manager.is_some() {
+                        self.show_notification("Load session UI not yet implemented".to_string());
+                        return Ok(());
+                    }
+                }
+                Action::Clear => {
+                    // Clear current buffer
+                    if let Some(buf) = self.output_buffers.get_mut(self.active_session) {
+                        buf.clear();
+                        if let Some(len) = self.cached_buffer_lens.get_mut(self.active_session) {
+                            *len = 0;
+                        }
+                        self.dirty = true;
+                        return Ok(());
+                    }
+                }
+                _ => {
+                    // Other actions not yet handled - fall through to default handling
                 }
             }
-
-            // Quit (Ctrl+C or Ctrl+D)
+        }
+        
+        // Fallback to default key handling
+        match (key.code, key.modifiers) {
+            // Quit (Ctrl+C or Ctrl+D) - not in keybindings to avoid accidental quit
             (KeyCode::Char('c' | 'd'), KeyModifiers::CONTROL) => {
                 debug!("Quit signal received");
                 self.should_quit = true;
-            }
-
-            // New tab (Bug #7: use current terminal size)
-            (KeyCode::Char('t'), KeyModifiers::CONTROL) if self.config.terminal.enable_tabs => {
-                self.create_new_tab()?;
-            }
-
-            // Next tab
-            (KeyCode::Tab, KeyModifiers::CONTROL) if self.config.terminal.enable_tabs => {
-                self.next_tab();
-            }
-
-            // Previous tab
-            (KeyCode::BackTab, m)
-                if m.contains(KeyModifiers::SHIFT) && self.config.terminal.enable_tabs =>
-            {
-                self.prev_tab();
             }
 
             // Regular character input (Bug #1: track ALL characters including shifted)
@@ -761,6 +824,55 @@ impl Terminal {
             }
             debug!("Switched to tab {}", self.active_session);
         }
+    }
+    
+    /// Close current tab
+    fn close_current_tab(&mut self) {
+        if self.sessions.len() <= 1 {
+            // Don't close the last tab
+            return;
+        }
+        
+        // Remove the session and associated data
+        self.sessions.remove(self.active_session);
+        self.output_buffers.remove(self.active_session);
+        self.command_buffers.remove(self.active_session);
+        self.cached_styled_lines.remove(self.active_session);
+        self.cached_buffer_lens.remove(self.active_session);
+        
+        // Adjust active session if needed
+        if self.active_session >= self.sessions.len() {
+            self.active_session = self.sessions.len().saturating_sub(1);
+        }
+        
+        self.dirty = true;
+        debug!("Closed tab, now on tab {}", self.active_session);
+    }
+    
+    /// Save current session state
+    fn try_save_session(&mut self) -> Result<()> {
+        use crate::session::{SavedSession, TabState};
+        
+        let tabs: Vec<TabState> = self.output_buffers.iter()
+            .enumerate()
+            .map(|(i, buf)| TabState {
+                output: String::from_utf8_lossy(buf).to_string(),
+                working_dir: None,
+                active: i == self.active_session,
+            })
+            .collect();
+        
+        let session = SavedSession {
+            id: uuid::Uuid::new_v4().to_string(),
+            name: format!("Session {}", chrono::Local::now().format("%Y-%m-%d %H:%M:%S")),
+            created_at: chrono::Local::now(),
+            tabs,
+        };
+        
+        if let Some(ref mut sm) = self.session_manager {
+            sm.save_session(&session)?;
+        }
+        Ok(())
     }
 
     /// Bug #8: Enforce scrollback limit on a specific tab

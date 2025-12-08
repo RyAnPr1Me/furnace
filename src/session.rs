@@ -1,7 +1,6 @@
 use anyhow::{Context, Result};
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Local};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -14,18 +13,15 @@ pub struct SessionManager {
 pub struct SavedSession {
     pub id: String,
     pub name: String,
-    pub created_at: DateTime<Utc>,
-    pub working_dir: String,
-    pub shell: String,
-    pub env: HashMap<String, String>,
+    pub created_at: DateTime<Local>,
     pub tabs: Vec<TabState>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TabState {
-    pub name: String,
-    pub working_dir: String,
-    pub command_history: Vec<String>,
+    pub output: String,
+    pub working_dir: Option<String>,
+    pub active: bool,
 }
 
 impl SessionManager {
