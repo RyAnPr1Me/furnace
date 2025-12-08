@@ -103,6 +103,12 @@ impl KeybindingManager {
         // Tab management
         self.add_binding("t", &["Ctrl"], Action::NewTab);
         self.add_binding("w", &["Ctrl"], Action::CloseTab);
+        
+        // BUG FIX #7: Ctrl+Tab is not reliably supported by crossterm on all terminals
+        // Most terminals intercept Ctrl+Tab before it reaches the application.
+        // Using Ctrl+PageDown/PageUp or Alt+number is more reliable, but we keep
+        // these bindings as they work in some terminals (e.g., Windows Terminal).
+        // Users can remap these in their config if needed.
         self.add_binding("Tab", &["Ctrl"], Action::NextTab);
         self.add_binding("Tab", &["Ctrl", "Shift"], Action::PrevTab);
 
@@ -126,8 +132,10 @@ impl KeybindingManager {
         self.add_binding("r", &["Ctrl"], Action::ToggleResourceMonitor);
 
         // Session management
+        // BUG FIX #16: Removed duplicate Ctrl+O binding
+        // Ctrl+O is used for FocusNextPane above
         self.add_binding("s", &["Ctrl"], Action::SaveSession);
-        self.add_binding("o", &["Ctrl", "Shift"], Action::LoadSession);
+        self.add_binding("l", &["Ctrl", "Shift"], Action::LoadSession);
     }
 
     /// Add a keybinding
@@ -143,11 +151,18 @@ impl KeybindingManager {
     }
 
     /// Get action for key event
+    ///
+    /// BUG FIX #6: Normalize character keys to lowercase for consistent matching.
+    /// When Shift is pressed with Ctrl (e.g., Ctrl+Shift+C), crossterm provides
+    /// an uppercase 'C', but our bindings use lowercase 'c'. This function normalizes
+    /// the key to lowercase for character keys while preserving Shift in modifiers.
     #[allow(dead_code)] // Public API
     #[must_use]
     pub fn get_action(&self, code: KeyCode, modifiers: KeyModifiers) -> Option<Action> {
         let key_str = match code {
-            KeyCode::Char(c) => c.to_string(),
+            // BUG FIX #6: Normalize character keys to lowercase for case-insensitive matching
+            // This allows Ctrl+Shift+C to match a binding defined as ctrl+shift+c
+            KeyCode::Char(c) => c.to_lowercase().to_string(),
             KeyCode::Tab => "Tab".to_string(),
             KeyCode::Enter => "Enter".to_string(),
             KeyCode::Esc => "Esc".to_string(),

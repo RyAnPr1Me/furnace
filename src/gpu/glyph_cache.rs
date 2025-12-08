@@ -60,9 +60,12 @@ impl GlyphCache {
 
     /// Pre-cache ASCII characters for faster rendering
     fn precache_ascii(&mut self) {
-        // Calculate approximate glyph dimensions
-        let glyph_width = (self.font_size * 0.6) as u32;
-        let glyph_height = (self.font_size * 1.2) as u32;
+        // BUG FIX #8: Use consistent font metric ratios
+        // Standard monospace font metrics: 0.6 width ratio, 1.2 height ratio
+        const CELL_WIDTH_RATIO: f32 = 0.6;
+        const CELL_HEIGHT_RATIO: f32 = 1.2;
+        let glyph_width = (self.font_size * CELL_WIDTH_RATIO) as u32;
+        let glyph_height = (self.font_size * CELL_HEIGHT_RATIO) as u32;
         let atlas_size = self.atlas_size as f32;
 
         // Cache printable ASCII (32-126)

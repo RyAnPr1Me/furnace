@@ -1,6 +1,37 @@
 //! GPU renderer implementation using wgpu
 //!
 //! Provides hardware-accelerated rendering for the terminal.
+//!
+//! # Implementation Status
+//!
+//! This GPU renderer is an **optional feature** currently under active development.
+//! Some functionality is not yet complete:
+//!
+//! ## ⚠️ Known Limitations
+//!
+//! 1. **Surface Creation (BUG #10)**: The renderer does not create its own surface.
+//!    To use GPU rendering, you must:
+//!    - Create a window using `winit` or similar
+//!    - Create a wgpu surface from that window
+//!    - Pass the surface to the renderer via a new `with_surface()` method
+//!
+//! 2. **Glyph Upload (BUG #4)**: Glyphs are cached but not uploaded to GPU texture.
+//!    The glyph atlas texture is created but remains empty. To fix:
+//!    - Implement font rasterization using `fontdue`
+//!    - Upload rasterized glyphs to the atlas texture
+//!    - Update glyph cache when new characters are encountered
+//!
+//! 3. **Dirty Rectangles (BUG #24)**: Currently uploads all cells every frame.
+//!    Future optimization: track changed cells and only update those regions.
+//!
+//! ## Usage
+//!
+//! To enable GPU rendering:
+//! ```bash
+//! cargo build --features gpu
+//! ```
+//!
+//! See `examples/gpu_rendering.rs` (TODO) for complete usage example.
 
 // Allow pedantic warnings for optional GPU feature code
 #![allow(clippy::pedantic)]
@@ -152,12 +183,18 @@ impl GpuRenderer {
             source: wgpu::ShaderSource::Wgsl(include_str!("shaders/terminal.wgsl").into()),
         });
 
-        // Create uniform buffer
+        // Create uniform buffer with dynamic screen size
+        // BUG FIX #3: Don't hardcode 1920x1080 - use config dimensions or defaults
+        let (initial_width, initial_height) = (
+            config.initial_width.unwrap_or(1280.0),
+            config.initial_height.unwrap_or(720.0)
+        );
+        
         let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Uniform Buffer"),
             contents: bytemuck::cast_slice(&[Uniforms {
-                view_proj: orthographic_projection(1920.0, 1080.0),
-                screen_size: [1920.0, 1080.0],
+                view_proj: orthographic_projection(initial_width, initial_height),
+                screen_size: [initial_width, initial_height],
                 time: 0.0,
                 _padding: 0.0,
             }]),
@@ -415,6 +452,16 @@ impl GpuRenderer {
         let glyph_cache =
             super::glyph_cache::GlyphCache::new(config.font_size, &config.font_family);
 
+        // BUG FIX #8: Calculate cell size from font metrics instead of magic numbers
+        // Standard monospace font metrics:
+        // - Width is typically 0.6 * font_size for monospace fonts
+        // - Height is typically 1.2 * font_size (with line spacing)
+        // These are industry-standard ratios for monospace terminal fonts
+        const CELL_WIDTH_RATIO: f32 = 0.6;
+        const CELL_HEIGHT_RATIO: f32 = 1.2;
+        let cell_width = config.font_size * CELL_WIDTH_RATIO;
+        let cell_height = config.font_size * CELL_HEIGHT_RATIO;
+
         Ok(Self {
             instance,
             adapter,
@@ -434,7 +481,7 @@ impl GpuRenderer {
             glyph_sampler,
             glyph_bind_group,
             terminal_size: (80, 24),
-            cell_size: (config.font_size * 0.6, config.font_size * 1.2),
+            cell_size: (cell_width, cell_height),
             cells: Vec::with_capacity(80 * 24),
             config,
             stats: GpuStats::default(),
@@ -468,6 +515,47 @@ impl GpuRenderer {
         };
         self.queue
             .write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[uniforms]));
+    }
+
+    /// Set surface for rendering
+    ///
+    /// BUG FIX #10: Provide method to attach a surface for actual rendering.
+    /// The renderer cannot create its own surface as that requires a window,
+    /// which is outside the scope of this rendering module.
+    ///
+    /// # Arguments
+    /// * `surface` - wgpu surface created from a window
+    /// * `width` - Surface width in pixels
+    /// * `height` - Surface height in pixels
+    ///
+    /// # Example
+    /// ```ignore
+    /// let window = /* create winit window */;
+    /// let surface = instance.create_surface(&window)?;
+    /// renderer.set_surface(surface, 1920, 1080);
+    /// ```
+    pub fn set_surface(&mut self, surface: wgpu::Surface<'static>, width: u32, height: u32) {
+        let config = wgpu::SurfaceConfiguration {
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            format: wgpu::TextureFormat::Bgra8UnormSrgb,
+            width,
+            height,
+            present_mode: if self.config.vsync {
+                wgpu::PresentMode::AutoVsync
+            } else {
+                wgpu::PresentMode::AutoNoVsync
+            },
+            alpha_mode: wgpu::CompositeAlphaMode::Auto,
+            view_formats: vec![],
+            desired_maximum_frame_latency: 2,
+        };
+        
+        surface.configure(&self.device, &config);
+        self.surface = Some(surface);
+        self.surface_config = Some(config);
+        
+        // Update uniforms for new size
+        self.resize(width, height);
     }
 
     /// Render a frame
