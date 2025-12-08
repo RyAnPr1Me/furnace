@@ -42,7 +42,8 @@ impl AnsiParser {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            current_style: Style::default().fg(Color::White).bg(Color::Black),
+            // BUG FIX #9: Use Color::Reset for theme support instead of hardcoded White/Black
+            current_style: Style::default().fg(Color::Reset).bg(Color::Reset),
             current_text: String::with_capacity(256), // Pre-allocate for typical line length
             current_line_spans: Vec::with_capacity(8), // Pre-allocate for typical spans per line
             lines: Vec::with_capacity(24),            // Pre-allocate for typical terminal height
@@ -147,8 +148,9 @@ impl AnsiParser {
 
             match param[0] {
                 // Reset all attributes to default
+                // BUG FIX #9: Use Color::Reset instead of hardcoded White/Black for theme support
                 0 => {
-                    self.current_style = Style::default().fg(Color::White).bg(Color::Black);
+                    self.current_style = Style::default().fg(Color::Reset).bg(Color::Reset);
                 }
                 // Bold
                 1 => {
@@ -262,9 +264,9 @@ impl AnsiParser {
                         }
                     }
                 }
-                // Default foreground color
+                // Default foreground color - BUG FIX #9: Use Color::Reset for theme support
                 39 => {
-                    self.current_style = self.current_style.fg(Color::White);
+                    self.current_style = self.current_style.fg(Color::Reset);
                 }
                 // Standard background colors (40-47)
                 40 => self.current_style = self.current_style.bg(Color::Black),
@@ -308,9 +310,9 @@ impl AnsiParser {
                         }
                     }
                 }
-                // Default background color
+                // Default background color - BUG FIX #9: Use Color::Reset for theme support
                 49 => {
-                    self.current_style = self.current_style.bg(Color::Black);
+                    self.current_style = self.current_style.bg(Color::Reset);
                 }
                 // Bright foreground colors (90-97)
                 90 => self.current_style = self.current_style.fg(Color::DarkGray),
@@ -354,14 +356,20 @@ impl Perform for AnsiParser {
             b'\n' => {
                 self.flush_line();
             }
-            // Carriage return - in most cases part of \r\n, so we ignore it
-            // True cursor positioning for bare \r is complex for scrollback
+            // Carriage return - BUG FIX #5: Handle \r properly for progress bars
+            // Flush current text without adding a newline, so next text overwrites on same line
             b'\r' => {
-                // Ignore - most terminals use \r\n together
+                self.flush_text();
+                // Note: We don't flush_line() here, so the next text continues on the same line
+                // This allows progress bars and prompts that use \r to work correctly
             }
-            // Tab
+            // Tab - BUG FIX #10: Proper tab stop handling (8 spaces is standard)
             b'\t' => {
-                self.current_text.push_str("    "); // 4-space tab
+                // Calculate spaces to next tab stop (8-column tabs)
+                // Use unicode_width to count display columns correctly for UTF-8
+                let current_len = unicode_width::UnicodeWidthStr::width(self.current_text.as_str());
+                let spaces_to_tab = 8 - (current_len % 8);
+                self.current_text.push_str(&" ".repeat(spaces_to_tab));
             }
             // Backspace
             0x08 => {

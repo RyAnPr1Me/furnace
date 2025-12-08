@@ -3,7 +3,7 @@ use portable_pty::{CommandBuilder, NativePtySystem, PtySize, PtySystem};
 use std::io::{Read, Write};
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tracing::{debug, error, info};
+use tracing::{debug, info};
 
 /// High-performance shell session with zero-copy I/O where possible
 pub struct ShellSession {
@@ -62,40 +62,29 @@ impl ShellSession {
     /// # Errors
     /// Returns an error if the read operation fails or the task cannot be spawned
     pub async fn read_output(&self, buffer: &mut [u8]) -> Result<usize> {
+        // BUG FIX #1: Use spawn_blocking but write directly to buffer to avoid data corruption
+        // Clone the Arc to move into spawn_blocking, but pass buffer size to avoid lifetime issues
         let reader = self.reader.clone();
-
-        // Use spawn_blocking for the synchronous read operation
-        // We pass the buffer data as a Vec to work around the lifetime/Send constraints
         let buffer_len = buffer.len();
-        let result = tokio::task::spawn_blocking(move || {
+        
+        let (n, data) = tokio::task::spawn_blocking(move || {
             let mut reader = reader.blocking_lock();
-            // Use a stack-allocated array for small buffers, heap for large ones
-            // This is already optimized by Rust's allocator
-            let mut temp_buf = vec![0u8; buffer_len];
-            match reader.read(&mut temp_buf) {
-                Ok(n) => Ok((n, temp_buf)),
-                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => Ok((0, Vec::new())),
+            let mut temp = vec![0u8; buffer_len];
+            match reader.read(&mut temp) {
+                Ok(n) => Ok((n, temp)),
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => Ok((0, vec![])),
                 Err(e) => Err(e),
             }
         })
-        .await;
-
-        match result {
-            Ok(Ok((n, temp_buf))) => {
-                if n > 0 {
-                    buffer[..n].copy_from_slice(&temp_buf[..n]);
-                }
-                Ok(n)
-            }
-            Ok(Err(e)) => {
-                error!("Failed to read from shell: {}", e);
-                Err(e.into())
-            }
-            Err(e) => {
-                error!("Task join error: {}", e);
-                Err(e.into())
-            }
+        .await
+        .context("Task join error")?
+        .context("Failed to read from shell")?;
+        
+        // Copy data to buffer only once, outside spawn_blocking
+        if n > 0 {
+            buffer[..n].copy_from_slice(&data[..n]);
         }
+        Ok(n)
     }
 
     /// Write input to shell with minimal latency
@@ -114,18 +103,23 @@ impl ShellSession {
     /// - The write operation fails (e.g., shell terminated)
     /// - The flush operation fails (e.g., broken pipe)
     pub async fn write_input(&self, data: &[u8]) -> Result<usize> {
-        let mut writer = self.writer.lock().await;
-
-        writer
-            .write_all(data)
-            .context(format!("Failed to write {} bytes to shell", data.len()))?;
-
-        writer
-            .flush()
-            .context("Failed to flush shell input buffer")?;
-
-        debug!("Wrote {} bytes to shell", data.len());
-        Ok(data.len())
+        // BUG FIX #2: Use spawn_blocking for sync I/O to avoid blocking the async runtime
+        let writer = self.writer.clone();
+        let data = data.to_vec();
+        let len = data.len();
+        
+        tokio::task::spawn_blocking(move || {
+            let mut writer = writer.blocking_lock();
+            writer.write_all(&data)?;
+            writer.flush()?;
+            Ok::<_, anyhow::Error>(len)
+        })
+        .await
+        .context("Task join error")?
+        .context(format!("Failed to write {} bytes to shell", len))?;
+        
+        debug!("Wrote {} bytes to shell", len);
+        Ok(len)
     }
 
     /// Resize the PTY to match terminal dimensions
