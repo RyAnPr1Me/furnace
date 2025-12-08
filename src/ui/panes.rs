@@ -2,39 +2,33 @@ use ratatui::layout::{Constraint, Direction, Layout, Rect};
 
 /// Pane layout manager for split views
 #[derive(Debug, Clone)]
-#[allow(dead_code)] // Public API for pane management
 pub struct PaneLayout {
     splits: Vec<Split>,
 }
 
 #[derive(Debug, Clone)]
-#[allow(dead_code)] // Public API enum for split types
 pub enum Split {
     Horizontal { ratio: u16 },
     Vertical { ratio: u16 },
 }
 
 impl PaneLayout {
-    #[allow(dead_code)] // Public API
     #[must_use]
     pub fn new() -> Self {
         Self { splits: Vec::new() }
     }
 
     /// Add a horizontal split
-    #[allow(dead_code)] // Public API
     pub fn split_horizontal(&mut self, ratio: u16) {
         self.splits.push(Split::Horizontal { ratio });
     }
 
     /// Add a vertical split
-    #[allow(dead_code)] // Public API
     pub fn split_vertical(&mut self, ratio: u16) {
         self.splits.push(Split::Vertical { ratio });
     }
 
     /// Calculate layout rectangles for all panes
-    #[allow(dead_code)] // Public API
     #[must_use]
     pub fn calculate(&self, area: Rect) -> Vec<Rect> {
         if self.splits.is_empty() {

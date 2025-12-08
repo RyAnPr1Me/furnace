@@ -53,7 +53,6 @@ const TARGET_FPS: u64 = 170;
 const READ_BUFFER_SIZE: usize = 4 * 1024;
 
 /// Notification display duration in seconds
-#[allow(dead_code)] // May be used for notifications feature
 const NOTIFICATION_DURATION_SECS: u64 = 2;
 
 /// Minimum popup size to prevent collapse (Bug #19)
@@ -90,7 +89,6 @@ const COLOR_REDDISH_GRAY: (u8, u8, u8) = (0xC0, 0xB0, 0xB0); // Reddish-gray tex
 const COLOR_PURE_BLACK: (u8, u8, u8) = (0x00, 0x00, 0x00); // Pure black background
 const COLOR_MUTED_GREEN: (u8, u8, u8) = (0x6A, 0x9A, 0x7A); // Muted green
 const COLOR_MAGENTA_RED: (u8, u8, u8) = (0xB0, 0x5A, 0x7A); // Magenta-red
-#[allow(dead_code)] // May be used for future UI features
 const COLOR_DARK_GRAY: (u8, u8, u8) = (0x5A, 0x4A, 0x4A); // Dark gray for comments
 
 /// High-performance terminal with GPU-accelerated rendering at 170 FPS
@@ -102,17 +100,12 @@ pub struct Terminal {
     output_buffers: Vec<Vec<u8>>,
     should_quit: bool,
     resource_monitor: Option<ResourceMonitor>,
-    #[allow(dead_code)] // Feature not yet implemented
     autocomplete: Option<Autocomplete>,
     show_resources: bool,
-    #[allow(dead_code)]
     keybindings: KeybindingManager,
-    #[allow(dead_code)] // Feature not yet implemented
     session_manager: Option<SessionManager>,
-    #[allow(dead_code)]
     color_palette: TrueColorPalette,
     // Theme manager for dynamic theme switching
-    #[allow(dead_code)] // May be used for future theming features
     theme_manager: Option<ThemeManager>,
     // Performance optimization: track if redraw is needed
     dirty: bool,
@@ -1134,11 +1127,20 @@ impl Terminal {
 
         f.render_widget(resource_widget, area);
     }
+    
+    /// Show notification message
+    ///
+    /// BUG FIX #17: Actually set notification_frames when showing notification
+    pub fn show_notification(&mut self, message: String) {
+        self.notification_message = Some(message);
+        // BUG FIX #17: Set frames based on duration and target FPS
+        self.notification_frames = NOTIFICATION_DURATION_SECS * TARGET_FPS;
+        self.dirty = true;
+    }
 }
 
 /// Bug #19: Create a centered popup area with minimum size guarantees
 #[must_use]
-#[allow(dead_code)] // May be used for future UI features
 pub fn centered_popup(parent: Rect, max_width: u16, max_height: u16) -> Rect {
     // Enforce minimum size (Bug #19)
     let width = parent.width.min(max_width).max(MIN_POPUP_WIDTH);

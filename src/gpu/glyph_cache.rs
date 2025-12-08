@@ -1,20 +1,20 @@
 //! Glyph cache for GPU text rendering
 //!
 //! Caches rasterized glyphs in a texture atlas for efficient GPU rendering.
-
-// Allow pedantic warnings for optional GPU feature code
-#![allow(clippy::pedantic)]
+//! Uses fontdue for font rasterization to provide actual glyph bitmaps.
 
 use std::collections::HashMap;
 
-/// Glyph cache for efficient text rendering
-#[allow(dead_code)] // Some fields are for future use in complete GPU implementation
+/// Glyph cache for efficient text rendering with fontdue font rasterization
 pub struct GlyphCache {
     /// Map from character code to UV coordinates in atlas
     glyph_map: HashMap<u32, GlyphInfo>,
+    /// Font for rasterization
+    #[cfg(feature = "gpu")]
+    font: Option<fontdue::Font>,
     /// Font size
     font_size: f32,
-    /// Font family name
+    /// Font family name (used for font loading)
     font_family: String,
     /// Atlas dimensions
     atlas_size: u32,
@@ -24,6 +24,8 @@ pub struct GlyphCache {
     cursor_y: u32,
     /// Maximum height in current row
     row_height: u32,
+    /// Atlas bitmap data (R8 format)
+    atlas_data: Vec<u8>,
 }
 
 /// Information about a cached glyph
@@ -40,16 +42,25 @@ pub struct GlyphInfo {
 }
 
 impl GlyphCache {
-    /// Create a new glyph cache
+    /// Create a new glyph cache with font loading
+    ///
+    /// BUG FIX #4: Implement actual font loading and rasterization
     pub fn new(font_size: f32, font_family: &str) -> Self {
+        #[cfg(feature = "gpu")]
+        let font = Self::load_font(font_family);
+        
+        let atlas_size = 2048;
         let mut cache = Self {
             glyph_map: HashMap::with_capacity(256),
+            #[cfg(feature = "gpu")]
+            font,
             font_size,
             font_family: font_family.to_string(),
-            atlas_size: 2048,
+            atlas_size,
             cursor_x: 0,
             cursor_y: 0,
             row_height: 0,
+            atlas_data: vec![0u8; (atlas_size * atlas_size) as usize],
         };
 
         // Pre-cache ASCII characters
@@ -58,10 +69,154 @@ impl GlyphCache {
         cache
     }
 
+    /// Load font from system or embedded
+    ///
+    /// BUG FIX #4: Actually load fonts for rendering
+    #[cfg(feature = "gpu")]
+    fn load_font(font_family: &str) -> Option<fontdue::Font> {
+        // Try to load from common system font paths
+        let font_paths = Self::get_font_paths(font_family);
+        
+        for path in font_paths {
+            if let Ok(data) = std::fs::read(&path) {
+                if let Ok(font) = fontdue::Font::from_bytes(
+                    data,
+                    fontdue::FontSettings::default()
+                ) {
+                    tracing::info!("Loaded font from: {}", path);
+                    return Some(font);
+                }
+            }
+        }
+        
+        // Fallback to embedded font data (a minimal monospace font)
+        // In production, include a default monospace font like JetBrains Mono
+        tracing::warn!("Could not load font '{}', using fallback", font_family);
+        None
+    }
+    
+    /// Get common font file paths based on font name
+    #[cfg(feature = "gpu")]
+    fn get_font_paths(font_family: &str) -> Vec<String> {
+        let mut paths = Vec::new();
+        
+        // Windows
+        paths.push(format!("C:\\Windows\\Fonts\\{}.ttf", font_family));
+        paths.push(format!("C:\\Windows\\Fonts\\{}.otf", font_family));
+        
+        // Common monospace fonts on Windows
+        if font_family.contains("Mono") || font_family.contains("Consolas") {
+            paths.push("C:\\Windows\\Fonts\\consola.ttf".to_string());
+            paths.push("C:\\Windows\\Fonts\\cour.ttf".to_string());
+        }
+        
+        // Linux
+        paths.push(format!("/usr/share/fonts/truetype/{}/{}.ttf", 
+            font_family.to_lowercase(), font_family));
+        paths.push(format!("/usr/share/fonts/TTF/{}.ttf", font_family));
+        
+        // macOS
+        paths.push(format!("/System/Library/Fonts/{}.ttf", font_family));
+        paths.push(format!("/Library/Fonts/{}.ttf", font_family));
+        
+        paths
+    }
+
     /// Pre-cache ASCII characters for faster rendering
+    ///
+    /// BUG FIX #4: Actually rasterize glyphs and upload to atlas
     fn precache_ascii(&mut self) {
+        #[cfg(feature = "gpu")]
+        {
+            if self.font.is_some() {
+                // Cache printable ASCII (32-126)
+                for code in 32u32..=126 {
+                    if let Some(c) = char::from_u32(code) {
+                        // Borrow font separately to avoid borrow conflict
+                        self.cache_glyph_rendered(c, code);
+                    }
+                }
+                return;
+            }
+        }
+        
+        // Fallback: use placeholder rects if no font available
+        self.precache_ascii_placeholders();
+    }
+    
+    /// Cache a single glyph by rendering it
+    ///
+    /// BUG FIX #4: Helper method to avoid borrow conflicts
+    #[cfg(feature = "gpu")]
+    fn cache_glyph_rendered(&mut self, c: char, code: u32) {
+        // Get font reference
+        let Some(ref font) = self.font else { return; };
+        
+        // Rasterize the glyph
+        let (metrics, bitmap) = font.rasterize(c, self.font_size);
+        
+        let width = metrics.width as u32;
+        let height = metrics.height as u32;
+        
+        // Skip if glyph is too large or empty
+        if width == 0 || height == 0 || width > 256 || height > 256 {
+            return;
+        }
+        
+        // Find space in atlas
+        if self.cursor_x + width > self.atlas_size {
+            self.cursor_x = 0;
+            self.cursor_y += self.row_height + 2;
+            self.row_height = 0;
+        }
+        
+        // Check if we have vertical space
+        if self.cursor_y + height > self.atlas_size {
+            tracing::warn!("Atlas full, cannot cache more glyphs");
+            return;
+        }
+        
+        // Copy bitmap data to atlas
+        for y in 0..height {
+            for x in 0..width {
+                let src_idx = (y * width + x) as usize;
+                let dst_x = self.cursor_x + x;
+                let dst_y = self.cursor_y + y;
+                let dst_idx = (dst_y * self.atlas_size + dst_x) as usize;
+                
+                if src_idx < bitmap.len() && dst_idx < self.atlas_data.len() {
+                    self.atlas_data[dst_idx] = bitmap[src_idx];
+                }
+            }
+        }
+        
+        // Calculate UV coordinates (normalized 0-1)
+        let atlas_size = self.atlas_size as f32;
+        let uv = [
+            self.cursor_x as f32 / atlas_size,
+            self.cursor_y as f32 / atlas_size,
+            width as f32 / atlas_size,
+            height as f32 / atlas_size,
+        ];
+        
+        // Store glyph info
+        self.glyph_map.insert(
+            code,
+            GlyphInfo {
+                uv,
+                advance: metrics.advance_width,
+                bearing: [metrics.xmin as f32, metrics.ymin as f32],
+                size: [width as f32, height as f32],
+            },
+        );
+        
+        self.cursor_x += width + 2; // 2-pixel padding
+        self.row_height = self.row_height.max(height);
+    }
+    
+    /// Fallback: pre-cache ASCII with placeholder rectangles
+    fn precache_ascii_placeholders(&mut self) {
         // BUG FIX #8: Use consistent font metric ratios
-        // Standard monospace font metrics: 0.6 width ratio, 1.2 height ratio
         const CELL_WIDTH_RATIO: f32 = 0.6;
         const CELL_HEIGHT_RATIO: f32 = 1.2;
         let glyph_width = (self.font_size * CELL_WIDTH_RATIO) as u32;
@@ -110,10 +265,12 @@ impl GlyphCache {
     }
 
     /// Cache a new glyph (returns UV coordinates)
+    ///
+    /// BUG FIX #4: Support dynamic glyph caching at runtime
     pub fn cache_glyph(
         &mut self,
         char_code: u32,
-        _bitmap: &[u8],
+        bitmap: &[u8],
         width: u32,
         height: u32,
     ) -> [f32; 4] {
@@ -129,6 +286,22 @@ impl GlyphCache {
             self.cursor_x = 0;
             self.cursor_y += self.row_height + 2;
             self.row_height = 0;
+        }
+        
+        // Copy bitmap to atlas if provided
+        if !bitmap.is_empty() {
+            for y in 0..height {
+                for x in 0..width {
+                    let src_idx = (y * width + x) as usize;
+                    let dst_x = self.cursor_x + x;
+                    let dst_y = self.cursor_y + y;
+                    let dst_idx = (dst_y * self.atlas_size + dst_x) as usize;
+                    
+                    if src_idx < bitmap.len() && dst_idx < self.atlas_data.len() {
+                        self.atlas_data[dst_idx] = bitmap[src_idx];
+                    }
+                }
+            }
         }
 
         let uv = [
@@ -153,6 +326,18 @@ impl GlyphCache {
 
         uv
     }
+    
+    /// Get atlas data for uploading to GPU
+    ///
+    /// BUG FIX #4: Provide access to atlas bitmap for GPU upload
+    pub fn atlas_data(&self) -> &[u8] {
+        &self.atlas_data
+    }
+    
+    /// Get atlas dimensions
+    pub fn atlas_size(&self) -> u32 {
+        self.atlas_size
+    }
 
     /// Get number of cached glyphs
     pub fn len(&self) -> usize {
@@ -170,6 +355,7 @@ impl GlyphCache {
         self.cursor_x = 0;
         self.cursor_y = 0;
         self.row_height = 0;
+        self.atlas_data.fill(0);
     }
 }
 
@@ -203,5 +389,12 @@ mod tests {
 
         // Should be retrievable
         assert_eq!(cache.get_glyph_uv(0x1F600), Some(uv));
+    }
+    
+    #[test]
+    fn test_atlas_data_access() {
+        let cache = GlyphCache::new(14.0, "Monospace");
+        let data = cache.atlas_data();
+        assert_eq!(data.len(), (2048 * 2048) as usize);
     }
 }

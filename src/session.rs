@@ -6,13 +6,11 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 /// Session manager for saving and restoring terminal sessions
-#[allow(dead_code)] // Public API for session management
 pub struct SessionManager {
     sessions_dir: PathBuf,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[allow(dead_code)] // Public API
 pub struct SavedSession {
     pub id: String,
     pub name: String,
@@ -24,7 +22,6 @@ pub struct SavedSession {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[allow(dead_code)] // Public API
 pub struct TabState {
     pub name: String,
     pub working_dir: String,
@@ -51,7 +48,6 @@ impl SessionManager {
     /// Returns an error if:
     /// - JSON serialization fails
     /// - The session file cannot be written
-    #[allow(dead_code)] // Public API
     pub fn save_session(&self, session: &SavedSession) -> Result<()> {
         let session_file = self.sessions_dir.join(format!("{}.json", session.id));
         let json = serde_json::to_string_pretty(session).context("Failed to serialize session")?;
@@ -68,7 +64,6 @@ impl SessionManager {
     /// - The session file doesn't exist
     /// - The file cannot be read
     /// - JSON deserialization fails
-    #[allow(dead_code)] // Public API
     pub fn load_session(&self, id: &str) -> Result<SavedSession> {
         let session_file = self.sessions_dir.join(format!("{id}.json"));
         let json = fs::read_to_string(&session_file).context("Failed to read session file")?;
@@ -83,7 +78,6 @@ impl SessionManager {
     ///
     /// # Errors
     /// Returns an error if the sessions directory cannot be read
-    #[allow(dead_code)] // Public API
     pub fn list_sessions(&self) -> Result<Vec<SavedSession>> {
         let mut sessions = Vec::new();
 
@@ -110,7 +104,6 @@ impl SessionManager {
     ///
     /// # Errors
     /// Returns an error if the session file cannot be deleted
-    #[allow(dead_code)] // Public API
     pub fn delete_session(&self, id: &str) -> Result<()> {
         let session_file = self.sessions_dir.join(format!("{id}.json"));
         fs::remove_file(&session_file).context("Failed to delete session file")?;
@@ -119,7 +112,6 @@ impl SessionManager {
     }
 
     /// Get sessions directory path
-    #[allow(dead_code)] // Public API
     #[must_use]
     pub fn sessions_dir(&self) -> &Path {
         &self.sessions_dir

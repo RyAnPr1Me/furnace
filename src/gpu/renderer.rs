@@ -52,10 +52,8 @@ use super::{GpuCell, GpuConfig, GpuStats};
 /// - Implements dirty flagging for optimal performance
 ///
 /// # Note
-/// Some fields are marked with `#[allow(dead_code)]` as they are part of the public API
 /// and used in the complete GPU rendering pipeline. The GPU module is an optional feature
 /// that is still under development.
-#[allow(dead_code)] // Some fields are for future use in complete GPU implementation
 pub struct GpuRenderer {
     /// WGPU instance
     instance: wgpu::Instance,
@@ -448,9 +446,31 @@ impl GpuRenderer {
             mapped_at_creation: false,
         });
 
-        // Create glyph cache
+        // Create glyph cache with font loading
         let glyph_cache =
             super::glyph_cache::GlyphCache::new(config.font_size, &config.font_family);
+        
+        // BUG FIX #4: Upload glyph atlas data to GPU texture
+        // This ensures glyphs are actually visible when rendered
+        queue.write_texture(
+            wgpu::ImageCopyTexture {
+                texture: &glyph_atlas,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            glyph_cache.atlas_data(),
+            wgpu::ImageDataLayout {
+                offset: 0,
+                bytes_per_row: Some(glyph_atlas_size),
+                rows_per_image: Some(glyph_atlas_size),
+            },
+            wgpu::Extent3d {
+                width: glyph_atlas_size,
+                height: glyph_atlas_size,
+                depth_or_array_layers: 1,
+            },
+        );
 
         // BUG FIX #8: Calculate cell size from font metrics instead of magic numbers
         // Standard monospace font metrics:
@@ -556,6 +576,33 @@ impl GpuRenderer {
         
         // Update uniforms for new size
         self.resize(width, height);
+    }
+    
+    /// Upload glyph atlas to GPU
+    ///
+    /// BUG FIX #4: Provide method to upload glyph atlas data when new glyphs are cached.
+    /// Call this after caching new glyphs to ensure they appear correctly.
+    pub fn upload_glyph_atlas(&mut self) {
+        let atlas_size = self.glyph_cache.atlas_size();
+        self.queue.write_texture(
+            wgpu::ImageCopyTexture {
+                texture: &self.glyph_atlas,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            self.glyph_cache.atlas_data(),
+            wgpu::ImageDataLayout {
+                offset: 0,
+                bytes_per_row: Some(atlas_size),
+                rows_per_image: Some(atlas_size),
+            },
+            wgpu::Extent3d {
+                width: atlas_size,
+                height: atlas_size,
+                depth_or_array_layers: 1,
+            },
+        );
     }
 
     /// Render a frame

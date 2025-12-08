@@ -4,7 +4,6 @@ use std::collections::HashMap;
 
 /// Enhanced keybinding system with shell integration
 #[derive(Debug, Clone)]
-#[allow(dead_code)] // Public API for keybinding system
 pub struct KeybindingManager {
     bindings: HashMap<KeyBinding, Action>,
     shell_integration: ShellIntegration,
@@ -63,7 +62,6 @@ pub enum Action {
 
 /// Shell integration features
 #[derive(Debug, Clone)]
-#[allow(dead_code)] // Public API for shell integration
 #[allow(clippy::struct_excessive_bools)]
 pub struct ShellIntegration {
     /// OSC sequences support
@@ -156,7 +154,6 @@ impl KeybindingManager {
     /// When Shift is pressed with Ctrl (e.g., Ctrl+Shift+C), crossterm provides
     /// an uppercase 'C', but our bindings use lowercase 'c'. This function normalizes
     /// the key to lowercase for character keys while preserving Shift in modifiers.
-    #[allow(dead_code)] // Public API
     #[must_use]
     pub fn get_action(&self, code: KeyCode, modifiers: KeyModifiers) -> Option<Action> {
         let key_str = match code {
@@ -193,7 +190,6 @@ impl KeybindingManager {
     }
 
     /// Enable shell integration features
-    #[allow(dead_code)] // Public API
     pub fn enable_shell_integration(&mut self, feature: ShellIntegrationFeature, enabled: bool) {
         match feature {
             ShellIntegrationFeature::OscSequences => self.shell_integration.osc_sequences = enabled,
@@ -210,19 +206,16 @@ impl KeybindingManager {
     }
 
     /// Update current directory from shell
-    #[allow(dead_code)] // Public API
     pub fn update_directory(&mut self, dir: String) {
         self.shell_integration.current_dir = Some(dir);
     }
 
     /// Update last command from shell
-    #[allow(dead_code)] // Public API
     pub fn update_last_command(&mut self, command: String) {
         self.shell_integration.last_command = Some(command);
     }
 
     /// Get shell integration status
-    #[allow(dead_code)] // Public API
     #[must_use]
     pub fn shell_integration(&self) -> &ShellIntegration {
         &self.shell_integration
@@ -230,7 +223,6 @@ impl KeybindingManager {
 }
 
 /// Shell integration features
-#[allow(dead_code)] // Public API enum
 #[derive(Debug, Clone, Copy)]
 pub enum ShellIntegrationFeature {
     OscSequences,

@@ -7,7 +7,6 @@ use tracing::{debug, info};
 
 /// High-performance shell session with zero-copy I/O where possible
 pub struct ShellSession {
-    #[allow(dead_code)] // Kept for potential future use
     pty: Arc<Mutex<Box<dyn portable_pty::MasterPty + Send>>>,
     reader: Arc<Mutex<Box<dyn Read + Send>>>,
     writer: Arc<Mutex<Box<dyn Write + Send>>>,
@@ -140,7 +139,6 @@ impl ShellSession {
     ///
     /// # Errors
     /// Returns an error if the PTY resize operation fails (e.g., invalid dimensions)
-    #[allow(dead_code)] // Public API for future use
     pub async fn resize(&self, rows: u16, cols: u16) -> Result<()> {
         let pty = self.pty.lock().await;
 

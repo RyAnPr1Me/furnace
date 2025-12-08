@@ -12,7 +12,6 @@ pub struct ResourceMonitor {
 }
 
 #[derive(Debug, Clone)]
-#[allow(dead_code)] // Public API for resource monitoring
 pub struct ResourceStats {
     pub cpu_usage: f32,
     pub cpu_count: usize,
@@ -26,7 +25,6 @@ pub struct ResourceStats {
 }
 
 #[derive(Debug, Clone)]
-#[allow(dead_code)] // Public API for disk information
 pub struct DiskInfo {
     pub name: String,
     pub mount_point: String,
