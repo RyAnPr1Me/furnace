@@ -149,11 +149,12 @@ mod tests {
         let session = SavedSession {
             id: "test-session".to_string(),
             name: "Test Session".to_string(),
-            created_at: Utc::now(),
-            working_dir: "/home/user".to_string(),
-            shell: "bash".to_string(),
-            env: HashMap::new(),
-            tabs: vec![],
+            created_at: Local::now(),
+            tabs: vec![TabState {
+                output: "test output".to_string(),
+                working_dir: Some("/home/user".to_string()),
+                active: true,
+            }],
         };
 
         manager.save_session(&session).unwrap();
@@ -161,6 +162,7 @@ mod tests {
 
         assert_eq!(loaded.id, session.id);
         assert_eq!(loaded.name, session.name);
+        assert_eq!(loaded.tabs.len(), 1);
 
         // Cleanup
         manager.delete_session("test-session").ok();
