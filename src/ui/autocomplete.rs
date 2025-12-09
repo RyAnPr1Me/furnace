@@ -96,22 +96,16 @@ type SharedString = Arc<str>;
 /// Bug #6: Optimized for performance - O(1) dedup, minimal allocations
 pub struct Autocomplete {
     /// Bug #28: History uses `Arc<str>` for efficient sharing
-    #[allow(dead_code)] // Internal state for history tracking
     history: VecDeque<SharedString>,
     /// Bug #22: `HashSet` for O(1) duplicate detection
-    #[allow(dead_code)]
     history_set: HashSet<SharedString>,
     /// Current suggestions (references to history or static commands)
-    #[allow(dead_code)]
     current_suggestions: Vec<SharedString>,
     /// Current index in suggestions
-    #[allow(dead_code)]
     current_index: usize,
     /// Cached prefix for incremental filtering
-    #[allow(dead_code)]
     prefix: String,
     /// Bug #26: Cached filtered common commands (reused across calls)
-    #[allow(dead_code)]
     cached_common_filtered: Vec<&'static str>,
 }
 
@@ -129,7 +123,6 @@ impl Autocomplete {
     }
 
     /// Add command to history (Bug #22: O(1) duplicate detection)
-    #[allow(dead_code)] // Public API for history tracking
     pub fn add_to_history(&mut self, command: String) {
         if command.trim().is_empty() {
             return;
@@ -205,7 +198,6 @@ impl Autocomplete {
     }
 
     /// Get next suggestion (Bug #27: return reference, avoid clone)
-    #[allow(dead_code)] // Public API for navigation
     pub fn next_suggestion(&mut self) -> Option<&str> {
         if self.current_suggestions.is_empty() {
             return None;
@@ -217,13 +209,11 @@ impl Autocomplete {
     }
 
     /// Get next suggestion as owned String (legacy API)
-    #[allow(dead_code)] // Public API
     pub fn next_suggestion_owned(&mut self) -> Option<String> {
         self.next_suggestion().map(std::string::ToString::to_string)
     }
 
     /// Get previous suggestion (Bug #27: return reference, avoid clone)
-    #[allow(dead_code)] // Public API for navigation
     pub fn previous_suggestion(&mut self) -> Option<&str> {
         if self.current_suggestions.is_empty() {
             return None;
@@ -239,27 +229,23 @@ impl Autocomplete {
     }
 
     /// Get previous suggestion as owned String (legacy API)
-    #[allow(dead_code)] // Public API
     pub fn previous_suggestion_owned(&mut self) -> Option<String> {
         self.previous_suggestion()
             .map(std::string::ToString::to_string)
     }
 
     /// Get history (for up/down arrow navigation)
-    #[allow(dead_code)] // Public API
     pub fn get_history(&self) -> impl Iterator<Item = &str> {
         self.history.iter().map(std::convert::AsRef::as_ref)
     }
 
     /// Get history length
     #[must_use]
-    #[allow(dead_code)] // Public API
     pub fn history_len(&self) -> usize {
         self.history.len()
     }
 
     /// Clear history
-    #[allow(dead_code)] // Public API
     pub fn clear_history(&mut self) {
         self.history.clear();
         self.history_set.clear();

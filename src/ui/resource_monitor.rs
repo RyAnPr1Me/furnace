@@ -19,18 +19,14 @@ pub struct ResourceStats {
     pub memory_total: u64,
     pub memory_percent: f32,
     pub process_count: usize,
-    #[allow(dead_code)] // Collected but not displayed yet - future network stats
     pub network_rx: u64,
-    #[allow(dead_code)]
     pub network_tx: u64,
     pub disk_usage: Vec<DiskInfo>,
 }
 
 #[derive(Debug, Clone)]
 pub struct DiskInfo {
-    #[allow(dead_code)] // Available for detailed disk info display
     pub name: String,
-    #[allow(dead_code)]
     pub mount_point: String,
     pub used: u64,
     pub total: u64,

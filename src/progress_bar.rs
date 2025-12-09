@@ -52,7 +52,6 @@ impl ProgressBar {
     }
 
     /// Start tracking a command (legacy API, takes ownership)
-    #[allow(dead_code)] // Public API for backward compatibility
     pub fn start(&mut self, command: String) {
         self.visible = true;
         self.command = command;
@@ -95,7 +94,6 @@ impl ProgressBar {
 
     /// Get display text for progress bar
     #[must_use]
-    #[allow(dead_code)] // Public API for rendering progress bars
     pub fn display_text(&self) -> String {
         if self.visible {
             format!(
@@ -135,7 +133,6 @@ impl ProgressBar {
 
     /// Get the command being tracked
     #[must_use]
-    #[allow(dead_code)] // Public API
     pub fn command(&self) -> &str {
         &self.command
     }
