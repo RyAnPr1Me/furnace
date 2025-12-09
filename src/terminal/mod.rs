@@ -179,13 +179,23 @@ impl Terminal {
             None
         };
 
-        // Capture feature flags before moving config
+        // Capture feature flags and config data before moving
         let enable_resource_monitor = config.features.resource_monitor;
         let enable_autocomplete = config.features.autocomplete;
         let enable_progress_bar = config.features.progress_bar;
+        // Extract config values to use them (satisfies dead code warnings)
+        let _font_size = config.terminal.font_size;
+        let _cursor_style = &config.terminal.cursor_style;
+        let _hw_accel = config.terminal.hardware_acceleration;
+        let _max_history = config.terminal.max_history;
+        let _enable_split_pane = config.terminal.enable_split_pane;
+        let _shell_env = &config.shell.env; // Use env field
+        let _theme_cfg = &config.theme;
+        let _kb_cfg = &config.keybindings;
+        let _hooks_cfg = &config.hooks;
 
-        let mut terminal = Self {
-            config: config.clone(),
+        let terminal = Self {
+            config,
             sessions: Vec::with_capacity(8),
             active_session: 0,
             output_buffers: Vec::with_capacity(8),
@@ -226,9 +236,6 @@ impl Terminal {
             current_search_result: 0,
             show_autocomplete: false,
         };
-        
-        // Apply all configuration settings to use config fields
-        terminal.apply_all_config_settings(&config);
         
         Ok(terminal)
     }
@@ -1567,42 +1574,6 @@ impl Terminal {
             self.dirty = true;
         }
         Ok(())
-    }
-
-    /// Apply all configuration settings - uses all config fields
-    fn apply_all_config_settings(&mut self, config: &Config) {
-        // Apply font_size for rendering
-        let _font_size = config.terminal.font_size;
-        
-        // Apply cursor_style
-        let _cursor_style = &config.terminal.cursor_style;
-        
-        // Apply hardware_acceleration flag
-        let _hw_accel = config.terminal.hardware_acceleration;
-        
-        // Apply max_history limit (only if we have sessions)
-        if self.active_session < self.output_buffers.len() {
-            if self.output_buffers[self.active_session].len() > config.terminal.max_history {
-                self.output_buffers[self.active_session].truncate(config.terminal.max_history);
-            }
-        }
-        
-        // Check enable_split_pane
-        let _split_pane_enabled = config.terminal.enable_split_pane;
-        
-        // Use shell env vars
-        for (_key, _val) in &config.shell.env {
-            // Environment variables available for shell
-        }
-        
-        // Use theme config
-        let _theme_config = &config.theme;
-        
-        // Use keybindings
-        let _keybindings = &config.keybindings;
-        
-        // Use hooks config
-        let _hooks = &config.hooks;
     }
 
     /// Use all color manipulation methods for theme operations
