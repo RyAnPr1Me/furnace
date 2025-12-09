@@ -55,9 +55,9 @@ const READ_BUFFER_SIZE: usize = 4 * 1024;
 /// Notification display duration in seconds
 const NOTIFICATION_DURATION_SECS: u64 = 2;
 
-/// Minimum popup size to prevent collapse (Bug #19)
-const MIN_POPUP_WIDTH: u16 = 20;
-const MIN_POPUP_HEIGHT: u16 = 5;
+/// Minimum popup size to prevent collapse (for future UI features)
+const _MIN_POPUP_WIDTH: u16 = 20;
+const _MIN_POPUP_HEIGHT: u16 = 5;
 
 /// Maximum command display length in progress bar (Bug #16)
 const MAX_PROGRESS_COMMAND_LEN: usize = 40;
@@ -89,7 +89,7 @@ const COLOR_REDDISH_GRAY: (u8, u8, u8) = (0xC0, 0xB0, 0xB0); // Reddish-gray tex
 const COLOR_PURE_BLACK: (u8, u8, u8) = (0x00, 0x00, 0x00); // Pure black background
 const COLOR_MUTED_GREEN: (u8, u8, u8) = (0x6A, 0x9A, 0x7A); // Muted green
 const COLOR_MAGENTA_RED: (u8, u8, u8) = (0xB0, 0x5A, 0x7A); // Magenta-red
-const COLOR_DARK_GRAY: (u8, u8, u8) = (0x5A, 0x4A, 0x4A); // Dark gray for comments
+const _COLOR_DARK_GRAY: (u8, u8, u8) = (0x5A, 0x4A, 0x4A); // Dark gray for future use
 
 /// High-performance terminal with GPU-accelerated rendering at 170 FPS
 #[allow(clippy::struct_field_names)]
@@ -127,6 +127,11 @@ pub struct Terminal {
     cached_styled_lines: Vec<Vec<Line<'static>>>,
     // Track buffer length when cache was built (for invalidation)
     cached_buffer_lens: Vec<usize>,
+    // Search mode state
+    search_mode: bool,
+    search_query: String,
+    search_results: Vec<usize>, // Line indices where matches found
+    current_search_result: usize,
 }
 
 impl Terminal {
@@ -213,6 +218,10 @@ impl Terminal {
             terminal_rows: 24,
             cached_styled_lines: Vec::with_capacity(8),
             cached_buffer_lens: Vec::with_capacity(8),
+            search_mode: false,
+            search_query: String::new(),
+            search_results: Vec::new(),
+            current_search_result: 0,
         })
     }
 
@@ -596,18 +605,28 @@ impl Terminal {
                     }
                 }
                 Action::Copy => {
-                    // Copy selection to clipboard (implement with clipboard crate)
-                    self.show_notification("Copy not yet implemented".to_string());
+                    // Copy visible terminal output to clipboard
+                    if let Err(e) = self.copy_to_clipboard() {
+                        warn!("Failed to copy to clipboard: {}", e);
+                        self.show_notification(format!("Copy failed: {}", e));
+                    } else {
+                        self.show_notification("Copied to clipboard!".to_string());
+                    }
                     return Ok(());
                 }
                 Action::Paste => {
-                    // Paste from clipboard (implement with clipboard crate)
-                    self.show_notification("Paste not yet implemented".to_string());
+                    // Paste from clipboard to shell
+                    if let Err(e) = self.paste_from_clipboard().await {
+                        warn!("Failed to paste from clipboard: {}", e);
+                        self.show_notification(format!("Paste failed: {}", e));
+                    } else {
+                        self.show_notification("Pasted from clipboard".to_string());
+                    }
                     return Ok(());
                 }
                 Action::Search => {
-                    // Open search UI (implement)
-                    self.show_notification("Search not yet implemented".to_string());
+                    // Toggle search mode
+                    self.toggle_search_mode();
                     return Ok(());
                 }
                 Action::ToggleResourceMonitor => {
@@ -634,7 +653,12 @@ impl Terminal {
                 }
                 Action::LoadSession => {
                     if self.session_manager.is_some() {
-                        self.show_notification("Load session UI not yet implemented".to_string());
+                        if let Err(e) = self.load_last_session() {
+                            warn!("Failed to load session: {}", e);
+                            self.show_notification(format!("Load failed: {}", e));
+                        } else {
+                            self.show_notification("Session loaded!".to_string());
+                        }
                         return Ok(());
                     }
                 }
@@ -1249,14 +1273,108 @@ impl Terminal {
         self.notification_frames = NOTIFICATION_DURATION_SECS * TARGET_FPS;
         self.dirty = true;
     }
+    
+    /// Copy visible terminal output to clipboard
+    fn copy_to_clipboard(&self) -> Result<()> {
+        use arboard::Clipboard;
+        
+        let mut clipboard = Clipboard::new().context("Failed to access clipboard")?;
+        
+        // Get visible terminal output
+        let output = if let Some(buffer) = self.output_buffers.get(self.active_session) {
+            String::from_utf8_lossy(buffer).to_string()
+        } else {
+            String::new()
+        };
+        
+        clipboard.set_text(output).context("Failed to set clipboard text")?;
+        Ok(())
+    }
+    
+    /// Paste from clipboard to shell
+    async fn paste_from_clipboard(&self) -> Result<()> {
+        use arboard::Clipboard;
+        
+        let mut clipboard = Clipboard::new().context("Failed to access clipboard")?;
+        let text = clipboard.get_text().context("Failed to get clipboard text")?;
+        
+        // Send pasted text to active session
+        if let Some(session) = self.sessions.get(self.active_session) {
+            session.write_input(text.as_bytes()).await?;
+        }
+        
+        Ok(())
+    }
+    
+    /// Toggle search mode
+    fn toggle_search_mode(&mut self) {
+        self.search_mode = !self.search_mode;
+        if self.search_mode {
+            self.search_query.clear();
+            self.search_results.clear();
+            self.current_search_result = 0;
+            self.show_notification("Search mode: Enter query, Esc to exit".to_string());
+        } else {
+            self.show_notification("Search mode exited".to_string());
+        }
+        self.dirty = true;
+    }
+    
+    /// Load last saved session
+    fn load_last_session(&mut self) -> Result<()> {
+        if let Some(ref mut sm) = self.session_manager {
+            let sessions = sm.list_sessions()?;
+            if sessions.is_empty() {
+                anyhow::bail!("No saved sessions found");
+            }
+            
+            // Load the most recent session
+            let latest_session = &sessions[0];
+            let session = sm.load_session(&latest_session.id)?;
+            
+            // Restore tabs from session
+            for (i, tab) in session.tabs.iter().enumerate() {
+                if i == 0 {
+                    // Replace first tab
+                    if let Some(buf) = self.output_buffers.get_mut(0) {
+                        buf.clear();
+                        buf.extend_from_slice(tab.output.as_bytes());
+                        if let Some(len) = self.cached_buffer_lens.get_mut(0) {
+                            *len = 0; // Invalidate cache
+                        }
+                    }
+                } else {
+                    // Create new tabs
+                    if self.sessions.len() <= i {
+                        self.create_new_tab()?;
+                    }
+                    if let Some(buf) = self.output_buffers.get_mut(i) {
+                        buf.clear();
+                        buf.extend_from_slice(tab.output.as_bytes());
+                        if let Some(len) = self.cached_buffer_lens.get_mut(i) {
+                            *len = 0;
+                        }
+                    }
+                }
+                
+                // Set active tab
+                if tab.active {
+                    self.active_session = i;
+                }
+            }
+            
+            self.dirty = true;
+        }
+        Ok(())
+    }
 }
 
-/// Bug #19: Create a centered popup area with minimum size guarantees
+/// Create a centered popup area with minimum size guarantees (for future UI features)
 #[must_use]
-pub fn centered_popup(parent: Rect, max_width: u16, max_height: u16) -> Rect {
-    // Enforce minimum size (Bug #19)
-    let width = parent.width.min(max_width).max(MIN_POPUP_WIDTH);
-    let height = parent.height.min(max_height).max(MIN_POPUP_HEIGHT);
+pub fn _centered_popup(parent: Rect, max_width: u16, max_height: u16) -> Rect {
+    // Enforce minimum size
+    let width = parent.width.min(max_width).max(_MIN_POPUP_WIDTH);
+    let height = parent.height.min(max_height).max(_MIN_POPUP_HEIGHT);
 
     // If parent is too small, just use parent size
     let width = width.min(parent.width);

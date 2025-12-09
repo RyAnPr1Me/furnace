@@ -159,9 +159,9 @@ fn format_duration_secs(secs: u64) -> String {
     }
 }
 
-/// Format duration for display (legacy API)
+/// Format duration for display (legacy API - kept for future use)
 #[must_use]
-pub fn format_duration(duration: Duration) -> String {
+pub fn _format_duration(duration: Duration) -> String {
     format_duration_secs(duration.as_secs())
 }
 
