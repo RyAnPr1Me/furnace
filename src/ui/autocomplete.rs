@@ -107,18 +107,28 @@ pub struct Autocomplete {
     prefix: String,
     /// Bug #26: Cached filtered common commands (reused across calls)
     cached_common_filtered: Vec<&'static str>,
+    /// Maximum history entries (configurable from terminal config)
+    max_history: usize,
 }
 
 impl Autocomplete {
     #[must_use]
     pub fn new() -> Self {
+        Self::with_max_history(1000)
+    }
+
+    /// Create autocomplete with custom max history limit
+    #[must_use]
+    pub fn with_max_history(max_history: usize) -> Self {
+        let capacity = max_history.min(10000); // Cap at 10k for safety
         Self {
-            history: VecDeque::with_capacity(1000),
-            history_set: HashSet::with_capacity(1000),
+            history: VecDeque::with_capacity(capacity),
+            history_set: HashSet::with_capacity(capacity),
             current_suggestions: Vec::with_capacity(20),
             current_index: 0,
             prefix: String::new(),
             cached_common_filtered: Vec::with_capacity(10),
+            max_history: capacity,
         }
     }
 
@@ -143,8 +153,8 @@ impl Autocomplete {
         // Add to front
         self.history.push_front(shared);
 
-        // Limit size
-        if self.history.len() > 1000 {
+        // Limit size based on configured max_history
+        if self.history.len() > self.max_history {
             if let Some(removed) = self.history.pop_back() {
                 self.history_set.remove(&removed);
             }
@@ -355,5 +365,39 @@ mod tests {
         // Second call - should use cached common commands
         let suggestions2 = autocomplete.get_suggestions("git");
         assert!(suggestions2.iter().any(|s| s.starts_with("git")));
+    }
+
+    #[test]
+    fn test_with_max_history() {
+        let mut autocomplete = Autocomplete::with_max_history(5);
+
+        // Add 10 commands
+        for i in 0..10 {
+            autocomplete.add_to_history(format!("cmd{}", i));
+        }
+
+        // Should only keep last 5
+        assert_eq!(autocomplete.history_len(), 5);
+    }
+
+    #[test]
+    fn test_max_history_limit() {
+        // Test with small limit
+        let mut autocomplete = Autocomplete::with_max_history(3);
+
+        autocomplete.add_to_history("cmd1".to_string());
+        autocomplete.add_to_history("cmd2".to_string());
+        autocomplete.add_to_history("cmd3".to_string());
+        autocomplete.add_to_history("cmd4".to_string());
+
+        // Should only have 3 entries (oldest removed)
+        assert_eq!(autocomplete.history_len(), 3);
+
+        let history: Vec<_> = autocomplete.get_history().collect();
+        // Most recent first
+        assert_eq!(history[0], "cmd4");
+        assert_eq!(history[1], "cmd3");
+        assert_eq!(history[2], "cmd2");
+        // cmd1 should be removed
     }
 }

@@ -13,16 +13,18 @@
 //!    To use GPU rendering, you must:
 //!    - Create a window using `winit` or similar
 //!    - Create a wgpu surface from that window
-//!    - Pass the surface to the renderer via a new `with_surface()` method
+//!    - Pass the surface to the renderer via the `set_surface()` method
 //!
-//! 2. **Glyph Upload (BUG #4)**: Glyphs are cached but not uploaded to GPU texture.
-//!    The glyph atlas texture is created but remains empty. To fix:
-//!    - Implement font rasterization using `fontdue`
-//!    - Upload rasterized glyphs to the atlas texture
-//!    - Update glyph cache when new characters are encountered
-//!
-//! 3. **Dirty Rectangles (BUG #24)**: Currently uploads all cells every frame.
+//! 2. **Dirty Rectangles (BUG #24)**: Currently uploads all cells every frame.
 //!    Future optimization: track changed cells and only update those regions.
+//!
+//! ## ✅ Implemented Features
+//!
+//! - Glyph atlas creation and upload to GPU texture
+//! - Font rasterization using fontdue
+//! - Cell-based rendering with instancing
+//! - 24-bit true color support
+//! - Text style support (bold, italic, underline)
 //!
 //! ## Usage
 //!
