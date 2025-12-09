@@ -4,7 +4,6 @@ use std::collections::HashMap;
 
 /// Enhanced keybinding system with shell integration
 #[derive(Debug, Clone)]
-#[allow(dead_code)] // Public API for keybinding system
 pub struct KeybindingManager {
     bindings: HashMap<KeyBinding, Action>,
     shell_integration: ShellIntegration,
@@ -43,7 +42,10 @@ pub enum Action {
     SearchNext,
     SearchPrev,
 
-    // Command palette
+    // Command palette & features
+    ToggleAutocomplete,
+    NextTheme,
+    PrevTheme,
 
     // Resource monitor
     ToggleResourceMonitor,
@@ -61,9 +63,8 @@ pub enum Action {
     Custom(String),
 }
 
-/// Shell integration features
+/// Shell integration features (infrastructure for future OSC 7/133 support)
 #[derive(Debug, Clone)]
-#[allow(dead_code)] // Public API for shell integration
 #[allow(clippy::struct_excessive_bools)]
 pub struct ShellIntegration {
     /// OSC sequences support
@@ -103,6 +104,12 @@ impl KeybindingManager {
         // Tab management
         self.add_binding("t", &["Ctrl"], Action::NewTab);
         self.add_binding("w", &["Ctrl"], Action::CloseTab);
+        
+        // BUG FIX #7: Ctrl+Tab is not reliably supported by crossterm on all terminals
+        // Most terminals intercept Ctrl+Tab before it reaches the application.
+        // Using Ctrl+PageDown/PageUp or Alt+number is more reliable, but we keep
+        // these bindings as they work in some terminals (e.g., Windows Terminal).
+        // Users can remap these in their config if needed.
         self.add_binding("Tab", &["Ctrl"], Action::NextTab);
         self.add_binding("Tab", &["Ctrl", "Shift"], Action::PrevTab);
 
@@ -124,10 +131,15 @@ impl KeybindingManager {
 
         // Features
         self.add_binding("r", &["Ctrl"], Action::ToggleResourceMonitor);
+        self.add_binding("Tab", &["Alt"], Action::ToggleAutocomplete);
+        self.add_binding("]", &["Ctrl"], Action::NextTheme);
+        self.add_binding("[", &["Ctrl"], Action::PrevTheme);
 
         // Session management
+        // BUG FIX #16: Removed duplicate Ctrl+O binding
+        // Ctrl+O is used for FocusNextPane above
         self.add_binding("s", &["Ctrl"], Action::SaveSession);
-        self.add_binding("o", &["Ctrl", "Shift"], Action::LoadSession);
+        self.add_binding("l", &["Ctrl", "Shift"], Action::LoadSession);
     }
 
     /// Add a keybinding
@@ -143,11 +155,17 @@ impl KeybindingManager {
     }
 
     /// Get action for key event
-    #[allow(dead_code)] // Public API
+    ///
+    /// BUG FIX #6: Normalize character keys to lowercase for consistent matching.
+    /// When Shift is pressed with Ctrl (e.g., Ctrl+Shift+C), crossterm provides
+    /// an uppercase 'C', but our bindings use lowercase 'c'. This function normalizes
+    /// the key to lowercase for character keys while preserving Shift in modifiers.
     #[must_use]
     pub fn get_action(&self, code: KeyCode, modifiers: KeyModifiers) -> Option<Action> {
         let key_str = match code {
-            KeyCode::Char(c) => c.to_string(),
+            // BUG FIX #6: Normalize character keys to lowercase for case-insensitive matching
+            // This allows Ctrl+Shift+C to match a binding defined as ctrl+shift+c
+            KeyCode::Char(c) => c.to_lowercase().to_string(),
             KeyCode::Tab => "Tab".to_string(),
             KeyCode::Enter => "Enter".to_string(),
             KeyCode::Esc => "Esc".to_string(),
@@ -177,8 +195,7 @@ impl KeybindingManager {
         self.bindings.get(&binding).cloned()
     }
 
-    /// Enable shell integration features
-    #[allow(dead_code)] // Public API
+    /// Enable shell integration features (future OSC parsing support)
     pub fn enable_shell_integration(&mut self, feature: ShellIntegrationFeature, enabled: bool) {
         match feature {
             ShellIntegrationFeature::OscSequences => self.shell_integration.osc_sequences = enabled,
@@ -194,28 +211,24 @@ impl KeybindingManager {
         }
     }
 
-    /// Update current directory from shell
-    #[allow(dead_code)] // Public API
+    /// Update current directory from shell (future OSC 7 support)
     pub fn update_directory(&mut self, dir: String) {
         self.shell_integration.current_dir = Some(dir);
     }
 
-    /// Update last command from shell
-    #[allow(dead_code)] // Public API
+    /// Update last command from shell (future OSC 133 support)
     pub fn update_last_command(&mut self, command: String) {
         self.shell_integration.last_command = Some(command);
     }
 
     /// Get shell integration status
-    #[allow(dead_code)] // Public API
     #[must_use]
     pub fn shell_integration(&self) -> &ShellIntegration {
         &self.shell_integration
     }
 }
 
-/// Shell integration features
-#[allow(dead_code)] // Public API enum
+/// Shell integration features (future API for OSC parsing)
 #[derive(Debug, Clone, Copy)]
 pub enum ShellIntegrationFeature {
     OscSequences,

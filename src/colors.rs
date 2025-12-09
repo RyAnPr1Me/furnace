@@ -3,7 +3,6 @@ use std::fmt;
 
 /// 24-bit true color support
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[allow(dead_code)] // Public API for color system
 pub struct TrueColor {
     pub r: u8,
     pub g: u8,
@@ -21,7 +20,6 @@ impl TrueColor {
     ///
     /// # Errors
     /// Returns an error if the hex string is not exactly 6 characters or contains invalid hex digits
-    #[allow(dead_code)] // Public API for runtime color parsing
     pub fn from_hex(hex: &str) -> Result<Self> {
         let hex = hex.trim_start_matches('#');
 
@@ -43,14 +41,12 @@ impl TrueColor {
     }
 
     /// Convert to ANSI escape sequence for foreground
-    #[allow(dead_code)] // Public API
     #[must_use]
     pub fn to_ansi_fg(self) -> String {
         format!("\x1b[38;2;{};{};{}m", self.r, self.g, self.b)
     }
 
     /// Convert to ANSI escape sequence for background
-    #[allow(dead_code)] // Public API
     #[must_use]
     pub fn to_ansi_bg(self) -> String {
         format!("\x1b[48;2;{};{};{}m", self.r, self.g, self.b)
@@ -79,7 +75,6 @@ impl TrueColor {
     /// let purple = red.blend(blue, 0.5);  // 50% blend = purple
     /// ```
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-    #[allow(dead_code)] // Public API
     #[must_use]
     pub fn blend(self, other: Self, factor: f32) -> Self {
         let factor = factor.clamp(0.0, 1.0);
@@ -101,7 +96,6 @@ impl TrueColor {
     }
 
     /// Lighten color by factor
-    #[allow(dead_code)] // Public API
     #[must_use]
     pub fn lighten(self, factor: f32) -> Self {
         let white = Self::new(255, 255, 255);
@@ -109,7 +103,6 @@ impl TrueColor {
     }
 
     /// Darken color by factor
-    #[allow(dead_code)] // Public API
     #[must_use]
     pub fn darken(self, factor: f32) -> Self {
         let black = Self::new(0, 0, 0);
@@ -117,7 +110,6 @@ impl TrueColor {
     }
 
     /// Get luminance (0.0 - 1.0)
-    #[allow(dead_code)] // Public API
     #[must_use]
     pub fn luminance(self) -> f32 {
         // Use nested mul_add for hardware FMA (Fused Multiply-Add) optimization
@@ -132,7 +124,6 @@ impl TrueColor {
     }
 
     /// Check if color is light
-    #[allow(dead_code)] // Public API
     #[must_use]
     pub fn is_light(self) -> bool {
         self.luminance() > 0.5
@@ -147,7 +138,6 @@ impl fmt::Display for TrueColor {
 
 /// Color palette with 24-bit color support
 #[derive(Debug, Clone)]
-#[allow(dead_code)] // Public API for color palette
 pub struct TrueColorPalette {
     // ANSI colors (16 colors)
     pub black: TrueColor,
@@ -231,7 +221,6 @@ impl TrueColorPalette {
     }
 
     /// Get color by 256-color index (optimized with inline and match)
-    #[allow(dead_code)] // Public API
     #[must_use]
     #[inline]
     pub fn get_256(&self, index: u8) -> TrueColor {

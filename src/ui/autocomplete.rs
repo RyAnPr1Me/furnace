@@ -94,7 +94,6 @@ type SharedString = Arc<str>;
 
 /// Advanced autocomplete system for shell commands
 /// Bug #6: Optimized for performance - O(1) dedup, minimal allocations
-#[allow(dead_code)]
 pub struct Autocomplete {
     /// Bug #28: History uses `Arc<str>` for efficient sharing
     history: VecDeque<SharedString>,
@@ -124,7 +123,6 @@ impl Autocomplete {
     }
 
     /// Add command to history (Bug #22: O(1) duplicate detection)
-    #[allow(dead_code)]
     pub fn add_to_history(&mut self, command: String) {
         if command.trim().is_empty() {
             return;
@@ -154,7 +152,6 @@ impl Autocomplete {
     }
 
     /// Get suggestions for prefix (Bug #6: optimized, minimal allocations)
-    #[allow(dead_code)]
     #[must_use]
     pub fn get_suggestions(&mut self, prefix: &str) -> Vec<String> {
         self.prefix.clear();
@@ -201,7 +198,6 @@ impl Autocomplete {
     }
 
     /// Get next suggestion (Bug #27: return reference, avoid clone)
-    #[allow(dead_code)]
     pub fn next_suggestion(&mut self) -> Option<&str> {
         if self.current_suggestions.is_empty() {
             return None;
@@ -213,13 +209,11 @@ impl Autocomplete {
     }
 
     /// Get next suggestion as owned String (legacy API)
-    #[allow(dead_code)]
     pub fn next_suggestion_owned(&mut self) -> Option<String> {
         self.next_suggestion().map(std::string::ToString::to_string)
     }
 
     /// Get previous suggestion (Bug #27: return reference, avoid clone)
-    #[allow(dead_code)]
     pub fn previous_suggestion(&mut self) -> Option<&str> {
         if self.current_suggestions.is_empty() {
             return None;
@@ -235,27 +229,23 @@ impl Autocomplete {
     }
 
     /// Get previous suggestion as owned String (legacy API)
-    #[allow(dead_code)]
     pub fn previous_suggestion_owned(&mut self) -> Option<String> {
         self.previous_suggestion()
             .map(std::string::ToString::to_string)
     }
 
     /// Get history (for up/down arrow navigation)
-    #[allow(dead_code)]
     pub fn get_history(&self) -> impl Iterator<Item = &str> {
         self.history.iter().map(std::convert::AsRef::as_ref)
     }
 
     /// Get history length
-    #[allow(dead_code)]
     #[must_use]
     pub fn history_len(&self) -> usize {
         self.history.len()
     }
 
     /// Clear history
-    #[allow(dead_code)]
     pub fn clear_history(&mut self) {
         self.history.clear();
         self.history_set.clear();

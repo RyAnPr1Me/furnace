@@ -7,7 +7,6 @@ use tracing::{debug, info};
 
 /// High-performance shell session with zero-copy I/O where possible
 pub struct ShellSession {
-    #[allow(dead_code)] // Kept for potential future use
     pty: Arc<Mutex<Box<dyn portable_pty::MasterPty + Send>>>,
     reader: Arc<Mutex<Box<dyn Read + Send>>>,
     writer: Arc<Mutex<Box<dyn Write + Send>>>,
@@ -59,30 +58,36 @@ impl ShellSession {
 
     /// Read output from shell (non-blocking, high-performance)
     ///
+    /// This method uses `spawn_blocking` to avoid blocking the async runtime during
+    /// synchronous I/O operations. The data is read into a temporary buffer in the
+    /// blocking thread and then copied to the caller's buffer.
+    ///
     /// # Errors
     /// Returns an error if the read operation fails or the task cannot be spawned
     pub async fn read_output(&self, buffer: &mut [u8]) -> Result<usize> {
-        // BUG FIX #1: Use spawn_blocking but write directly to buffer to avoid data corruption
-        // Clone the Arc to move into spawn_blocking, but pass buffer size to avoid lifetime issues
         let reader = self.reader.clone();
         let buffer_len = buffer.len();
         
-        let (n, data) = tokio::task::spawn_blocking(move || {
+        // Spawn blocking task to perform synchronous read without blocking async runtime
+        let data = tokio::task::spawn_blocking(move || -> Result<Vec<u8>> {
             let mut reader = reader.blocking_lock();
             let mut temp = vec![0u8; buffer_len];
             match reader.read(&mut temp) {
-                Ok(n) => Ok((n, temp)),
-                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => Ok((0, vec![])),
-                Err(e) => Err(e),
+                Ok(n) => {
+                    temp.truncate(n); // Only keep the bytes we actually read
+                    Ok(temp)
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => Ok(Vec::new()),
+                Err(e) => Err(anyhow::Error::from(e)),
             }
         })
         .await
-        .context("Task join error")?
-        .context("Failed to read from shell")?;
+        .context("Task join error")??;
         
-        // Copy data to buffer only once, outside spawn_blocking
+        // Copy data to caller's buffer
+        let n = data.len();
         if n > 0 {
-            buffer[..n].copy_from_slice(&data[..n]);
+            buffer[..n].copy_from_slice(&data);
         }
         Ok(n)
     }
@@ -134,7 +139,6 @@ impl ShellSession {
     ///
     /// # Errors
     /// Returns an error if the PTY resize operation fails (e.g., invalid dimensions)
-    #[allow(dead_code)] // Public API for future use
     pub async fn resize(&self, rows: u16, cols: u16) -> Result<()> {
         let pty = self.pty.lock().await;
 

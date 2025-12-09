@@ -6,7 +6,6 @@ use std::path::{Path, PathBuf};
 
 /// Main configuration structure with zero-copy design for performance
 #[derive(Debug, Clone, Default)]
-#[allow(dead_code)] // Public API - fields accessed by users via config files
 pub struct Config {
     pub shell: ShellConfig,
     pub terminal: TerminalConfig,
@@ -17,9 +16,8 @@ pub struct Config {
 }
 
 #[derive(Debug, Clone, Default)]
-#[allow(dead_code)] // Public API - fields accessed by users via config files
 pub struct HooksConfig {
-    /// Lua script paths for various hooks
+    /// Lua script paths for various hooks (future Lua integration)
     pub on_startup: Option<String>,
     pub on_shutdown: Option<String>,
     pub on_key_press: Option<String>,
@@ -98,40 +96,38 @@ impl HooksConfig {
 }
 
 #[derive(Debug, Clone)]
-#[allow(dead_code)] // Public API - fields accessed by users via config files
 pub struct ShellConfig {
     pub default_shell: String,
+    /// Environment variables to pass to shell (future feature)
     pub env: HashMap<String, String>,
     pub working_dir: Option<String>,
 }
 
 #[derive(Debug, Clone)]
-#[allow(dead_code)] // Public API - fields accessed by users via config files
 pub struct TerminalConfig {
-    /// Maximum command history entries (memory-efficient circular buffer)
+    /// Maximum command history entries (memory-efficient circular buffer) - future feature
     pub max_history: usize,
 
     /// Enable tabs for multiple sessions
     pub enable_tabs: bool,
 
-    /// Enable split panes
+    /// Enable split panes - future feature
     pub enable_split_pane: bool,
 
-    /// Font size
+    /// Font size - parsed for future rendering integration
     pub font_size: u16,
 
-    /// Cursor style: block, underline, bar
+    /// Cursor style: block, underline, bar - future feature
     pub cursor_style: String,
 
     /// Number of scrollback lines (memory-mapped for large buffers)
     pub scrollback_lines: usize,
 
-    /// Hardware acceleration for rendering
+    /// Hardware acceleration for rendering - future GPU feature flag
     pub hardware_acceleration: bool,
 }
 
 #[derive(Debug, Clone)]
-#[allow(dead_code)] // Public API - fields accessed by users via config files
 pub struct ThemeConfig {
     pub name: String,
     pub foreground: String,
@@ -143,8 +139,8 @@ pub struct ThemeConfig {
     pub cursor_trail: Option<CursorTrailConfig>,
 }
 
+/// Background configuration for future background image support
 #[derive(Debug, Clone)]
-#[allow(dead_code)] // Public API - fields accessed by users via config files
 pub struct BackgroundConfig {
     /// Path to background image file (supports PNG, JPEG, etc.)
     pub image_path: Option<String>,
@@ -158,8 +154,8 @@ pub struct BackgroundConfig {
     pub blur: f32,
 }
 
+/// Cursor trail configuration for future cursor effects
 #[derive(Debug, Clone)]
-#[allow(dead_code)] // Public API - fields accessed by users via config files
 pub struct CursorTrailConfig {
     /// Enable cursor trail effect
     pub enabled: bool,
@@ -175,8 +171,8 @@ pub struct CursorTrailConfig {
     pub animation_speed: u64,
 }
 
+/// ANSI colors configuration (future theme integration)
 #[derive(Debug, Clone)]
-#[allow(dead_code)] // Public API - fields accessed by users via config files
 pub struct AnsiColors {
     pub black: String,
     pub red: String,
@@ -196,8 +192,8 @@ pub struct AnsiColors {
     pub bright_white: String,
 }
 
+/// Keybinding configuration (future custom keybinding loading)
 #[derive(Debug, Clone)]
-#[allow(dead_code)] // Public API - fields accessed by users via config files
 pub struct KeyBindings {
     pub new_tab: String,
     pub close_tab: String,

@@ -52,7 +52,6 @@ impl ProgressBar {
     }
 
     /// Start tracking a command (legacy API, takes ownership)
-    #[allow(dead_code)]
     pub fn start(&mut self, command: String) {
         self.visible = true;
         self.command = command;
@@ -94,7 +93,6 @@ impl ProgressBar {
     }
 
     /// Get display text for progress bar
-    #[allow(dead_code)]
     #[must_use]
     pub fn display_text(&self) -> String {
         if self.visible {
@@ -134,7 +132,6 @@ impl ProgressBar {
     }
 
     /// Get the command being tracked
-    #[allow(dead_code)]
     #[must_use]
     pub fn command(&self) -> &str {
         &self.command
@@ -162,10 +159,9 @@ fn format_duration_secs(secs: u64) -> String {
     }
 }
 
-/// Format duration for display (legacy API)
+/// Format duration for display (legacy API - kept for future use)
 #[must_use]
-#[allow(dead_code)]
-pub fn format_duration(duration: Duration) -> String {
+pub fn _format_duration(duration: Duration) -> String {
     format_duration_secs(duration.as_secs())
 }
 
@@ -219,9 +215,9 @@ mod tests {
 
     #[test]
     fn test_format_duration() {
-        assert_eq!(format_duration(Duration::from_secs(30)), "30s");
-        assert_eq!(format_duration(Duration::from_secs(90)), "1m 30s");
-        assert_eq!(format_duration(Duration::from_secs(3661)), "1h 1m");
+        assert_eq!(_format_duration(Duration::from_secs(30)), "30s");
+        assert_eq!(_format_duration(Duration::from_secs(90)), "1m 30s");
+        assert_eq!(_format_duration(Duration::from_secs(3661)), "1h 1m");
     }
 
     #[test]

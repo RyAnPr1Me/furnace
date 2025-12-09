@@ -84,6 +84,9 @@ regex = "1.10"
 # ANSI/VTE terminal parsing
 vte = "0.15"
 
+# Clipboard support
+arboard = "3.3"
+
 # For GPU feature
 bitflags = "2.4"
 pollster = "0.4"

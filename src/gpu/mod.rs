@@ -45,6 +45,11 @@ pub struct GpuConfig {
     pub background_blur: bool,
     /// Cell padding in pixels
     pub cell_padding: u32,
+    /// Initial window width (None = use defaults)
+    /// BUG FIX #3: Make screen dimensions configurable instead of hardcoding
+    pub initial_width: Option<f32>,
+    /// Initial window height (None = use defaults)
+    pub initial_height: Option<f32>,
 }
 
 impl Default for GpuConfig {
@@ -59,6 +64,8 @@ impl Default for GpuConfig {
             background_opacity: 1.0,
             background_blur: false,
             cell_padding: 2,
+            initial_width: None,  // Will use 1280.0 by default in renderer
+            initial_height: None, // Will use 720.0 by default in renderer
         }
     }
 }

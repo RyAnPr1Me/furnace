@@ -6,7 +6,6 @@ use std::path::{Path, PathBuf};
 
 /// Advanced theme system supporting multiple color schemes
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[allow(dead_code)] // Public API for theme system
 pub struct Theme {
     pub name: String,
     pub colors: ColorPalette,
@@ -15,7 +14,6 @@ pub struct Theme {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[allow(dead_code)] // Public API for theme system
 pub struct ColorPalette {
     // ANSI colors
     pub black: String,
@@ -67,7 +65,6 @@ pub struct Themes;
 
 impl Themes {
     /// Dark theme (default) with cool red/black color scheme
-    #[allow(dead_code)] // Public API
     #[must_use]
     pub fn dark() -> Theme {
         Theme {
@@ -114,7 +111,6 @@ impl Themes {
     }
 
     /// Light theme
-    #[allow(dead_code)] // Public API
     #[must_use]
     pub fn light() -> Theme {
         Theme {
@@ -161,7 +157,6 @@ impl Themes {
     }
 
     /// Nord theme
-    #[allow(dead_code)] // Public API
     #[must_use]
     pub fn nord() -> Theme {
         Theme {
@@ -208,7 +203,6 @@ impl Themes {
     }
 
     /// Get all built-in themes
-    #[allow(dead_code)] // Public API
     #[must_use]
     pub fn all() -> HashMap<String, Theme> {
         let mut themes = HashMap::new();
@@ -312,7 +306,6 @@ impl ThemeManager {
 
     /// Get the current theme
     #[must_use]
-    #[allow(dead_code)] // Public API for theme management
     pub fn current(&self) -> &Theme {
         &self.current_theme
     }
@@ -325,10 +318,9 @@ impl ThemeManager {
         names
     }
 
-    /// Switch to a different theme by name
+    /// Switch to a different theme by name (API for programmatic theme switching)
     ///
     /// Returns true if the theme was switched successfully, false if the theme was not found
-    #[allow(dead_code)] // Public API for theme management
     pub fn switch_theme(&mut self, name: &str) -> bool {
         let name_lower = name.to_lowercase();
         if let Some(theme) = self.available_themes.get(&name_lower) {
@@ -340,7 +332,6 @@ impl ThemeManager {
     }
 
     /// Cycle to the next theme in alphabetical order
-    #[allow(dead_code)] // Public API for theme management
     pub fn next_theme(&mut self) {
         let names = self.available_theme_names();
         if names.is_empty() {
@@ -362,7 +353,6 @@ impl ThemeManager {
     }
 
     /// Cycle to the previous theme in alphabetical order
-    #[allow(dead_code)] // Public API
     pub fn prev_theme(&mut self) {
         let names = self.available_theme_names();
         if names.is_empty() {
@@ -383,8 +373,7 @@ impl ThemeManager {
         }
     }
 
-    /// Add a custom theme
-    #[allow(dead_code)] // Public API
+    /// Add a custom theme (API for theme management)
     pub fn add_theme(&mut self, theme: Theme) {
         let name = theme.name.to_lowercase();
         self.available_themes.insert(name, theme);
@@ -394,7 +383,6 @@ impl ThemeManager {
     ///
     /// # Errors
     /// Returns an error if the themes directory is not set or the file cannot be written
-    #[allow(dead_code)] // Public API
     pub fn save_theme(&self, theme: &Theme) -> Result<()> {
         let themes_dir = self
             .themes_dir
