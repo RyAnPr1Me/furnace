@@ -357,6 +357,78 @@ impl GlyphCache {
         self.row_height = 0;
         self.atlas_data.fill(0);
     }
+
+    /// Get the font family name
+    ///
+    /// Returns the name of the font family currently in use.
+    ///
+    /// # Production Use Cases
+    /// - Displaying current font in settings UI
+    /// - Logging font information for debugging
+    /// - Saving font preference to configuration
+    /// - Implementing font selection dialog
+    pub fn font_family(&self) -> &str {
+        &self.font_family
+    }
+
+    /// Reload the font with a new family
+    ///
+    /// Changes the font family and reloads glyphs with the new font.
+    /// The atlas is cleared and all glyphs are re-cached with the new font.
+    ///
+    /// **Note**: This method is only available with the `gpu` feature enabled.
+    ///
+    /// # Production Use Cases
+    /// - Implementing font change in settings
+    /// - Font hot-reloading during development
+    /// - A/B testing different fonts for readability
+    /// - User preference customization
+    ///
+    /// # Arguments
+    /// * `font_family` - Name of the new font family to load
+    ///
+    /// # Returns
+    /// Returns `true` if the font was successfully loaded, `false` if fallback was used
+    #[cfg(feature = "gpu")]
+    pub fn reload_font(&mut self, font_family: &str) -> bool {
+        self.font_family = font_family.to_string();
+        self.font = Self::load_font(font_family);
+        
+        // Clear and rebuild cache with new font
+        self.clear();
+        
+        // Re-cache ASCII characters with new font
+        let has_font = self.font.is_some();
+        self.precache_ascii();
+        has_font
+    }
+
+    /// Get font metrics information
+    ///
+    /// Returns detailed metrics about the current font for layout calculations
+    /// and debugging.
+    ///
+    /// # Production Use Cases
+    /// - Calculating precise cell dimensions
+    /// - Implementing pixel-perfect layout
+    /// - Debugging font rendering issues
+    /// - Optimizing atlas size based on font characteristics
+    ///
+    /// # Returns
+    /// A tuple of (font_size, font_family, has_real_font, cached_glyph_count)
+    pub fn font_metrics(&self) -> (f32, &str, bool, usize) {
+        #[cfg(feature = "gpu")]
+        let has_font = self.font.is_some();
+        #[cfg(not(feature = "gpu"))]
+        let has_font = false;
+        
+        (
+            self.font_size,
+            &self.font_family,
+            has_font,
+            self.glyph_map.len(),
+        )
+    }
 }
 
 #[cfg(test)]
@@ -396,5 +468,35 @@ mod tests {
         let cache = GlyphCache::new(14.0, "Monospace");
         let data = cache.atlas_data();
         assert_eq!(data.len(), (2048 * 2048) as usize);
+    }
+
+    #[test]
+    fn test_font_family_getter() {
+        let cache = GlyphCache::new(14.0, "JetBrains Mono");
+        assert_eq!(cache.font_family(), "JetBrains Mono");
+    }
+
+    #[test]
+    fn test_font_metrics() {
+        let cache = GlyphCache::new(14.0, "Monospace");
+        let (size, family, _has_font, count) = cache.font_metrics();
+        
+        assert_eq!(size, 14.0);
+        assert_eq!(family, "Monospace");
+        assert!(count >= 95); // At least ASCII characters
+        // _has_font depends on whether the font was successfully loaded
+    }
+
+    #[test]
+    #[cfg(feature = "gpu")]
+    fn test_reload_font() {
+        let mut cache = GlyphCache::new(14.0, "Monospace");
+        
+        // Reload with different font
+        cache.reload_font("Courier");
+        assert_eq!(cache.font_family(), "Courier");
+        
+        // Cache should still have ASCII characters
+        assert!(cache.len() >= 95);
     }
 }

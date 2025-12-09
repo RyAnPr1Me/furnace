@@ -43,6 +43,7 @@
 
 pub mod colors;
 pub mod config;
+pub mod hooks;
 pub mod keybindings;
 pub mod progress_bar;
 pub mod session;

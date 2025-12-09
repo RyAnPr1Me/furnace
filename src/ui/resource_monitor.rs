@@ -123,12 +123,23 @@ impl ResourceMonitor {
         stats
     }
 
-    /// Get basic network statistics (placeholder for cross-platform implementation)
+    /// Get basic network statistics (cross-platform implementation)
     /// Returns `(rx_bytes, tx_bytes)`
     fn get_network_stats() -> (u64, u64) {
-        // Basic implementation - can be extended with platform-specific code
-        // For now, returns 0 to maintain API compatibility
-        (0, 0)
+        use sysinfo::Networks;
+        
+        // Get network information
+        let networks = Networks::new_with_refreshed_list();
+        
+        let mut total_rx = 0u64;
+        let mut total_tx = 0u64;
+        
+        for (_interface_name, network) in networks.iter() {
+            total_rx = total_rx.saturating_add(network.total_received());
+            total_tx = total_tx.saturating_add(network.total_transmitted());
+        }
+        
+        (total_rx, total_tx)
     }
 
     /// Get disk usage information

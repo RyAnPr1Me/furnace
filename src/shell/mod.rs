@@ -15,9 +15,34 @@ pub struct ShellSession {
 impl ShellSession {
     /// Create a new shell session with optimal buffer sizes
     ///
+    /// This is a convenience wrapper around `new_with_env` with no environment variables.
+    /// Provided for backward compatibility and simpler use cases.
+    ///
     /// # Errors
     /// Returns an error if PTY creation or shell process spawn fails
+    #[allow(dead_code)] // Used by external tests and public API
     pub fn new(shell_cmd: &str, working_dir: Option<&str>, rows: u16, cols: u16) -> Result<Self> {
+        Self::new_with_env(shell_cmd, working_dir, rows, cols, &[])
+    }
+
+    /// Create a new shell session with environment variables
+    ///
+    /// # Arguments
+    /// * `shell_cmd` - Shell command to execute
+    /// * `working_dir` - Optional working directory
+    /// * `rows` - Number of terminal rows
+    /// * `cols` - Number of terminal columns
+    /// * `env_vars` - Environment variables as (key, value) tuples
+    ///
+    /// # Errors
+    /// Returns an error if PTY creation or shell process spawn fails
+    pub fn new_with_env(
+        shell_cmd: &str,
+        working_dir: Option<&str>,
+        rows: u16,
+        cols: u16,
+        env_vars: &[(&str, &str)],
+    ) -> Result<Self> {
         let pty_system = NativePtySystem::default();
 
         let pty_size = PtySize {
@@ -33,6 +58,11 @@ impl ShellSession {
 
         if let Some(dir) = working_dir {
             cmd.cwd(dir);
+        }
+
+        // Set environment variables
+        for (key, value) in env_vars {
+            cmd.env(key, value);
         }
 
         let _child = pair
@@ -159,5 +189,29 @@ impl ShellSession {
 impl Drop for ShellSession {
     fn drop(&mut self) {
         info!("Shell session terminated");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_shell_with_env_vars() {
+        let shell = if cfg!(windows) { "cmd.exe" } else { "sh" };
+
+        let env_vars = vec![("TEST_VAR", "test_value"), ("CUSTOM_PATH", "/custom")];
+
+        let result = ShellSession::new_with_env(shell, None, 24, 80, &env_vars);
+        assert!(result.is_ok(), "Failed to create shell with env vars");
+    }
+
+    #[tokio::test]
+    async fn test_shell_new_compatibility() {
+        // Test that new() method still works (backward compatibility)
+        let shell = if cfg!(windows) { "cmd.exe" } else { "sh" };
+
+        let result = ShellSession::new(shell, None, 24, 80);
+        assert!(result.is_ok(), "Failed to create shell with new() method");
     }
 }

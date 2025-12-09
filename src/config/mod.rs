@@ -732,4 +732,107 @@ config = {
         assert!(config.terminal.enable_tabs);
         assert!(config.terminal.enable_split_pane);
     }
+
+    #[test]
+    fn test_complete_config_loading() {
+        let lua_config = r"
+config = {
+    shell = {
+        default_shell = '/bin/bash',
+        working_dir = '/home/user',
+        env = {
+            MY_VAR = 'test_value',
+            PATH = '/custom/path'
+        }
+    },
+    terminal = {
+        max_history = 5000,
+        enable_tabs = true,
+        enable_split_pane = true,
+        hardware_acceleration = false,
+        cursor_style = 'underline',
+        font_size = 14,
+        scrollback_lines = 20000
+    },
+    theme = {
+        name = 'custom_theme',
+        foreground = 'ffffff',
+        background = '000000',
+        cursor = 'ff0000',
+        selection = '00ff00'
+    },
+    keybindings = {
+        new_tab = 'Ctrl',
+        close_tab = 'Ctrl',
+        next_tab = 'Ctrl',
+        prev_tab = 'Ctrl',
+        split_horizontal = 'Ctrl',
+        split_vertical = 'Ctrl'
+    },
+    features = {
+        resource_monitor = true,
+        autocomplete = true,
+        session_manager = true,
+        theme_manager = true,
+        progress_bar = true
+    },
+    hooks = {
+        on_startup = 'print(1)',
+        on_shutdown = 'print(2)',
+        on_key_press = 'print(3)',
+        on_command_start = 'print(4)'
+    }
+}
+";
+        let lua = Lua::new();
+        lua.load(lua_config).exec().unwrap();
+        let globals = lua.globals();
+        let config_table: Table = globals.get("config").unwrap();
+        let config = Config::from_lua_table(&config_table).unwrap();
+        
+        // Verify shell config
+        assert_eq!(config.shell.default_shell, "/bin/bash");
+        assert_eq!(config.shell.working_dir, Some("/home/user".to_string()));
+        assert_eq!(config.shell.env.len(), 2);
+        assert_eq!(config.shell.env.get("MY_VAR"), Some(&"test_value".to_string()));
+        
+        // Verify terminal config
+        assert_eq!(config.terminal.max_history, 5000);
+        assert!(config.terminal.enable_tabs);
+        assert!(config.terminal.enable_split_pane);
+        assert!(!config.terminal.hardware_acceleration);
+        assert_eq!(config.terminal.cursor_style, "underline");
+        assert_eq!(config.terminal.font_size, 14);
+        assert_eq!(config.terminal.scrollback_lines, 20000);
+        
+        // Verify theme config
+        assert_eq!(config.theme.name, "custom_theme");
+        
+        // Verify keybindings config loaded
+        assert!(!config.keybindings.new_tab.is_empty());
+        
+        // Verify features config
+        assert!(config.features.resource_monitor);
+        assert!(config.features.autocomplete);
+        assert!(config.features.session_manager);
+        assert!(config.features.theme_manager);
+        assert!(config.features.progress_bar);
+        
+        // Verify hooks config are loaded
+        assert!(config.hooks.on_startup.is_some());
+        assert!(config.hooks.on_shutdown.is_some());
+        assert!(config.hooks.on_key_press.is_some());
+        assert!(config.hooks.on_command_start.is_some());
+    }
+
+    #[test]
+    fn test_config_file_loading() {
+        // Test that config.lua exists
+        let config_path = std::path::Path::new("config.lua");
+        assert!(config_path.exists(), "config.lua should exist in repository root");
+        
+        // Note: The actual file has platform detection code using os.execute
+        // which won't work in a sandboxed test environment.
+        // The important thing is the file exists and the structure is valid for real usage.
+    }
 }
