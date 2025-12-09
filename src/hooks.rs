@@ -41,7 +41,7 @@ impl HooksExecutor {
         }
 
         // Create a table with context
-        self.lua.load(&format!(
+        self.lua.load(format!(
             r#"
             local context = "{}"
             {}

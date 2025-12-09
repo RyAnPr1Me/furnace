@@ -771,12 +771,12 @@ impl GpuRenderer {
         self.dirty_cells.fill(false);
         
         // Log dirty cell optimization stats occasionally
-        if self.stats.frame_count % 100 == 0 {
+        if self.stats.frame_count.is_multiple_of(100) {
             tracing::debug!(
                 "GPU Render: {}/{} dirty cells ({}% optimized)",
                 dirty_count,
                 self.cells.len(),
-                if self.cells.len() > 0 {
+                if !self.cells.is_empty() {
                     100 - (dirty_count * 100 / self.cells.len())
                 } else {
                     0

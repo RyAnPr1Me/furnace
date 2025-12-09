@@ -493,80 +493,45 @@ impl Terminal {
             debug!("Theme customization demo completed: {}", e);
         }
         self.control_progress_display();
-        let _stats_display = self.display_full_resource_stats();
         
-        // Use color_palette field - access ANSI colors
-        let _ansi_red = &self.color_palette.red;
-        let _color_256 = self.color_palette.get_256(196);
+        // Display resource stats in debug mode if available
+        if self.resource_monitor.is_some() {
+            let stats_display = self.display_full_resource_stats();
+            if !stats_display.is_empty() {
+                debug!("Resource stats: {}", stats_display);
+            }
+        }
+        
+        // Log color capabilities
+        debug!("Terminal supports 256 colors and true color (24-bit RGB)");
         
         // Use shell integration feature variants
         use crate::keybindings::ShellIntegrationFeature;
         self.keybindings.enable_shell_integration(ShellIntegrationFeature::DirectoryTracking, true);
         self.keybindings.enable_shell_integration(ShellIntegrationFeature::CommandTracking, true);
         
-        // Use config struct fields
-        let _bg_string = &self.config.theme.background;
-        if let Some(bg) = &self.config.theme.background_image {
-            let _img = &bg.image_path;
-            let _clr = &bg.color;
-            let _opacity = bg.opacity;
-            let _mode = &bg.mode;
-            let _blur = bg.blur;
+        // Log theme configuration
+        debug!("Theme: {} (fg: {}, bg: {}, cursor: {})", 
+            self.config.theme.name,
+            self.config.theme.foreground,
+            self.config.theme.background,
+            self.config.theme.cursor
+        );
+        
+        if self.config.theme.background_image.is_some() {
+            debug!("Background image configured in theme");
         }
-        let _cursor_trail = &self.config.theme.cursor_trail;
-        if let Some(ct) = _cursor_trail {
-            let _enabled = ct.enabled;
-            let _len = ct.length;
-            let _clr = &ct.color;
-            let _fade = &ct.fade_mode;
-            let _width = ct.width;
-            let _speed = ct.animation_speed;
+        if self.config.theme.cursor_trail.is_some() {
+            debug!("Cursor trail effects configured in theme");
         }
-        let _theme_name = &self.config.theme.name;
-        let _fg = &self.config.theme.foreground;
-        let _cursor = &self.config.theme.cursor;
-        let _selection = &self.config.theme.selection;
-        let _colors = &self.config.theme.colors;
-        let _lua_on_startup = &self.config.hooks.on_startup;
-        let _lua_on_shutdown = &self.config.hooks.on_shutdown;
-        let _lua_on_key = &self.config.hooks.on_key_press;
-        let _lua_on_cmd_start = &self.config.hooks.on_command_start;
-        let _lua_on_cmd_end = &self.config.hooks.on_command_end;
-        let _lua_on_output = &self.config.hooks.on_output;
-        let _lua_on_bell = &self.config.hooks.on_bell;
-        let _lua_on_title = &self.config.hooks.on_title_change;
-        let _lua_custom_kb = &self.config.hooks.custom_keybindings;
-        let _lua_filters = &self.config.hooks.output_filters;
-        let _lua_widgets = &self.config.hooks.custom_widgets;
         
-        let _ansi_black = &self.config.theme.colors.black;
-        let _ansi_red = &self.config.theme.colors.red;
-        let _ansi_green = &self.config.theme.colors.green;
-        let _ansi_yellow = &self.config.theme.colors.yellow;
-        let _ansi_blue = &self.config.theme.colors.blue;
-        let _ansi_magenta = &self.config.theme.colors.magenta;
-        let _ansi_cyan = &self.config.theme.colors.cyan;
-        let _ansi_white = &self.config.theme.colors.white;
-        let _ansi_br_black = &self.config.theme.colors.bright_black;
-        let _ansi_br_red = &self.config.theme.colors.bright_red;
-        let _ansi_br_green = &self.config.theme.colors.bright_green;
-        let _ansi_br_yellow = &self.config.theme.colors.bright_yellow;
-        let _ansi_br_blue = &self.config.theme.colors.bright_blue;
-        let _ansi_br_magenta = &self.config.theme.colors.bright_magenta;
-        let _ansi_br_cyan = &self.config.theme.colors.bright_cyan;
-        let _ansi_br_white = &self.config.theme.colors.bright_white;
+        // Log hooks configuration
+        if self.config.hooks.on_startup.is_some() {
+            debug!("Lua hooks configured");
+        }
         
-        let _kb_new_tab = &self.config.keybindings.new_tab;
-        let _kb_close = &self.config.keybindings.close_tab;
-        let _kb_next = &self.config.keybindings.next_tab;
-        let _kb_prev = &self.config.keybindings.prev_tab;
-        let _kb_split_h = &self.config.keybindings.split_horizontal;
-        let _kb_split_v = &self.config.keybindings.split_vertical;
-        let _kb_copy = &self.config.keybindings.copy;
-        let _kb_paste = &self.config.keybindings.paste;
-        let _kb_search = &self.config.keybindings.search;
-        let _kb_clear = &self.config.keybindings.clear;
-        
+        // Keybindings are loaded and ready for use
+        debug!("Keybindings loaded from config");
         debug!("All feature demonstrations completed");
 
         // Event loop with optimized timing for TARGET_FPS
@@ -926,6 +891,16 @@ impl Terminal {
 
             // Regular character input (Bug #1: track ALL characters including shifted)
             (KeyCode::Char(c), modifiers) => {
+                // Execute key press hook if configured
+                if let Some(ref executor) = self.hooks_executor {
+                    if let Some(ref script) = self.config.hooks.on_key_press {
+                        let key_info = format!("{}+{:?}", if modifiers.contains(KeyModifiers::CONTROL) { "Ctrl" } else { "" }, c);
+                        if let Err(e) = executor.on_key_press(script, &key_info) {
+                            debug!("Key press hook execution failed: {}", e);
+                        }
+                    }
+                }
+                
                 if let Some(session) = self.sessions.get(self.active_session) {
                     // Bug #1: Track the actual byte sent to shell, not the character
                     if modifiers.contains(KeyModifiers::CONTROL) && c.is_ascii_alphabetic() {
@@ -1017,6 +992,17 @@ impl Terminal {
                 .command_buffers
                 .get(self.active_session)
                 .map_or(Cow::Borrowed(""), |b| String::from_utf8_lossy(b));
+
+            // Execute command start hook
+            if !command.trim().is_empty() {
+                if let Some(ref executor) = self.hooks_executor {
+                    if let Some(ref script) = self.config.hooks.on_command_start {
+                        if let Err(e) = executor.on_command_start(script, &command) {
+                            debug!("Command start hook execution failed: {}", e);
+                        }
+                    }
+                }
+            }
 
             // Send Enter
             session.write_input(b"\r").await?;
@@ -1505,7 +1491,7 @@ impl Terminal {
         
         // Debug trace for cursor style (used in GPU rendering pipeline)
         #[cfg(debug_assertions)]
-        if self.frame_count % 60 == 0 {
+        if self.frame_count.is_multiple_of(60) {
             // Log cursor style every 60 frames in debug mode
             debug!(
                 "Cursor style: {}, Font size: {}pt, HW Accel: {}, Split pane: {}",
@@ -1556,7 +1542,7 @@ impl Terminal {
         // Render first session in first pane (temporarily save active session)
         let original_active = self.active_session;
         
-        if self.sessions.len() >= 1 {
+        if !self.sessions.is_empty() {
             self.active_session = 0;
             self.render_terminal_output(f, panes[0]);
         }
