@@ -376,6 +376,8 @@ impl GlyphCache {
     /// Changes the font family and reloads glyphs with the new font.
     /// The atlas is cleared and all glyphs are re-cached with the new font.
     ///
+    /// **Note**: This method is only available with the `gpu` feature enabled.
+    ///
     /// # Production Use Cases
     /// - Implementing font change in settings
     /// - Font hot-reloading during development

@@ -802,22 +802,21 @@ impl GpuRenderer {
         self.adapter.get_info()
     }
 
-    /// Enumerate available GPU backends
+    /// Get the current GPU backend in use
     ///
-    /// Returns a list of available rendering backends on the current platform.
-    /// This is more efficient than `supports_backend()` as it queries all backends at once.
+    /// Returns the rendering backend being used by this renderer instance.
     ///
     /// # Production Use Cases
-    /// - Implementing backend selection UI
-    /// - Displaying available backends in settings
-    /// - Platform-specific feature detection
+    /// - Displaying active backend in settings UI
+    /// - Logging backend information for diagnostics
+    /// - Platform-specific behavior adjustments
     ///
     /// # Note
-    /// This method is synchronous and cached for performance. Backend availability
-    /// is determined at renderer creation time.
-    pub fn available_backends(&self) -> Vec<wgpu::Backend> {
+    /// This returns the backend selected during renderer initialization,
+    /// not all potentially available backends on the system.
+    pub fn current_backend(&self) -> wgpu::Backend {
         let info = self.adapter.get_info();
-        vec![info.backend]
+        info.backend
     }
 }
 
@@ -880,9 +879,9 @@ mod tests {
                 let adapter_info = renderer.get_adapter_info();
                 assert!(!adapter_info.name.is_empty());
             }
-            Err(e) => {
-                // GPU not available in test environment - expected
-                println!("GPU not available in test: {}", e);
+            Err(_e) => {
+                // GPU not available in test environment - this is expected
+                // No need to log, test environment may not have GPU
             }
         }
     }
@@ -921,13 +920,12 @@ mod tests {
         let result = GpuRenderer::new(config).await;
         
         if let Ok(renderer) = result {
-            // Test available backends method
-            let backends = renderer.available_backends();
-            assert!(!backends.is_empty(), "Should have at least one backend");
+            // Test current backend method
+            let backend = renderer.current_backend();
             
-            // Get adapter info to see what backend is actually in use
+            // Get adapter info to verify backend is reported correctly
             let info = renderer.get_adapter_info();
-            println!("Using backend: {:?}", info.backend);
+            assert_eq!(backend, info.backend);
         }
     }
 }
