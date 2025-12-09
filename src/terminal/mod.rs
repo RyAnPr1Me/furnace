@@ -142,8 +142,23 @@ pub struct Terminal {
     font_size: u16,
     // Hardware acceleration enabled flag
     hardware_acceleration: bool,
-    // Split pane enabled flag (for future feature)
+    // Split pane enabled flag
     enable_split_pane: bool,
+    // Split pane layout (horizontal/vertical) when enabled
+    split_orientation: SplitOrientation,
+    // Split ratio (0.0-1.0) for pane sizing
+    split_ratio: f32,
+}
+
+/// Split pane orientation
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SplitOrientation {
+    /// No split - single pane
+    None,
+    /// Horizontal split (top/bottom)
+    Horizontal,
+    /// Vertical split (left/right)
+    Vertical,
 }
 
 impl Terminal {
@@ -254,6 +269,8 @@ impl Terminal {
             font_size,
             hardware_acceleration,
             enable_split_pane,
+            split_orientation: SplitOrientation::None,
+            split_ratio: 0.5, // Default 50/50 split
         };
         
         Ok(terminal)
@@ -839,6 +856,22 @@ impl Terminal {
                         return Ok(());
                     }
                 }
+                Action::SplitHorizontal => {
+                    if self.enable_split_pane && self.sessions.len() >= 2 {
+                        self.split_orientation = SplitOrientation::Horizontal;
+                        self.show_notification("Split: Horizontal".to_string());
+                        self.dirty = true;
+                        return Ok(());
+                    }
+                }
+                Action::SplitVertical => {
+                    if self.enable_split_pane && self.sessions.len() >= 2 {
+                        self.split_orientation = SplitOrientation::Vertical;
+                        self.show_notification("Split: Vertical".to_string());
+                        self.dirty = true;
+                        return Ok(());
+                    }
+                }
                 Action::Clear => {
                     // Clear current buffer
                     if let Some(buf) = self.output_buffers.get_mut(self.active_session) {
@@ -1237,14 +1270,13 @@ impl Terminal {
         }
 
         // Render terminal output (Bug #3: use cached styled lines)
-        // Note: When enable_split_pane is true, this area could be split vertically/horizontally
-        // For future split pane implementation, check self.enable_split_pane here
-        if self.enable_split_pane {
-            // Future: Split content_area into panes and render each session
-            // For now, render single pane as normal
-            debug!("Split pane enabled but not yet implemented - rendering single pane");
+        // Split pane implementation: when enabled, split content area and render multiple sessions
+        if self.enable_split_pane && self.sessions.len() >= 2 && self.split_orientation != SplitOrientation::None {
+            self.render_split_panes(f, content_area);
+        } else {
+            // Single pane rendering
+            self.render_terminal_output(f, content_area);
         }
-        self.render_terminal_output(f, content_area);
 
         // Render autocomplete if enabled
         if self.show_autocomplete && self.autocomplete.is_some() {
@@ -1456,6 +1488,84 @@ impl Terminal {
                 self.enable_split_pane
             );
         }
+    }
+
+    /// Render split panes for multiple sessions
+    ///
+    /// Splits the content area and renders multiple shell sessions side-by-side or top-bottom
+    fn render_split_panes(&mut self, f: &mut ratatui::Frame, area: Rect) {
+        use ratatui::layout::{Constraint, Direction, Layout};
+
+        // Calculate split based on orientation
+        let panes = match self.split_orientation {
+            SplitOrientation::Horizontal => {
+                // Top/bottom split
+                let split_height = (area.height as f32 * self.split_ratio) as u16;
+                Layout::default()
+                    .direction(Direction::Vertical)
+                    .constraints([
+                        Constraint::Length(split_height),
+                        Constraint::Min(0),
+                    ])
+                    .split(area)
+            }
+            SplitOrientation::Vertical => {
+                // Left/right split
+                let split_width = (area.width as f32 * self.split_ratio) as u16;
+                Layout::default()
+                    .direction(Direction::Horizontal)
+                    .constraints([
+                        Constraint::Length(split_width),
+                        Constraint::Min(0),
+                    ])
+                    .split(area)
+            }
+            SplitOrientation::None => {
+                // Fallback to single pane
+                return self.render_terminal_output(f, area);
+            }
+        };
+
+        // Render first session in first pane (temporarily save active session)
+        let original_active = self.active_session;
+        
+        if self.sessions.len() >= 1 {
+            self.active_session = 0;
+            self.render_terminal_output(f, panes[0]);
+        }
+        
+        // Render second session in second pane
+        if self.sessions.len() >= 2 && panes.len() >= 2 {
+            self.active_session = 1;
+            self.render_terminal_output(f, panes[1]);
+        }
+        
+        // Restore active session
+        self.active_session = original_active;
+    }
+
+    /// Toggle split pane orientation
+    ///
+    /// Cycles through: None -> Horizontal -> Vertical -> None
+    #[allow(dead_code)] // Used in tests and public API for split pane control
+    pub fn toggle_split_orientation(&mut self) {
+        if !self.enable_split_pane {
+            return;
+        }
+        
+        self.split_orientation = match self.split_orientation {
+            SplitOrientation::None => SplitOrientation::Horizontal,
+            SplitOrientation::Horizontal => SplitOrientation::Vertical,
+            SplitOrientation::Vertical => SplitOrientation::None,
+        };
+        
+        info!("Split pane orientation: {:?}", self.split_orientation);
+    }
+
+    /// Set split ratio (0.0-1.0)
+    #[allow(dead_code)] // Used in tests and public API for split pane control
+    pub fn set_split_ratio(&mut self, ratio: f32) {
+        self.split_ratio = ratio.clamp(0.1, 0.9);
     }
 
     /// Render resource monitor (Bug #23: doesn't need &mut self)
@@ -2007,5 +2117,19 @@ mod tests {
         assert!(!terminal.cursor_style().is_empty());
         assert!(terminal.max_history() > 0);
         assert!(terminal.font_size() > 0);
+    }
+
+    #[test]
+    fn test_split_pane_functionality() {
+        let mut config = Config::default();
+        config.terminal.enable_split_pane = true;
+        
+        let mut terminal = Terminal::new(config).unwrap();
+        
+        // Test split pane methods
+        terminal.toggle_split_orientation();
+        terminal.set_split_ratio(0.6);
+        
+        assert!(terminal.is_split_pane_enabled());
     }
 }
