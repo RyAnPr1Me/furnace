@@ -16,10 +16,117 @@ impl TrueColor {
         Self { r, g, b }
     }
 
+    /// Create from hex string (#RRGGBB or RRGGBB)
+    ///
+    /// # Errors
+    /// Returns an error if the hex string is not exactly 6 characters or contains invalid hex digits
+    pub fn from_hex(hex: &str) -> Result<Self> {
+        let hex = hex.trim_start_matches('#');
+
+        if hex.len() != 6 {
+            anyhow::bail!("Invalid hex color: must be 6 characters");
+        }
+
+        let r = u8::from_str_radix(&hex[0..2], 16).context("Invalid red component")?;
+        let g = u8::from_str_radix(&hex[2..4], 16).context("Invalid green component")?;
+        let b = u8::from_str_radix(&hex[4..6], 16).context("Invalid blue component")?;
+
+        Ok(Self::new(r, g, b))
+    }
+
     /// Convert to hex string
     #[must_use]
     pub fn to_hex(self) -> String {
         format!("#{:02X}{:02X}{:02X}", self.r, self.g, self.b)
+    }
+
+    /// Convert to ANSI escape sequence for foreground
+    #[must_use]
+    pub fn to_ansi_fg(self) -> String {
+        format!("\x1b[38;2;{};{};{}m", self.r, self.g, self.b)
+    }
+
+    /// Convert to ANSI escape sequence for background
+    #[must_use]
+    pub fn to_ansi_bg(self) -> String {
+        format!("\x1b[48;2;{};{};{}m", self.r, self.g, self.b)
+    }
+
+    /// Blend two colors together using linear interpolation
+    ///
+    /// This function performs color blending with sub-pixel accuracy using
+    /// proper rounding. It's optimized to use FMA (Fused Multiply-Add) when
+    /// available on the CPU for better performance.
+    ///
+    /// # Arguments
+    /// * `other` - The color to blend with
+    /// * `factor` - Blend factor (0.0 = all self, 1.0 = all other)
+    ///
+    /// # Returns
+    /// Blended color
+    ///
+    /// # Formula
+    /// `result = self * (1 - factor) + other * factor`
+    ///
+    /// # Example
+    /// ```ignore
+    /// let red = TrueColor::new(255, 0, 0);
+    /// let blue = TrueColor::new(0, 0, 255);
+    /// let purple = red.blend(blue, 0.5);  // 50% blend = purple
+    /// ```
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    #[must_use]
+    pub fn blend(self, other: Self, factor: f32) -> Self {
+        let factor = factor.clamp(0.0, 1.0);
+        Self {
+            // Use mul_add for efficient FMA (Fused Multiply-Add) instruction
+            // Formula: self * (1 - factor) + other * factor
+            // Restructured as: (other - self) * factor + self for proper FMA usage
+            // Note: Casts are safe because we clamp factor and round before casting
+            r: (f32::from(other.r) - f32::from(self.r))
+                .mul_add(factor, f32::from(self.r))
+                .round() as u8,
+            g: (f32::from(other.g) - f32::from(self.g))
+                .mul_add(factor, f32::from(self.g))
+                .round() as u8,
+            b: (f32::from(other.b) - f32::from(self.b))
+                .mul_add(factor, f32::from(self.b))
+                .round() as u8,
+        }
+    }
+
+    /// Lighten color by factor
+    #[must_use]
+    pub fn lighten(self, factor: f32) -> Self {
+        let white = Self::new(255, 255, 255);
+        self.blend(white, factor)
+    }
+
+    /// Darken color by factor
+    #[must_use]
+    pub fn darken(self, factor: f32) -> Self {
+        let black = Self::new(0, 0, 0);
+        self.blend(black, factor)
+    }
+
+    /// Get luminance (0.0 - 1.0)
+    #[must_use]
+    pub fn luminance(self) -> f32 {
+        // Use nested mul_add for hardware FMA (Fused Multiply-Add) optimization
+        // Original formula: (0.299*r + 0.587*g + 0.114*b) / 255.0
+        // Nested as: 0.299*r + (0.587*g + (0.114*b + 0.0))
+        // This leverages single-instruction FMA on modern CPUs for better performance and accuracy
+        // Trade-off: slightly reduced readability for measurable performance gains in tight loops
+        0.299f32.mul_add(
+            f32::from(self.r),
+            0.587f32.mul_add(f32::from(self.g), 0.114f32.mul_add(f32::from(self.b), 0.0)),
+        ) / 255.0
+    }
+
+    /// Check if color is light
+    #[must_use]
+    pub fn is_light(self) -> bool {
+        self.luminance() > 0.5
     }
 }
 
@@ -114,7 +221,6 @@ impl TrueColorPalette {
     }
 
     /// Get color by 256-color index (optimized with inline and match)
-    /// API for future 256-color mode support
     #[must_use]
     #[inline]
     pub fn get_256(&self, index: u8) -> TrueColor {
@@ -149,8 +255,43 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_true_color_from_hex() {
+        let color = TrueColor::from_hex("#FF8800").unwrap();
+        assert_eq!(color.r, 255);
+        assert_eq!(color.g, 136);
+        assert_eq!(color.b, 0);
+    }
+
+    #[test]
     fn test_true_color_to_hex() {
         let color = TrueColor::new(255, 136, 0);
         assert_eq!(color.to_hex(), "#FF8800");
+    }
+
+    #[test]
+    fn test_ansi_sequences() {
+        let color = TrueColor::new(255, 0, 0);
+        assert_eq!(color.to_ansi_fg(), "\x1b[38;2;255;0;0m");
+        assert_eq!(color.to_ansi_bg(), "\x1b[48;2;255;0;0m");
+    }
+
+    #[test]
+    fn test_color_blending() {
+        let red = TrueColor::new(255, 0, 0);
+        let blue = TrueColor::new(0, 0, 255);
+        let purple = red.blend(blue, 0.5);
+
+        // With rounding: 255 * 0.5 = 127.5 -> rounds to 128
+        assert_eq!(purple.r, 128);
+        assert_eq!(purple.b, 128);
+    }
+
+    #[test]
+    fn test_luminance() {
+        let white = TrueColor::new(255, 255, 255);
+        let black = TrueColor::new(0, 0, 0);
+
+        assert!(white.is_light());
+        assert!(!black.is_light());
     }
 }
