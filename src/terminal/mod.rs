@@ -35,6 +35,7 @@ use unicode_width::UnicodeWidthStr;
 
 use crate::colors::TrueColorPalette;
 use crate::config::Config;
+use crate::hooks::HooksExecutor;
 use crate::keybindings::KeybindingManager;
 use crate::progress_bar::ProgressBar;
 use crate::session::SessionManager;
@@ -148,6 +149,8 @@ pub struct Terminal {
     split_orientation: SplitOrientation,
     // Split ratio (0.0-1.0) for pane sizing
     split_ratio: f32,
+    // Lua hooks executor for custom functionality
+    hooks_executor: Option<HooksExecutor>,
 }
 
 /// Split pane orientation
@@ -212,6 +215,9 @@ impl Terminal {
             None
         };
 
+        // Initialize Lua hooks executor
+        let hooks_executor = HooksExecutor::new().ok();
+        
         // Capture feature flags and config data before moving
         let enable_resource_monitor = config.features.resource_monitor;
         let enable_autocomplete = config.features.autocomplete;
@@ -222,6 +228,9 @@ impl Terminal {
         let font_size = config.terminal.font_size;
         let hardware_acceleration = config.terminal.hardware_acceleration;
         let enable_split_pane = config.terminal.enable_split_pane;
+        
+        // Store hooks for later execution
+        let on_startup_hook = config.hooks.on_startup.clone();
 
         let terminal = Self {
             config,
@@ -271,7 +280,15 @@ impl Terminal {
             enable_split_pane,
             split_orientation: SplitOrientation::None,
             split_ratio: 0.5, // Default 50/50 split
+            hooks_executor,
         };
+        
+        // Execute startup hook if configured
+        if let (Some(executor), Some(script)) = (&terminal.hooks_executor, on_startup_hook) {
+            if let Err(e) = executor.on_startup(&script) {
+                warn!("Startup hook execution failed: {}", e);
+            }
+        }
         
         Ok(terminal)
     }
@@ -894,6 +911,16 @@ impl Terminal {
             // Quit (Ctrl+C or Ctrl+D) - not in keybindings to avoid accidental quit
             (KeyCode::Char('c' | 'd'), KeyModifiers::CONTROL) => {
                 debug!("Quit signal received");
+                
+                // Execute shutdown hook before quitting
+                if let Some(ref executor) = self.hooks_executor {
+                    if let Some(ref script) = self.config.hooks.on_shutdown {
+                        if let Err(e) = executor.on_shutdown(script) {
+                            warn!("Shutdown hook execution failed: {}", e);
+                        }
+                    }
+                }
+                
                 self.should_quit = true;
             }
 

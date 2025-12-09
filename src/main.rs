@@ -6,6 +6,7 @@ use tracing_subscriber::FmtSubscriber;
 
 mod colors;
 mod config;
+mod hooks;
 mod keybindings;
 mod progress_bar;
 mod session;
