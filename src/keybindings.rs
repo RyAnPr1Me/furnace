@@ -42,7 +42,10 @@ pub enum Action {
     SearchNext,
     SearchPrev,
 
-    // Command palette
+    // Command palette & features
+    ToggleAutocomplete,
+    NextTheme,
+    PrevTheme,
 
     // Resource monitor
     ToggleResourceMonitor,
@@ -128,6 +131,9 @@ impl KeybindingManager {
 
         // Features
         self.add_binding("r", &["Ctrl"], Action::ToggleResourceMonitor);
+        self.add_binding("Tab", &["Alt"], Action::ToggleAutocomplete);
+        self.add_binding("]", &["Ctrl"], Action::NextTheme);
+        self.add_binding("[", &["Ctrl"], Action::PrevTheme);
 
         // Session management
         // BUG FIX #16: Removed duplicate Ctrl+O binding

@@ -132,6 +132,8 @@ pub struct Terminal {
     search_query: String,
     search_results: Vec<usize>, // Line indices where matches found
     current_search_result: usize,
+    // Autocomplete state
+    show_autocomplete: bool,
 }
 
 impl Terminal {
@@ -222,6 +224,7 @@ impl Terminal {
             search_query: String::new(),
             search_results: Vec::new(),
             current_search_result: 0,
+            show_autocomplete: false,
         })
     }
 
@@ -639,6 +642,46 @@ impl Terminal {
                         return Ok(());
                     }
                 }
+                Action::ToggleAutocomplete => {
+                    if self.autocomplete.is_some() {
+                        self.show_autocomplete = !self.show_autocomplete;
+                        debug!(
+                            "Autocomplete: {}",
+                            if self.show_autocomplete { "ON" } else { "OFF" }
+                        );
+                        self.show_notification(format!(
+                            "Autocomplete {}",
+                            if self.show_autocomplete { "enabled" } else { "disabled" }
+                        ));
+                        return Ok(());
+                    }
+                }
+                Action::NextTheme => {
+                    let theme_name = if let Some(ref mut tm) = self.theme_manager {
+                        tm.next_theme();
+                        tm.current().name.clone()
+                    } else {
+                        String::new()
+                    };
+                    if !theme_name.is_empty() {
+                        self.show_notification(format!("Theme: {}", theme_name));
+                        self.dirty = true;
+                    }
+                    return Ok(());
+                }
+                Action::PrevTheme => {
+                    let theme_name = if let Some(ref mut tm) = self.theme_manager {
+                        tm.prev_theme();
+                        tm.current().name.clone()
+                    } else {
+                        String::new()
+                    };
+                    if !theme_name.is_empty() {
+                        self.show_notification(format!("Theme: {}", theme_name));
+                        self.dirty = true;
+                    }
+                    return Ok(());
+                }
                 Action::SaveSession => {
                     // Save current session
                     if self.session_manager.is_some() {
@@ -928,6 +971,11 @@ impl Terminal {
                 Constraint::Length(u16::from(self.notification_message.is_some())),
                 Constraint::Length(u16::from(progress_visible)),
                 Constraint::Min(0),
+                Constraint::Length(if self.show_autocomplete && self.autocomplete.is_some() {
+                    5
+                } else {
+                    0
+                }),
                 Constraint::Length(if self.show_resources && self.resource_monitor.is_some() {
                     3
                 } else {
@@ -940,7 +988,8 @@ impl Terminal {
         let notification_area = main_chunks[1];
         let progress_area = main_chunks[2];
         let content_area = main_chunks[3];
-        let resource_area = main_chunks[4];
+        let autocomplete_area = main_chunks[4];
+        let resource_area = main_chunks[5];
 
         // Render tabs if enabled
         if self.config.terminal.enable_tabs && self.sessions.len() > 1 {
@@ -1033,6 +1082,11 @@ impl Terminal {
 
         // Render terminal output (Bug #3: use cached styled lines)
         self.render_terminal_output(f, content_area);
+
+        // Render autocomplete if enabled
+        if self.show_autocomplete && self.autocomplete.is_some() {
+            self.render_autocomplete(f, autocomplete_area);
+        }
 
         // Render resource monitor if enabled (Bug #23: take &self not &mut self)
         if self.show_resources && self.resource_monitor.is_some() {
@@ -1233,16 +1287,28 @@ impl Terminal {
 
         let stats = monitor.get_stats();
 
+        // Include disk usage in display
+        let disk_info = if !stats.disk_usage.is_empty() {
+            let disk = &stats.disk_usage[0]; // Show first disk
+            format!(
+                " | Disk: {} / {} ({:.1}%)",
+                ResourceMonitor::format_bytes(disk.used),
+                ResourceMonitor::format_bytes(disk.total),
+                disk.percent
+            )
+        } else {
+            String::new()
+        };
+
         let text = format!(
-            " CPU: {:.1}% ({} cores) | Memory: {} / {} ({:.1}%) | Processes: {} | Network: ↓{} ↑{} ",
+            " CPU: {:.1}% ({} cores) | Memory: {} / {} ({:.1}%) | Processes: {}{}",
             stats.cpu_usage,
             stats.cpu_count,
             ResourceMonitor::format_bytes(stats.memory_used),
             ResourceMonitor::format_bytes(stats.memory_total),
             stats.memory_percent,
             stats.process_count,
-            ResourceMonitor::format_bytes(stats.network_rx),
-            ResourceMonitor::format_bytes(stats.network_tx),
+            disk_info,
         );
 
         let resource_widget = Paragraph::new(text)
@@ -1262,6 +1328,46 @@ impl Terminal {
             .block(Block::default().borders(Borders::TOP));
 
         f.render_widget(resource_widget, area);
+    }
+    
+    /// Render autocomplete suggestions
+    fn render_autocomplete(&mut self, f: &mut ratatui::Frame, area: Rect) {
+        let Some(ref mut ac) = self.autocomplete else {
+            return;
+        };
+        
+        // Get current command from buffer
+        let current_cmd = if let Some(cmd_buf) = self.command_buffers.get(self.active_session) {
+            String::from_utf8_lossy(cmd_buf).to_string()
+        } else {
+            String::new()
+        };
+        
+        // Get suggestions
+        let suggestions = ac.get_suggestions(&current_cmd);
+        let display_text = if suggestions.is_empty() {
+            "No suggestions".to_string()
+        } else {
+            format!("Suggestions: {}", suggestions.join(", "))
+        };
+        
+        let autocomplete_widget = Paragraph::new(display_text)
+            .style(
+                Style::default()
+                    .fg(Color::Rgb(
+                        COLOR_MAGENTA_RED.0,
+                        COLOR_MAGENTA_RED.1,
+                        COLOR_MAGENTA_RED.2,
+                    ))
+                    .bg(Color::Rgb(
+                        COLOR_PURE_BLACK.0,
+                        COLOR_PURE_BLACK.1,
+                        COLOR_PURE_BLACK.2,
+                    )),
+            )
+            .block(Block::default().borders(Borders::TOP).title("Autocomplete (Alt+Tab to toggle)"));
+        
+        f.render_widget(autocomplete_widget, area);
     }
     
     /// Show notification message
