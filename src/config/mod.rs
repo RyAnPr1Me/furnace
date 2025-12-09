@@ -9,31 +9,45 @@ use std::path::{Path, PathBuf};
 pub struct Config {
     pub shell: ShellConfig,
     pub terminal: TerminalConfig,
+    #[allow(dead_code)] // Parsed from config, available for theme system integration
     pub theme: ThemeConfig,
+    #[allow(dead_code)] // Parsed from config, available for custom keybinding loading
     pub keybindings: KeyBindings,
     pub features: FeaturesConfig,
+    #[allow(dead_code)] // Parsed from config, available for Lua hook system integration
     pub hooks: HooksConfig,
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct HooksConfig {
-    /// Lua script paths for various hooks
+    /// Lua script paths for various hooks (future Lua integration)
+    #[allow(dead_code)]
     pub on_startup: Option<String>,
+    #[allow(dead_code)]
     pub on_shutdown: Option<String>,
+    #[allow(dead_code)]
     pub on_key_press: Option<String>,
+    #[allow(dead_code)]
     pub on_command_start: Option<String>,
+    #[allow(dead_code)]
     pub on_command_end: Option<String>,
+    #[allow(dead_code)]
     pub on_output: Option<String>,
+    #[allow(dead_code)]
     pub on_bell: Option<String>,
+    #[allow(dead_code)]
     pub on_title_change: Option<String>,
 
     /// Custom keybinding handlers (key -> lua function string)
+    #[allow(dead_code)]
     pub custom_keybindings: HashMap<String, String>,
 
     /// Output filters (Lua functions that transform output)
+    #[allow(dead_code)]
     pub output_filters: Vec<String>,
 
     /// Custom widgets (Lua code for rendering custom UI)
+    #[allow(dead_code)]
     pub custom_widgets: Vec<String>,
 }
 
@@ -98,107 +112,164 @@ impl HooksConfig {
 #[derive(Debug, Clone)]
 pub struct ShellConfig {
     pub default_shell: String,
+    /// Environment variables to pass to shell (future feature)
+    #[allow(dead_code)]
     pub env: HashMap<String, String>,
     pub working_dir: Option<String>,
 }
 
 #[derive(Debug, Clone)]
 pub struct TerminalConfig {
-    /// Maximum command history entries (memory-efficient circular buffer)
+    /// Maximum command history entries (memory-efficient circular buffer) - future feature
+    #[allow(dead_code)]
     pub max_history: usize,
 
     /// Enable tabs for multiple sessions
     pub enable_tabs: bool,
 
-    /// Enable split panes
+    /// Enable split panes - future feature
+    #[allow(dead_code)]
     pub enable_split_pane: bool,
 
-    /// Font size
+    /// Font size - parsed for future rendering integration
+    #[allow(dead_code)]
     pub font_size: u16,
 
-    /// Cursor style: block, underline, bar
+    /// Cursor style: block, underline, bar - future feature
+    #[allow(dead_code)]
     pub cursor_style: String,
 
     /// Number of scrollback lines (memory-mapped for large buffers)
     pub scrollback_lines: usize,
 
-    /// Hardware acceleration for rendering
+    /// Hardware acceleration for rendering - future GPU feature flag
+    #[allow(dead_code)]
     pub hardware_acceleration: bool,
 }
 
 #[derive(Debug, Clone)]
 pub struct ThemeConfig {
+    #[allow(dead_code)] // Available for theme loading
     pub name: String,
+    #[allow(dead_code)]
     pub foreground: String,
+    #[allow(dead_code)]
     pub background: String,
+    #[allow(dead_code)]
     pub cursor: String,
+    #[allow(dead_code)]
     pub selection: String,
+    #[allow(dead_code)]
     pub colors: AnsiColors,
+    #[allow(dead_code)]
     pub background_image: Option<BackgroundConfig>,
+    #[allow(dead_code)]
     pub cursor_trail: Option<CursorTrailConfig>,
 }
 
+/// Background configuration for future background image support
 #[derive(Debug, Clone)]
 pub struct BackgroundConfig {
     /// Path to background image file (supports PNG, JPEG, etc.)
+    #[allow(dead_code)]
     pub image_path: Option<String>,
     /// Solid color as fallback or alternative
+    #[allow(dead_code)]
     pub color: Option<String>,
     /// Opacity/transparency (0.0 = fully transparent, 1.0 = fully opaque)
+    #[allow(dead_code)]
     pub opacity: f32,
     /// How the image should be displayed: "fill", "fit", "stretch", "tile", "center"
+    #[allow(dead_code)]
     pub mode: String,
     /// Blur effect strength (0.0 = no blur, higher = more blur)
+    #[allow(dead_code)]
     pub blur: f32,
 }
 
+/// Cursor trail configuration for future cursor effects
 #[derive(Debug, Clone)]
 pub struct CursorTrailConfig {
     /// Enable cursor trail effect
+    #[allow(dead_code)]
     pub enabled: bool,
     /// Length of the trail (number of past positions to show)
+    #[allow(dead_code)]
     pub length: usize,
     /// Trail color (with alpha channel support like "#RRGGBBAA")
+    #[allow(dead_code)]
     pub color: String,
     /// Fade mode: "linear", "exponential", "smooth"
+    #[allow(dead_code)]
     pub fade_mode: String,
     /// Trail width (multiplier of cursor size)
+    #[allow(dead_code)]
     pub width: f32,
     /// Animation speed (milliseconds per trail update)
+    #[allow(dead_code)]
     pub animation_speed: u64,
 }
 
+/// ANSI colors configuration (future theme integration)
 #[derive(Debug, Clone)]
 pub struct AnsiColors {
+    #[allow(dead_code)]
     pub black: String,
+    #[allow(dead_code)]
     pub red: String,
+    #[allow(dead_code)]
     pub green: String,
+    #[allow(dead_code)]
     pub yellow: String,
+    #[allow(dead_code)]
     pub blue: String,
+    #[allow(dead_code)]
+    #[allow(dead_code)]
     pub magenta: String,
+    #[allow(dead_code)]
     pub cyan: String,
+    #[allow(dead_code)]
     pub white: String,
+    #[allow(dead_code)]
     pub bright_black: String,
+    #[allow(dead_code)]
     pub bright_red: String,
+    #[allow(dead_code)]
     pub bright_green: String,
+    #[allow(dead_code)]
     pub bright_yellow: String,
+    #[allow(dead_code)]
     pub bright_blue: String,
+    #[allow(dead_code)]
     pub bright_magenta: String,
+    #[allow(dead_code)]
     pub bright_cyan: String,
+    #[allow(dead_code)]
     pub bright_white: String,
 }
 
+/// Keybinding configuration (future custom keybinding loading)
 #[derive(Debug, Clone)]
 pub struct KeyBindings {
+    #[allow(dead_code)]
     pub new_tab: String,
+    #[allow(dead_code)]
     pub close_tab: String,
+    #[allow(dead_code)]
     pub next_tab: String,
+    #[allow(dead_code)]
     pub prev_tab: String,
+    #[allow(dead_code)]
     pub split_vertical: String,
+    #[allow(dead_code)]
     pub split_horizontal: String,
+    #[allow(dead_code)]
     pub copy: String,
+    #[allow(dead_code)]
     pub paste: String,
+    #[allow(dead_code)]
     pub search: String,
+    #[allow(dead_code)]
     pub clear: String,
 }
 

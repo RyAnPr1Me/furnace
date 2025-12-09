@@ -100,6 +100,7 @@ impl SessionManager {
     ///
     /// # Errors
     /// Returns an error if the session file cannot be deleted
+    #[allow(dead_code)] // Public API for session management
     pub fn delete_session(&self, id: &str) -> Result<()> {
         let session_file = self.sessions_dir.join(format!("{id}.json"));
         fs::remove_file(&session_file).context("Failed to delete session file")?;
@@ -109,6 +110,7 @@ impl SessionManager {
 
     /// Get sessions directory path
     #[must_use]
+    #[allow(dead_code)] // Public API
     pub fn sessions_dir(&self) -> &Path {
         &self.sessions_dir
     }

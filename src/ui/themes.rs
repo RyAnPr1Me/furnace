@@ -318,9 +318,10 @@ impl ThemeManager {
         names
     }
 
-    /// Switch to a different theme by name
+    /// Switch to a different theme by name (API for programmatic theme switching)
     ///
     /// Returns true if the theme was switched successfully, false if the theme was not found
+    #[allow(dead_code)]
     pub fn switch_theme(&mut self, name: &str) -> bool {
         let name_lower = name.to_lowercase();
         if let Some(theme) = self.available_themes.get(&name_lower) {
@@ -373,7 +374,8 @@ impl ThemeManager {
         }
     }
 
-    /// Add a custom theme
+    /// Add a custom theme (API for theme management)
+    #[allow(dead_code)]
     pub fn add_theme(&mut self, theme: Theme) {
         let name = theme.name.to_lowercase();
         self.available_themes.insert(name, theme);
@@ -383,6 +385,7 @@ impl ThemeManager {
     ///
     /// # Errors
     /// Returns an error if the themes directory is not set or the file cannot be written
+    #[allow(dead_code)]
     pub fn save_theme(&self, theme: &Theme) -> Result<()> {
         let themes_dir = self
             .themes_dir

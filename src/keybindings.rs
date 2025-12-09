@@ -6,6 +6,7 @@ use std::collections::HashMap;
 #[derive(Debug, Clone)]
 pub struct KeybindingManager {
     bindings: HashMap<KeyBinding, Action>,
+    #[allow(dead_code)] // Infrastructure for future shell integration features
     shell_integration: ShellIntegration,
 }
 
@@ -63,26 +64,32 @@ pub enum Action {
     Custom(String),
 }
 
-/// Shell integration features
+/// Shell integration features (infrastructure for future OSC 7/133 support)
 #[derive(Debug, Clone)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct ShellIntegration {
     /// OSC sequences support
+    #[allow(dead_code)]
     pub osc_sequences: bool,
 
     /// Shell prompt detection
+    #[allow(dead_code)]
     pub prompt_detection: bool,
 
     /// Directory tracking
+    #[allow(dead_code)]
     pub directory_tracking: bool,
 
     /// Command tracking
+    #[allow(dead_code)]
     pub command_tracking: bool,
 
     /// Current working directory
+    #[allow(dead_code)]
     pub current_dir: Option<String>,
 
     /// Last command
+    #[allow(dead_code)]
     pub last_command: Option<String>,
 }
 
@@ -195,7 +202,8 @@ impl KeybindingManager {
         self.bindings.get(&binding).cloned()
     }
 
-    /// Enable shell integration features
+    /// Enable shell integration features (future OSC parsing support)
+    #[allow(dead_code)]
     pub fn enable_shell_integration(&mut self, feature: ShellIntegrationFeature, enabled: bool) {
         match feature {
             ShellIntegrationFeature::OscSequences => self.shell_integration.osc_sequences = enabled,
@@ -211,25 +219,29 @@ impl KeybindingManager {
         }
     }
 
-    /// Update current directory from shell
+    /// Update current directory from shell (future OSC 7 support)
+    #[allow(dead_code)]
     pub fn update_directory(&mut self, dir: String) {
         self.shell_integration.current_dir = Some(dir);
     }
 
-    /// Update last command from shell
+    /// Update last command from shell (future OSC 133 support)
+    #[allow(dead_code)]
     pub fn update_last_command(&mut self, command: String) {
         self.shell_integration.last_command = Some(command);
     }
 
     /// Get shell integration status
     #[must_use]
+    #[allow(dead_code)]
     pub fn shell_integration(&self) -> &ShellIntegration {
         &self.shell_integration
     }
 }
 
-/// Shell integration features
+/// Shell integration features (future API for OSC parsing)
 #[derive(Debug, Clone, Copy)]
+#[allow(dead_code)]
 pub enum ShellIntegrationFeature {
     OscSequences,
     PromptDetection,

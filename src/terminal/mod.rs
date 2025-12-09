@@ -104,6 +104,7 @@ pub struct Terminal {
     show_resources: bool,
     keybindings: KeybindingManager,
     session_manager: Option<SessionManager>,
+    #[allow(dead_code)] // Available for ANSI color customization
     color_palette: TrueColorPalette,
     // Theme manager for dynamic theme switching
     theme_manager: Option<ThemeManager>,
