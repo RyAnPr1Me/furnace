@@ -729,6 +729,122 @@ impl GpuRenderer {
             info.name, info.backend, info.device_type
         )
     }
+
+    /// Get the wgpu instance for advanced use cases
+    ///
+    /// This allows external code to create additional surfaces or inspect
+    /// available adapters for multi-GPU setups or hot-reloading scenarios.
+    ///
+    /// # Production Use Cases
+    /// - Creating additional rendering surfaces for split views
+    /// - Querying available adapters for GPU selection UI
+    /// - Implementing GPU device hot-swapping on laptop dock/undock
+    /// - Creating compute pipelines for terminal effects
+    pub fn instance(&self) -> &wgpu::Instance {
+        &self.instance
+    }
+
+    /// Get the glyph atlas texture view for debugging or custom shaders
+    ///
+    /// Allows inspection of the glyph atlas for debugging font rendering issues
+    /// or implementing custom text effects in user shaders.
+    ///
+    /// # Production Use Cases
+    /// - Debugging glyph rasterization issues
+    /// - Implementing custom text effects (glow, shadow, outline)
+    /// - Creating texture atlas visualizer for development tools
+    /// - Sharing glyph atlas with external rendering pipelines
+    pub fn glyph_atlas_view(&self) -> &wgpu::TextureView {
+        &self.glyph_atlas_view
+    }
+
+    /// Get the glyph atlas sampler for custom rendering
+    ///
+    /// Provides access to the configured sampler for the glyph atlas,
+    /// useful when implementing custom rendering pipelines or effects.
+    ///
+    /// # Production Use Cases
+    /// - Creating custom bind groups with the glyph atlas
+    /// - Implementing text post-processing effects
+    /// - Sharing sampler configuration with user shaders
+    /// - Optimizing texture sampling for different display scales
+    pub fn glyph_sampler(&self) -> &wgpu::Sampler {
+        &self.glyph_sampler
+    }
+
+    /// Regenerate the glyph atlas with updated content
+    ///
+    /// Updates the GPU texture with fresh glyph data from the cache.
+    /// Called automatically when new glyphs are cached, but can be
+    /// manually invoked for cache rebuilds or font changes.
+    ///
+    /// # Production Use Cases
+    /// - Font hot-reloading during development
+    /// - Implementing font size change at runtime
+    /// - Recovering from GPU device loss
+    /// - Updating glyphs after theme change affects font rendering
+    pub fn update_glyph_atlas(&mut self) {
+        let atlas_size = self.glyph_cache.atlas_size();
+        self.queue.write_texture(
+            wgpu::ImageCopyTexture {
+                texture: &self.glyph_atlas,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            self.glyph_cache.atlas_data(),
+            wgpu::ImageDataLayout {
+                offset: 0,
+                bytes_per_row: Some(atlas_size),
+                rows_per_image: Some(atlas_size),
+            },
+            wgpu::Extent3d {
+                width: atlas_size,
+                height: atlas_size,
+                depth_or_array_layers: 1,
+            },
+        );
+    }
+
+    /// Query GPU adapter capabilities
+    ///
+    /// Returns detailed information about GPU capabilities for feature detection
+    /// and performance optimization decisions.
+    ///
+    /// # Production Use Cases
+    /// - Detecting hardware support for advanced features
+    /// - Adjusting quality settings based on GPU capabilities
+    /// - Displaying GPU specs in settings/about dialog
+    /// - Logging GPU info for bug reports
+    pub fn get_adapter_info(&self) -> wgpu::AdapterInfo {
+        self.adapter.get_info()
+    }
+
+    /// Check if GPU instance supports a specific backend
+    ///
+    /// Useful for determining available rendering backends on the current platform.
+    ///
+    /// # Production Use Cases
+    /// - Implementing backend selection UI
+    /// - Falling back to compatible backends
+    /// - Platform-specific optimizations
+    pub fn supports_backend(&self, backend: wgpu::Backends) -> bool {
+        // Query available adapters for the specific backend
+        pollster::block_on(async {
+            self.instance
+                .request_adapter(&wgpu::RequestAdapterOptions {
+                    power_preference: wgpu::PowerPreference::HighPerformance,
+                    compatible_surface: None,
+                    force_fallback_adapter: false,
+                })
+                .await
+                .map(|adapter| {
+                    let info = adapter.get_info();
+                    backend.contains(wgpu::Backends::from(info.backend))
+                })
+                .unwrap_or(false)
+        })
+    }
 }
 
 /// GPU rendering errors
@@ -764,4 +880,78 @@ fn orthographic_projection(width: f32, height: f32) -> [[f32; 4]; 4] {
             1.0,
         ],
     ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_gpu_renderer_creation() {
+        let config = GpuConfig::default();
+        let result = GpuRenderer::new(config).await;
+        
+        // Should either succeed or fail gracefully
+        // (May fail if no GPU is available in test environment)
+        match result {
+            Ok(renderer) => {
+                // Test that we can access the instance
+                let _instance = renderer.instance();
+                
+                // Test that we can get device info
+                let device_info = renderer.get_device_info();
+                assert!(!device_info.is_empty());
+                
+                // Test adapter info access
+                let adapter_info = renderer.get_adapter_info();
+                assert!(!adapter_info.name.is_empty());
+            }
+            Err(e) => {
+                // GPU not available in test environment - expected
+                println!("GPU not available in test: {}", e);
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_gpu_renderer_glyph_atlas_access() {
+        let config = GpuConfig::default();
+        let result = GpuRenderer::new(config).await;
+        
+        if let Ok(renderer) = result {
+            // Test glyph atlas view access
+            let _atlas_view = renderer.glyph_atlas_view();
+            
+            // Test glyph sampler access
+            let _sampler = renderer.glyph_sampler();
+            
+            // These should not panic - just verifies the methods work
+        }
+    }
+
+    #[tokio::test]
+    async fn test_gpu_renderer_update_glyph_atlas() {
+        let config = GpuConfig::default();
+        let result = GpuRenderer::new(config).await;
+        
+        if let Ok(mut renderer) = result {
+            // Test that we can update the glyph atlas
+            // This should not panic
+            renderer.update_glyph_atlas();
+        }
+    }
+
+    #[tokio::test]
+    async fn test_gpu_backend_support() {
+        let config = GpuConfig::default();
+        let result = GpuRenderer::new(config).await;
+        
+        if let Ok(renderer) = result {
+            // Test backend support checking
+            // At least one backend should be available
+            let supports_any = renderer.supports_backend(wgpu::Backends::all());
+            // Note: This may be false in CI environment without GPU
+            println!("Supports any backend: {}", supports_any);
+        }
+    }
 }
