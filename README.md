@@ -8,6 +8,7 @@ Furnace is a cross-platform terminal emulator written in Rust. It combines Cross
 - Lua configuration (`~/.furnace/config.lua` by default or `--config`) with lifecycle hooks (`on_startup`, `on_shutdown`, `on_key_press`, `on_command_start`, `on_command_end`, `on_output`, `on_bell`, `on_title_change`), output filters, custom keybindings, and custom widgets.
 - 24-bit color pipeline with ANSI parsing and themeable palettes.
 - Tabs for multiple sessions and optional split panes when `terminal.enable_split_pane` is enabled.
+- Optional GPU rendering via `wgpu` when built with `--features gpu` and `terminal.hardware_acceleration` enabled (falls back to CPU if unavailable).
 - Optional modules (disabled by default):
   - Resource monitor (Ctrl+R) powered by `sysinfo`.
   - Autocomplete suggestions sourced from history and common commands.
@@ -19,7 +20,6 @@ Furnace is a cross-platform terminal emulator written in Rust. It combines Cross
 
 ### Not yet implemented
 
-- GPU rendering (the `hardware_acceleration` flag is reserved for future work)
 - Command palette (keybinding placeholders are intentionally omitted)
 
 ## Installation
@@ -68,7 +68,7 @@ config = {
         font_size = 12,
         cursor_style = "block",
         scrollback_lines = 10000,
-        hardware_acceleration = false -- reserved for future GPU rendering
+        hardware_acceleration = false -- enable GPU rendering when built with `--features gpu` (falls back to CPU otherwise)
     },
 
     features = {
