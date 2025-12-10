@@ -190,6 +190,32 @@ impl TrueColorPalette {
         }
     }
 
+    /// Create palette from theme config's AnsiColors
+    ///
+    /// # Errors
+    /// Returns an error if any color string is not a valid hex color
+    pub fn from_ansi_colors(colors: &crate::config::AnsiColors) -> Result<Self> {
+        Ok(Self {
+            black: TrueColor::from_hex(&colors.black)?,
+            red: TrueColor::from_hex(&colors.red)?,
+            green: TrueColor::from_hex(&colors.green)?,
+            yellow: TrueColor::from_hex(&colors.yellow)?,
+            blue: TrueColor::from_hex(&colors.blue)?,
+            magenta: TrueColor::from_hex(&colors.magenta)?,
+            cyan: TrueColor::from_hex(&colors.cyan)?,
+            white: TrueColor::from_hex(&colors.white)?,
+            bright_black: TrueColor::from_hex(&colors.bright_black)?,
+            bright_red: TrueColor::from_hex(&colors.bright_red)?,
+            bright_green: TrueColor::from_hex(&colors.bright_green)?,
+            bright_yellow: TrueColor::from_hex(&colors.bright_yellow)?,
+            bright_blue: TrueColor::from_hex(&colors.bright_blue)?,
+            bright_magenta: TrueColor::from_hex(&colors.bright_magenta)?,
+            bright_cyan: TrueColor::from_hex(&colors.bright_cyan)?,
+            bright_white: TrueColor::from_hex(&colors.bright_white)?,
+            extended: Self::generate_256_palette(),
+        })
+    }
+
     /// Generate 256 color palette (for xterm compatibility)
     fn generate_256_palette() -> Vec<TrueColor> {
         let mut palette = Vec::with_capacity(256);

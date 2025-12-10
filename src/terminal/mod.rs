@@ -231,6 +231,13 @@ impl Terminal {
         
         // Store hooks for later execution
         let on_startup_hook = config.hooks.on_startup.clone();
+        
+        // Create color palette from theme colors if available, otherwise use default
+        let color_palette = TrueColorPalette::from_ansi_colors(&config.theme.colors)
+            .unwrap_or_else(|e| {
+                warn!("Failed to parse theme colors, using default: {}", e);
+                TrueColorPalette::default_dark()
+            });
 
         let terminal = Self {
             config,
@@ -251,7 +258,7 @@ impl Terminal {
             show_resources: false,
             keybindings: KeybindingManager::new(),
             session_manager,
-            color_palette: TrueColorPalette::default_dark(),
+            color_palette,
             theme_manager,
             dirty: true,
             read_buffer: vec![0u8; READ_BUFFER_SIZE],
