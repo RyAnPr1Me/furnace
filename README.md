@@ -4,6 +4,8 @@ Furnace is a cross-platform terminal emulator written in Rust. It combines Cross
 
 ## Features
 
+> GPU rendering and a command palette are not implemented yet; the `hardware_acceleration` flag and related fields are reserved for future GPU work.
+
 - Cross-platform PTY shell sessions (Windows, Linux, macOS) with async read/write.
 - Lua configuration (`~/.furnace/config.lua` by default or `--config`) with lifecycle hooks (`on_startup`, `on_shutdown`, `on_key_press`, `on_command_start`, `on_command_end`, `on_output`, `on_bell`, `on_title_change`), output filters, custom keybindings, and custom widgets.
 - 24-bit color pipeline with ANSI parsing and themeable palettes.
@@ -12,12 +14,10 @@ Furnace is a cross-platform terminal emulator written in Rust. It combines Cross
   - Resource monitor (Ctrl+R) powered by `sysinfo`.
   - Autocomplete suggestions sourced from history and common commands.
   - Progress bar for long-running commands.
-  - Session manager to save/restore sessions.
+  - Session manager to save/restore sessions (default bindings: Ctrl+S / Ctrl+Shift+L).
   - Theme manager to cycle bundled themes.
 - Clipboard copy/paste, search mode, configurable cursor styles and font sizing metadata, and scrollback/history limits.
 - Background color overlays and cursor trail effects from the theme configuration.
-
-> Note: GPU rendering and a command palette are not implemented yet; the `hardware_acceleration` flag and related fields are reserved for future GPU work.
 
 ## Installation
 
@@ -52,7 +52,7 @@ Furnace looks for `~/.furnace/config.lua` by default. All optional UI modules ar
 ```lua
 config = {
     shell = {
-        default_shell = "/bin/bash",
+        default_shell = "/bin/bash", -- use \"pwsh.exe\" on Windows if preferred
         working_dir = nil,
         env = {}
     },
@@ -104,17 +104,19 @@ config = {
 
 ### Hooks and scripting
 
-Lua hooks let you extend Furnace without plugins. Example output filter and notification:
+Lua hooks let you extend Furnace without plugins. Example output filter and notification inside your config table:
 
 ```lua
-hooks = {
-    on_command_end = [[
-        if exit_code ~= 0 then
-            print("Command failed: " .. command)
-        end
-    ]],
-    output_filters = {
-        "function(text) return text:gsub('todo', 'TODO') end"
+config = {
+    hooks = {
+        on_command_end = [[
+            if exit_code ~= 0 then
+                print("Command failed: " .. command)
+            end
+        ]],
+        output_filters = {
+            "function(text) return text:gsub('todo', 'TODO') end"
+        }
     }
 }
 ```
