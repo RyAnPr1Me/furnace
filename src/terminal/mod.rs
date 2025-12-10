@@ -1404,6 +1404,11 @@ impl Terminal {
         if self.show_resources && self.resource_monitor.is_some() {
             self.render_resource_monitor(f, resource_area);
         }
+
+        // Render custom Lua widgets
+        if !self.config.hooks.custom_widgets.is_empty() {
+            self.render_custom_widgets(f);
+        }
     }
 
     /// Bug #3: Render terminal output with zero-copy caching
@@ -1815,6 +1820,56 @@ impl Terminal {
         }
         
         Ok(())
+    }
+
+    /// Render custom Lua widgets
+    fn render_custom_widgets(&self, f: &mut ratatui::Frame) {
+        if let Some(ref executor) = self.hooks_executor {
+            for widget_code in &self.config.hooks.custom_widgets {
+                match executor.execute_widget(widget_code) {
+                    Ok(widget) => {
+                        // Create area for widget
+                        let area = Rect {
+                            x: widget.x.min(f.size().width.saturating_sub(1)),
+                            y: widget.y.min(f.size().height.saturating_sub(1)),
+                            width: widget.width.min(f.size().width.saturating_sub(widget.x)),
+                            height: widget.height.min(f.size().height.saturating_sub(widget.y)),
+                        };
+
+                        // Build style
+                        let mut style = Style::default();
+                        if let Some(fg) = &widget.fg_color {
+                            if let Ok(color) = crate::colors::TrueColor::from_hex(fg) {
+                                style = style.fg(Color::Rgb(color.r, color.g, color.b));
+                            }
+                        }
+                        if let Some(bg) = &widget.bg_color {
+                            if let Ok(color) = crate::colors::TrueColor::from_hex(bg) {
+                                style = style.bg(Color::Rgb(color.r, color.g, color.b));
+                            }
+                        }
+                        if widget.bold {
+                            style = style.add_modifier(Modifier::BOLD);
+                        }
+
+                        // Create text from content
+                        let lines: Vec<Line> = widget.content
+                            .iter()
+                            .map(|line| Line::from(Span::styled(line.clone(), style)))
+                            .collect();
+
+                        // Render widget
+                        let paragraph = Paragraph::new(lines)
+                            .style(style)
+                            .block(Block::default().borders(Borders::NONE));
+                        f.render_widget(paragraph, area);
+                    }
+                    Err(e) => {
+                        warn!("Failed to execute custom widget: {}", e);
+                    }
+                }
+            }
+        }
     }
     
     /// Toggle search mode

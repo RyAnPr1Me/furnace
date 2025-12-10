@@ -188,6 +188,85 @@ impl HooksExecutor {
         debug!("Custom keybinding executed successfully");
         Ok(())
     }
+
+    /// Execute custom widget Lua code and return widget specification
+    ///
+    /// Widget Lua code should set a global `widget` table with:
+    /// - x, y: position
+    /// - width, height: dimensions
+    /// - content: array of strings (lines)
+    /// - style: optional style (fg_color, bg_color, bold, etc.)
+    ///
+    /// # Example Lua Widget
+    /// ```lua
+    /// widget = {
+    ///     x = 0,
+    ///     y = 0,
+    ///     width = 20,
+    ///     height = 3,
+    ///     content = {"Line 1", "Line 2", "Line 3"},
+    ///     fg_color = "#00FF00",
+    ///     bg_color = "#000000"
+    /// }
+    /// ```
+    pub fn execute_widget(&self, lua_code: &str) -> Result<LuaWidget> {
+        if lua_code.trim().is_empty() {
+            return Err(anyhow::anyhow!("Empty widget code"));
+        }
+
+        // Execute Lua code
+        self.lua.load(lua_code).exec().map_err(|e| {
+            warn!("Widget execution failed: {}", e);
+            anyhow::anyhow!("Widget error: {}", e)
+        })?;
+
+        // Extract widget definition from globals
+        let globals = self.lua.globals();
+        let widget_table: mlua::Table = globals.get("widget")
+            .map_err(|_| anyhow::anyhow!("Widget code must set 'widget' global table"))?;
+
+        // Extract position and dimensions
+        let x = widget_table.get::<_, u16>("x")?;
+        let y = widget_table.get::<_, u16>("y")?;
+        let width = widget_table.get::<_, u16>("width")?;
+        let height = widget_table.get::<_, u16>("height")?;
+
+        // Extract content
+        let content_table: mlua::Table = widget_table.get("content")?;
+        let mut content = Vec::new();
+        for value in content_table.sequence_values::<String>() {
+            content.push(value?);
+        }
+
+        // Extract optional style
+        let fg_color = widget_table.get::<_, Option<String>>("fg_color")?;
+        let bg_color = widget_table.get::<_, Option<String>>("bg_color")?;
+        let bold = widget_table.get::<_, Option<bool>>("bold")?.unwrap_or(false);
+
+        Ok(LuaWidget {
+            x,
+            y,
+            width,
+            height,
+            content,
+            fg_color,
+            bg_color,
+            bold,
+        })
+    }
+}
+
+/// Widget specification from Lua
+#[derive(Debug, Clone)]
+pub struct LuaWidget {
+    pub x: u16,
+    pub y: u16,
+    pub width: u16,
+    pub height: u16,
+    pub content: Vec<String>,
+    pub fg_color: Option<String>,
+    pub bg_color: Option<String>,
+    pub bold: bool,
 }
 
 impl Default for HooksExecutor {
