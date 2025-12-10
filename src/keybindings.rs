@@ -61,6 +61,9 @@ pub enum Action {
 
     // Custom
     Custom(String),
+    
+    // Lua execution
+    ExecuteLua(String),
 }
 
 /// Shell integration features (infrastructure for future OSC 7/133 support)

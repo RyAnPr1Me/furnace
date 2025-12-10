@@ -235,6 +235,9 @@ impl Terminal {
         // Clone keybindings config before moving config
         let kb_config = config.keybindings.clone();
         
+        // Clone custom Lua keybindings before moving config
+        let custom_lua_keybindings = config.hooks.custom_keybindings.clone();
+        
         // Create color palette from theme colors if available, otherwise use default
         let color_palette = TrueColorPalette::from_ansi_colors(&config.theme.colors)
             .unwrap_or_else(|e| {
@@ -293,6 +296,12 @@ impl Terminal {
                 if !kb_config.clear.is_empty() {
                     let _ = kb.add_binding_from_string(&kb_config.clear, crate::keybindings::Action::Clear);
                 }
+                
+                // Register custom Lua keybindings from hooks config
+                for (key_combo, lua_code) in &custom_lua_keybindings {
+                    let _ = kb.add_binding_from_string(key_combo, crate::keybindings::Action::ExecuteLua(lua_code.clone()));
+                }
+                
                 kb
             },
             session_manager,
@@ -938,6 +947,25 @@ impl Terminal {
                             *len = 0;
                         }
                         self.dirty = true;
+                        return Ok(());
+                    }
+                }
+                Action::ExecuteLua(ref lua_code) => {
+                    // Execute custom Lua keybinding
+                    if let Some(ref executor) = self.hooks_executor {
+                        let cwd = self.keybindings.shell_integration().current_dir
+                            .as_deref()
+                            .unwrap_or("");
+                        let last_cmd = self.keybindings.shell_integration().last_command
+                            .as_deref()
+                            .unwrap_or("");
+                        
+                        if let Err(e) = executor.execute_custom_keybinding(lua_code, cwd, last_cmd) {
+                            warn!("Custom keybinding execution failed: {}", e);
+                            self.show_notification(format!("Keybinding error: {}", e));
+                        } else {
+                            debug!("Custom Lua keybinding executed successfully");
+                        }
                         return Ok(());
                     }
                 }
