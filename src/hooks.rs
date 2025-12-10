@@ -102,6 +102,171 @@ impl HooksExecutor {
     pub fn on_title_change(&self, script: &str, title: &str) -> Result<()> {
         self.execute(script, &format!("title_change:{}", title))
     }
+
+    /// Apply output filters to transform output text
+    ///
+    /// Filters are Lua functions that transform string input to string output.
+    /// Each filter in the pipeline receives the output of the previous filter.
+    ///
+    /// # Arguments
+    /// * `output` - Original output text
+    /// * `filters` - Vector of Lua code strings, each should set `output` global
+    ///
+    /// # Returns
+    /// Transformed output string, or original on error
+    ///
+    /// # Example Lua Filter
+    /// ```lua
+    /// -- Filter that converts to uppercase
+    /// output = string.upper(input)
+    /// ```
+    pub fn apply_output_filters(&self, output: &str, filters: &[String]) -> Result<String> {
+        if filters.is_empty() {
+            return Ok(output.to_string());
+        }
+
+        let mut result = output.to_string();
+        
+        for (idx, filter) in filters.iter().enumerate() {
+            if filter.trim().is_empty() {
+                continue;
+            }
+
+            // Set input in Lua globals
+            let globals = self.lua.globals();
+            globals.set("input", result.clone())?;
+            globals.set("output", result.clone())?; // Default: output = input
+            
+            // Execute the filter
+            match self.lua.load(filter).exec() {
+                Ok(()) => {
+                    // Get the transformed output
+                    match globals.get::<_, String>("output") {
+                        Ok(transformed) => {
+                            result = transformed;
+                            debug!("Output filter {} applied successfully", idx);
+                        }
+                        Err(e) => {
+                            warn!("Output filter {} didn't set output variable: {}", idx, e);
+                            // Keep previous result
+                        }
+                    }
+                }
+                Err(e) => {
+                    warn!("Output filter {} execution failed: {}", idx, e);
+                    // Continue with current result, don't break the chain
+                }
+            }
+        }
+        
+        Ok(result)
+    }
+
+    /// Execute custom keybinding Lua function
+    ///
+    /// # Arguments
+    /// * `lua_code` - Lua function code to execute
+    /// * `context` - Context data (cwd, last_command, etc.)
+    pub fn execute_custom_keybinding(&self, lua_code: &str, cwd: &str, last_command: &str) -> Result<()> {
+        if lua_code.trim().is_empty() {
+            return Ok(());
+        }
+
+        // Set up context
+        let globals = self.lua.globals();
+        let ctx_table = self.lua.create_table()?;
+        ctx_table.set("cwd", cwd)?;
+        ctx_table.set("last_command", last_command)?;
+        globals.set("context", ctx_table)?;
+        
+        // Execute Lua code
+        self.lua.load(lua_code).exec().map_err(|e| {
+            warn!("Custom keybinding execution failed: {}", e);
+            anyhow::anyhow!("Keybinding error: {}", e)
+        })?;
+
+        debug!("Custom keybinding executed successfully");
+        Ok(())
+    }
+
+    /// Execute custom widget Lua code and return widget specification
+    ///
+    /// Widget Lua code should set a global `widget` table with:
+    /// - x, y: position
+    /// - width, height: dimensions
+    /// - content: array of strings (lines)
+    /// - style: optional style (fg_color, bg_color, bold, etc.)
+    ///
+    /// # Example Lua Widget
+    /// ```lua
+    /// widget = {
+    ///     x = 0,
+    ///     y = 0,
+    ///     width = 20,
+    ///     height = 3,
+    ///     content = {"Line 1", "Line 2", "Line 3"},
+    ///     fg_color = "#00FF00",
+    ///     bg_color = "#000000"
+    /// }
+    /// ```
+    pub fn execute_widget(&self, lua_code: &str) -> Result<LuaWidget> {
+        if lua_code.trim().is_empty() {
+            return Err(anyhow::anyhow!("Empty widget code"));
+        }
+
+        // Execute Lua code
+        self.lua.load(lua_code).exec().map_err(|e| {
+            warn!("Widget execution failed: {}", e);
+            anyhow::anyhow!("Widget error: {}", e)
+        })?;
+
+        // Extract widget definition from globals
+        let globals = self.lua.globals();
+        let widget_table: mlua::Table = globals.get("widget")
+            .map_err(|_| anyhow::anyhow!("Widget code must set 'widget' global table"))?;
+
+        // Extract position and dimensions
+        let x = widget_table.get::<_, u16>("x")?;
+        let y = widget_table.get::<_, u16>("y")?;
+        let width = widget_table.get::<_, u16>("width")?;
+        let height = widget_table.get::<_, u16>("height")?;
+
+        // Extract content
+        let content_table: mlua::Table = widget_table.get("content")?;
+        let mut content = Vec::new();
+        for value in content_table.sequence_values::<String>() {
+            content.push(value?);
+        }
+
+        // Extract optional style
+        let fg_color = widget_table.get::<_, Option<String>>("fg_color")?;
+        let bg_color = widget_table.get::<_, Option<String>>("bg_color")?;
+        let bold = widget_table.get::<_, Option<bool>>("bold")?.unwrap_or(false);
+
+        Ok(LuaWidget {
+            x,
+            y,
+            width,
+            height,
+            content,
+            fg_color,
+            bg_color,
+            bold,
+        })
+    }
+}
+
+/// Widget specification from Lua
+#[derive(Debug, Clone)]
+pub struct LuaWidget {
+    pub x: u16,
+    pub y: u16,
+    pub width: u16,
+    pub height: u16,
+    pub content: Vec<String>,
+    pub fg_color: Option<String>,
+    pub bg_color: Option<String>,
+    pub bold: bool,
 }
 
 impl Default for HooksExecutor {
@@ -147,5 +312,41 @@ mod tests {
         let script = "print('Starting up!')";
         let result = executor.on_startup(script);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_output_filter_single() {
+        let executor = HooksExecutor::new().unwrap();
+        let filters = vec!["output = string.upper(input)".to_string()];
+        let result = executor.apply_output_filters("hello world", &filters);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "HELLO WORLD");
+    }
+
+    #[test]
+    fn test_output_filter_pipeline() {
+        let executor = HooksExecutor::new().unwrap();
+        let filters = vec![
+            "output = string.upper(input)".to_string(),
+            "output = string.gsub(output, 'WORLD', 'LUA')".to_string(),
+        ];
+        let result = executor.apply_output_filters("hello world", &filters);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "HELLO LUA");
+    }
+
+    #[test]
+    fn test_output_filter_error_handling() {
+        let executor = HooksExecutor::new().unwrap();
+        let filters = vec![
+            "output = string.upper(input)".to_string(),
+            "this is invalid lua code!!!".to_string(), // This will fail
+            "output = output .. '!'".to_string(), // This should still work with previous output
+        ];
+        let result = executor.apply_output_filters("hello", &filters);
+        assert!(result.is_ok());
+        // Should have uppercased from first filter, ignored invalid filter, added ! from third
+        let output = result.unwrap();
+        assert!(output.contains("HELLO"));
     }
 }

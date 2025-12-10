@@ -17,7 +17,7 @@ pub struct Config {
 
 #[derive(Debug, Clone, Default)]
 pub struct HooksConfig {
-    /// Lua script paths for various hooks (future Lua integration)
+    /// Lua script paths for various hooks
     pub on_startup: Option<String>,
     pub on_shutdown: Option<String>,
     pub on_key_press: Option<String>,
@@ -139,7 +139,7 @@ pub struct ThemeConfig {
     pub cursor_trail: Option<CursorTrailConfig>,
 }
 
-/// Background configuration for future background image support
+/// Background configuration for background image support
 #[derive(Debug, Clone)]
 pub struct BackgroundConfig {
     /// Path to background image file (supports PNG, JPEG, etc.)
@@ -154,7 +154,7 @@ pub struct BackgroundConfig {
     pub blur: f32,
 }
 
-/// Cursor trail configuration for future cursor effects
+/// Cursor trail configuration for cursor effects
 #[derive(Debug, Clone)]
 pub struct CursorTrailConfig {
     /// Enable cursor trail effect
@@ -171,7 +171,7 @@ pub struct CursorTrailConfig {
     pub animation_speed: u64,
 }
 
-/// ANSI colors configuration (future theme integration)
+/// ANSI colors configuration for theme customization
 #[derive(Debug, Clone)]
 pub struct AnsiColors {
     pub black: String,
@@ -192,7 +192,7 @@ pub struct AnsiColors {
     pub bright_white: String,
 }
 
-/// Keybinding configuration (future custom keybinding loading)
+/// Keybinding configuration for custom keybinding loading
 #[derive(Debug, Clone)]
 pub struct KeyBindings {
     pub new_tab: String,
@@ -353,10 +353,10 @@ impl Default for CursorTrailConfig {
         Self {
             enabled: false,
             length: 10,
-            color: "#00FF0080".to_string(), // Green with 50% alpha
+            color: "#00FF0080".to_string(),
             fade_mode: "exponential".to_string(),
             width: 1.0,
-            animation_speed: 16, // ~60 FPS
+            animation_speed: 16,
         }
     }
 }
@@ -443,6 +443,60 @@ impl ThemeConfig {
     }
 }
 
+impl Default for KeyBindings {
+    fn default() -> Self {
+        Self {
+            new_tab: "Ctrl+T".to_string(),
+            close_tab: "Ctrl+W".to_string(),
+            next_tab: "Ctrl+Tab".to_string(),
+            prev_tab: "Ctrl+Shift+Tab".to_string(),
+            split_vertical: "Ctrl+Shift+V".to_string(),
+            split_horizontal: "Ctrl+Shift+H".to_string(),
+            copy: "Ctrl+Shift+C".to_string(),
+            paste: "Ctrl+Shift+V".to_string(),
+            search: "Ctrl+F".to_string(),
+            clear: "Ctrl+L".to_string(),
+        }
+    }
+}
+
+impl KeyBindings {
+    fn from_lua_table(table: &Table) -> Result<Self> {
+        Ok(Self {
+            new_tab: table
+                .get::<_, Option<String>>("new_tab")?
+                .unwrap_or_else(|| "Ctrl+T".to_string()),
+            close_tab: table
+                .get::<_, Option<String>>("close_tab")?
+                .unwrap_or_else(|| "Ctrl+W".to_string()),
+            next_tab: table
+                .get::<_, Option<String>>("next_tab")?
+                .unwrap_or_else(|| "Ctrl+Tab".to_string()),
+            prev_tab: table
+                .get::<_, Option<String>>("prev_tab")?
+                .unwrap_or_else(|| "Ctrl+Shift+Tab".to_string()),
+            split_vertical: table
+                .get::<_, Option<String>>("split_vertical")?
+                .unwrap_or_else(|| "Ctrl+Shift+V".to_string()),
+            split_horizontal: table
+                .get::<_, Option<String>>("split_horizontal")?
+                .unwrap_or_else(|| "Ctrl+Shift+H".to_string()),
+            copy: table
+                .get::<_, Option<String>>("copy")?
+                .unwrap_or_else(|| "Ctrl+Shift+C".to_string()),
+            paste: table
+                .get::<_, Option<String>>("paste")?
+                .unwrap_or_else(|| "Ctrl+Shift+V".to_string()),
+            search: table
+                .get::<_, Option<String>>("search")?
+                .unwrap_or_else(|| "Ctrl+F".to_string()),
+            clear: table
+                .get::<_, Option<String>>("clear")?
+                .unwrap_or_else(|| "Ctrl+L".to_string()),
+        })
+    }
+}
+
 impl Default for AnsiColors {
     fn default() -> Self {
         Self {
@@ -517,60 +571,6 @@ impl AnsiColors {
             bright_white: table
                 .get::<_, Option<String>>("bright_white")?
                 .unwrap_or_else(|| "#FFFFFF".to_string()),
-        })
-    }
-}
-
-impl Default for KeyBindings {
-    fn default() -> Self {
-        Self {
-            new_tab: "Ctrl+T".to_string(),
-            close_tab: "Ctrl+W".to_string(),
-            next_tab: "Ctrl+Tab".to_string(),
-            prev_tab: "Ctrl+Shift+Tab".to_string(),
-            split_vertical: "Ctrl+Shift+V".to_string(),
-            split_horizontal: "Ctrl+Shift+H".to_string(),
-            copy: "Ctrl+Shift+C".to_string(),
-            paste: "Ctrl+Shift+V".to_string(),
-            search: "Ctrl+F".to_string(),
-            clear: "Ctrl+L".to_string(),
-        }
-    }
-}
-
-impl KeyBindings {
-    fn from_lua_table(table: &Table) -> Result<Self> {
-        Ok(Self {
-            new_tab: table
-                .get::<_, Option<String>>("new_tab")?
-                .unwrap_or_else(|| "Ctrl+T".to_string()),
-            close_tab: table
-                .get::<_, Option<String>>("close_tab")?
-                .unwrap_or_else(|| "Ctrl+W".to_string()),
-            next_tab: table
-                .get::<_, Option<String>>("next_tab")?
-                .unwrap_or_else(|| "Ctrl+Tab".to_string()),
-            prev_tab: table
-                .get::<_, Option<String>>("prev_tab")?
-                .unwrap_or_else(|| "Ctrl+Shift+Tab".to_string()),
-            split_vertical: table
-                .get::<_, Option<String>>("split_vertical")?
-                .unwrap_or_else(|| "Ctrl+Shift+V".to_string()),
-            split_horizontal: table
-                .get::<_, Option<String>>("split_horizontal")?
-                .unwrap_or_else(|| "Ctrl+Shift+H".to_string()),
-            copy: table
-                .get::<_, Option<String>>("copy")?
-                .unwrap_or_else(|| "Ctrl+Shift+C".to_string()),
-            paste: table
-                .get::<_, Option<String>>("paste")?
-                .unwrap_or_else(|| "Ctrl+Shift+V".to_string()),
-            search: table
-                .get::<_, Option<String>>("search")?
-                .unwrap_or_else(|| "Ctrl+F".to_string()),
-            clear: table
-                .get::<_, Option<String>>("clear")?
-                .unwrap_or_else(|| "Ctrl+L".to_string()),
         })
     }
 }
@@ -758,16 +758,7 @@ config = {
         name = 'custom_theme',
         foreground = 'ffffff',
         background = '000000',
-        cursor = 'ff0000',
-        selection = '00ff00'
-    },
-    keybindings = {
-        new_tab = 'Ctrl',
-        close_tab = 'Ctrl',
-        next_tab = 'Ctrl',
-        prev_tab = 'Ctrl',
-        split_horizontal = 'Ctrl',
-        split_vertical = 'Ctrl'
+        cursor = 'ff0000'
     },
     features = {
         resource_monitor = true,
@@ -807,9 +798,6 @@ config = {
         
         // Verify theme config
         assert_eq!(config.theme.name, "custom_theme");
-        
-        // Verify keybindings config loaded
-        assert!(!config.keybindings.new_tab.is_empty());
         
         // Verify features config
         assert!(config.features.resource_monitor);

@@ -29,6 +29,7 @@ use ratatui::{
 };
 use std::borrow::Cow;
 use std::io;
+use std::time::Instant;
 use tokio::time::{interval, Duration};
 use tracing::{debug, info, warn};
 use unicode_width::UnicodeWidthStr;
@@ -151,6 +152,16 @@ pub struct Terminal {
     split_ratio: f32,
     // Lua hooks executor for custom functionality
     hooks_executor: Option<HooksExecutor>,
+    // Text selection state
+    selection_start: Option<(u16, u16)>, // (col, row)
+    selection_end: Option<(u16, u16)>,
+    selection_active: bool,
+    // Background image data (loaded once)
+    background_image: Option<Vec<u8>>, // Raw image data
+    background_image_width: u16,
+    background_image_height: u16,
+    // Cursor trail state
+    cursor_trail_positions: Vec<(u16, u16, std::time::Instant)>, // (col, row, timestamp)
 }
 
 /// Split pane orientation
@@ -231,8 +242,21 @@ impl Terminal {
         
         // Store hooks for later execution
         let on_startup_hook = config.hooks.on_startup.clone();
+        
+        // Clone keybindings config before moving config
+        let kb_config = config.keybindings.clone();
+        
+        // Clone custom Lua keybindings before moving config
+        let custom_lua_keybindings = config.hooks.custom_keybindings.clone();
+        
+        // Create color palette from theme colors if available, otherwise use default
+        let color_palette = TrueColorPalette::from_ansi_colors(&config.theme.colors)
+            .unwrap_or_else(|e| {
+                warn!("Failed to parse theme colors, using default: {}", e);
+                TrueColorPalette::default_dark()
+            });
 
-        let terminal = Self {
+        let mut terminal = Self {
             config,
             sessions: Vec::with_capacity(8),
             active_session: 0,
@@ -249,9 +273,50 @@ impl Terminal {
                 None
             },
             show_resources: false,
-            keybindings: KeybindingManager::new(),
+            keybindings: {
+                let mut kb = KeybindingManager::new();
+                // Register custom keybindings from config
+                // These override the defaults loaded by KeybindingManager::new()
+                if !kb_config.new_tab.is_empty() {
+                    let _ = kb.add_binding_from_string(&kb_config.new_tab, crate::keybindings::Action::NewTab);
+                }
+                if !kb_config.close_tab.is_empty() {
+                    let _ = kb.add_binding_from_string(&kb_config.close_tab, crate::keybindings::Action::CloseTab);
+                }
+                if !kb_config.next_tab.is_empty() {
+                    let _ = kb.add_binding_from_string(&kb_config.next_tab, crate::keybindings::Action::NextTab);
+                }
+                if !kb_config.prev_tab.is_empty() {
+                    let _ = kb.add_binding_from_string(&kb_config.prev_tab, crate::keybindings::Action::PrevTab);
+                }
+                if !kb_config.split_vertical.is_empty() {
+                    let _ = kb.add_binding_from_string(&kb_config.split_vertical, crate::keybindings::Action::SplitVertical);
+                }
+                if !kb_config.split_horizontal.is_empty() {
+                    let _ = kb.add_binding_from_string(&kb_config.split_horizontal, crate::keybindings::Action::SplitHorizontal);
+                }
+                if !kb_config.copy.is_empty() {
+                    let _ = kb.add_binding_from_string(&kb_config.copy, crate::keybindings::Action::Copy);
+                }
+                if !kb_config.paste.is_empty() {
+                    let _ = kb.add_binding_from_string(&kb_config.paste, crate::keybindings::Action::Paste);
+                }
+                if !kb_config.search.is_empty() {
+                    let _ = kb.add_binding_from_string(&kb_config.search, crate::keybindings::Action::Search);
+                }
+                if !kb_config.clear.is_empty() {
+                    let _ = kb.add_binding_from_string(&kb_config.clear, crate::keybindings::Action::Clear);
+                }
+                
+                // Register custom Lua keybindings from hooks config
+                for (key_combo, lua_code) in &custom_lua_keybindings {
+                    let _ = kb.add_binding_from_string(key_combo, crate::keybindings::Action::ExecuteLua(lua_code.clone()));
+                }
+                
+                kb
+            },
             session_manager,
-            color_palette: TrueColorPalette::default_dark(),
+            color_palette,
             theme_manager,
             dirty: true,
             read_buffer: vec![0u8; READ_BUFFER_SIZE],
@@ -281,7 +346,34 @@ impl Terminal {
             split_orientation: SplitOrientation::None,
             split_ratio: 0.5, // Default 50/50 split
             hooks_executor,
+            // Initialize text selection state
+            selection_start: None,
+            selection_end: None,
+            selection_active: false,
+            // Initialize background image state (load if configured)
+            background_image: None,
+            background_image_width: 0,
+            background_image_height: 0,
+            // Initialize cursor trail state
+            cursor_trail_positions: Vec::with_capacity(20), // Pre-allocate for trail
         };
+        
+        // Load background image if configured
+        if let Some(ref bg_config) = terminal.config.theme.background_image {
+            if let Some(ref image_path) = bg_config.image_path {
+                match Self::load_background_image(image_path) {
+                    Ok((data, width, height)) => {
+                        terminal.background_image = Some(data);
+                        terminal.background_image_width = width;
+                        terminal.background_image_height = height;
+                        debug!("Loaded background image: {}x{}", width, height);
+                    }
+                    Err(e) => {
+                        warn!("Failed to load background image: {}", e);
+                    }
+                }
+            }
+        }
         
         // Execute startup hook if configured
         if let (Some(executor), Some(script)) = (&terminal.hooks_executor, on_startup_hook) {
@@ -518,13 +610,6 @@ impl Terminal {
             self.config.theme.cursor
         );
         
-        if self.config.theme.background_image.is_some() {
-            debug!("Background image configured in theme");
-        }
-        if self.config.theme.cursor_trail.is_some() {
-            debug!("Cursor trail effects configured in theme");
-        }
-        
         // Log hooks configuration
         if self.config.hooks.on_startup.is_some() {
             debug!("Lua hooks configured");
@@ -585,14 +670,52 @@ impl Terminal {
                     if let Some(session) = self.sessions.get(self.active_session) {
                         if let Ok(n) = session.read_output(&mut self.read_buffer).await {
                             if n > 0 && self.active_session < self.output_buffers.len() {
-                                self.output_buffers[self.active_session].extend_from_slice(&self.read_buffer[..n]);
+                                // Convert output to String
+                                let mut output_str = String::from_utf8_lossy(&self.read_buffer[..n]).into_owned();
+
+                                // Apply output filters if configured
+                                if !self.config.hooks.output_filters.is_empty() {
+                                    if let Some(ref executor) = self.hooks_executor {
+                                        output_str = executor.apply_output_filters(&output_str, &self.config.hooks.output_filters)
+                                            .unwrap_or_else(|e| {
+                                                warn!("Output filter pipeline failed: {}", e);
+                                                output_str  // Use unfiltered output on error
+                                            });
+                                    }
+                                }
+
+                                // Store the (potentially filtered) output in buffer
+                                self.output_buffers[self.active_session].extend_from_slice(output_str.as_bytes());
                                 self.dirty = true;
+
+                                // Update shell integration state and trigger related hooks
+                                // This handles OSC sequences for title changes, command tracking, etc.
+                                self.update_shell_integration_state(&output_str);
+
+                                // Call on_output hook if configured
+                                if let Some(ref executor) = self.hooks_executor {
+                                    if let Some(ref script) = self.config.hooks.on_output {
+                                        if let Err(e) = executor.on_output(script, &output_str) {
+                                            warn!("on_output hook failed: {}", e);
+                                        }
+                                    }
+                                }
+
+                                // Check for bell character (0x07) and call on_bell hook
+                                if self.read_buffer[..n].contains(&0x07) {
+                                    if let Some(ref executor) = self.hooks_executor {
+                                        if let Some(ref script) = self.config.hooks.on_bell {
+                                            if let Err(e) = executor.on_bell(script) {
+                                                warn!("on_bell hook failed: {}", e);
+                                            }
+                                        }
+                                    }
+                                }
 
                                 // Bug #9: Improved prompt detection for various shells
                                 let should_stop_progress = if let Some(ref pb) = self.progress_bar {
                                     if pb.visible {
-                                        let recent_output = String::from_utf8_lossy(&self.read_buffer[..n]);
-                                        Self::detect_prompt(&recent_output)
+                                        Self::detect_prompt(&output_str)
                                     } else {
                                         false
                                     }
@@ -703,9 +826,9 @@ impl Terminal {
 
     /// Handle mouse events
     #[allow(clippy::unused_self)]
-    fn handle_mouse_event(&mut self, _mouse: MouseEvent) {
-        // Mouse events currently not handled
-        // Keeping &mut self for future implementation
+    fn handle_mouse_event(&mut self, mouse: MouseEvent) {
+        // Handle text selection
+        self.handle_mouse_selection(mouse);
     }
 
     /// Handle keyboard events with optimal input processing
@@ -862,6 +985,25 @@ impl Terminal {
                             *len = 0;
                         }
                         self.dirty = true;
+                        return Ok(());
+                    }
+                }
+                Action::ExecuteLua(ref lua_code) => {
+                    // Execute custom Lua keybinding
+                    if let Some(ref executor) = self.hooks_executor {
+                        let cwd = self.keybindings.shell_integration().current_dir
+                            .as_deref()
+                            .unwrap_or("");
+                        let last_cmd = self.keybindings.shell_integration().last_command
+                            .as_deref()
+                            .unwrap_or("");
+                        
+                        if let Err(e) = executor.execute_custom_keybinding(lua_code, cwd, last_cmd) {
+                            warn!("Custom keybinding execution failed: {}", e);
+                            self.show_notification(format!("Keybinding error: {}", e));
+                        } else {
+                            debug!("Custom Lua keybinding executed successfully");
+                        }
                         return Ok(());
                     }
                 }
@@ -1157,6 +1299,9 @@ impl Terminal {
     /// when hardware acceleration is enabled.
     #[allow(clippy::too_many_lines)]
     fn render(&mut self, f: &mut ratatui::Frame) {
+        // Render background image/color if configured
+        self.render_background(f);
+        
         // Note: When hardware_acceleration is enabled, this would delegate to GPU renderer
         // For now, we use ratatui (CPU rendering) but config values are available
         // for future GPU rendering pipeline integration
@@ -1300,6 +1445,14 @@ impl Terminal {
         if self.show_resources && self.resource_monitor.is_some() {
             self.render_resource_monitor(f, resource_area);
         }
+
+        // Render custom Lua widgets
+        if !self.config.hooks.custom_widgets.is_empty() {
+            self.render_custom_widgets(f);
+        }
+
+        // Render cursor trail overlay
+        self.render_cursor_trail(f);
     }
 
     /// Bug #3: Render terminal output with zero-copy caching
@@ -1320,7 +1473,8 @@ impl Terminal {
             if let Some(buffer) = self.output_buffers.get(self.active_session) {
                 // Use String::from_utf8_lossy which returns Cow - doesn't allocate if valid UTF-8
                 let raw_output = String::from_utf8_lossy(buffer);
-                let all_lines = AnsiParser::parse(&raw_output);
+                // Use custom color palette for theme-aware ANSI parsing
+                let all_lines = AnsiParser::parse_with_palette(&raw_output, &self.color_palette);
                 // Leave 1 line at bottom for breathing room (ensure prompt is visible)
                 let height = (area.height as usize).saturating_sub(1).max(1);
                 let skip_count = all_lines.len().saturating_sub(height);
@@ -1360,6 +1514,60 @@ impl Terminal {
 
         let mut display_lines = Vec::with_capacity(capacity);
         display_lines.extend_from_slice(styled_lines);
+
+        // Apply text selection highlighting if active
+        if !self.config.theme.selection.is_empty() {
+            if self.selection_start.is_some() || self.selection_end.is_some() {
+                if let Ok(sel_color) = crate::colors::TrueColor::from_hex(&self.config.theme.selection) {
+                    let selection_bg = Color::Rgb(sel_color.r, sel_color.g, sel_color.b);
+                    
+                    // Apply selection background to selected positions
+                    for (row_idx, line) in display_lines.iter_mut().enumerate() {
+                        let mut new_spans = Vec::new();
+                        let mut col = 0u16;
+                        
+                        for span in &line.spans {
+                            let span_width = span.content.len() as u16;
+                            let mut span_start = 0;
+                            
+                            for char_idx in 0..span_width {
+                                let char_col = col + char_idx;
+                                if self.is_position_selected(char_col, row_idx as u16) {
+                                    // This character is selected
+                                    if span_start < char_idx {
+                                        // Add non-selected part
+                                        new_spans.push(Span::styled(
+                                            span.content[span_start as usize..char_idx as usize].to_string(),
+                                            span.style
+                                        ));
+                                    }
+                                    // Add selected character
+                                    new_spans.push(Span::styled(
+                                        span.content[char_idx as usize..(char_idx + 1) as usize].to_string(),
+                                        span.style.bg(selection_bg)
+                                    ));
+                                    span_start = char_idx + 1;
+                                }
+                            }
+                            
+                            // Add remaining non-selected part
+                            if span_start < span_width {
+                                new_spans.push(Span::styled(
+                                    span.content[span_start as usize..].to_string(),
+                                    span.style
+                                ));
+                            }
+                            
+                            col += span_width;
+                        }
+                        
+                        if !new_spans.is_empty() {
+                            *line = Line::from(new_spans);
+                        }
+                    }
+                }
+            }
+        }
 
         if let Some(cmd_buf) = self.command_buffers.get(self.active_session) {
             if !cmd_buf.is_empty() {
@@ -1489,6 +1697,13 @@ impl Terminal {
         // This would be used by a GPU renderer or when implementing custom cursor rendering
         f.set_cursor(cursor_x, cursor_y);
         
+        // Update cursor trail with current position
+        if let Some(ref trail_config) = self.config.theme.cursor_trail {
+            if trail_config.enabled {
+                self.update_cursor_trail(cursor_x, cursor_y);
+            }
+        }
+        
         // Debug trace for cursor style (used in GPU rendering pipeline)
         #[cfg(debug_assertions)]
         if self.frame_count.is_multiple_of(60) {
@@ -1560,7 +1775,6 @@ impl Terminal {
     /// Toggle split pane orientation
     ///
     /// Cycles through: None -> Horizontal -> Vertical -> None
-    #[allow(dead_code)] // Used in tests and public API for split pane control
     pub fn toggle_split_orientation(&mut self) {
         if !self.enable_split_pane {
             return;
@@ -1576,7 +1790,6 @@ impl Terminal {
     }
 
     /// Set split ratio (0.0-1.0)
-    #[allow(dead_code)] // Used in tests and public API for split pane control
     pub fn set_split_ratio(&mut self, ratio: f32) {
         self.split_ratio = ratio.clamp(0.1, 0.9);
     }
@@ -1713,6 +1926,56 @@ impl Terminal {
         
         Ok(())
     }
+
+    /// Render custom Lua widgets
+    fn render_custom_widgets(&self, f: &mut ratatui::Frame) {
+        if let Some(ref executor) = self.hooks_executor {
+            for widget_code in &self.config.hooks.custom_widgets {
+                match executor.execute_widget(widget_code) {
+                    Ok(widget) => {
+                        // Create area for widget
+                        let area = Rect {
+                            x: widget.x.min(f.size().width.saturating_sub(1)),
+                            y: widget.y.min(f.size().height.saturating_sub(1)),
+                            width: widget.width.min(f.size().width.saturating_sub(widget.x)),
+                            height: widget.height.min(f.size().height.saturating_sub(widget.y)),
+                        };
+
+                        // Build style
+                        let mut style = Style::default();
+                        if let Some(fg) = &widget.fg_color {
+                            if let Ok(color) = crate::colors::TrueColor::from_hex(fg) {
+                                style = style.fg(Color::Rgb(color.r, color.g, color.b));
+                            }
+                        }
+                        if let Some(bg) = &widget.bg_color {
+                            if let Ok(color) = crate::colors::TrueColor::from_hex(bg) {
+                                style = style.bg(Color::Rgb(color.r, color.g, color.b));
+                            }
+                        }
+                        if widget.bold {
+                            style = style.add_modifier(Modifier::BOLD);
+                        }
+
+                        // Create text from content
+                        let lines: Vec<Line> = widget.content
+                            .iter()
+                            .map(|line| Line::from(Span::styled(line.clone(), style)))
+                            .collect();
+
+                        // Render widget
+                        let paragraph = Paragraph::new(lines)
+                            .style(style)
+                            .block(Block::default().borders(Borders::NONE));
+                        f.render_widget(paragraph, area);
+                    }
+                    Err(e) => {
+                        warn!("Failed to execute custom widget: {}", e);
+                    }
+                }
+            }
+        }
+    }
     
     /// Toggle search mode
     fn toggle_search_mode(&mut self) {
@@ -1809,12 +2072,37 @@ impl Terminal {
 
     /// Use all shell integration features
     fn update_shell_integration_state(&mut self, output: &str) {
+        // Parse OSC 0, 1, or 2 for window title changes
+        if output.contains("\x1b]0;") || output.contains("\x1b]1;") || output.contains("\x1b]2;") {
+            if let Some(start) = output.find("\x1b]") {
+                if let Some(end) = output[start..].find('\x07') {
+                    // OSC sequences: 0 = icon+title, 1 = icon, 2 = title
+                    // Format: ESC ] number ; text BEL
+                    let osc_content = &output[start..start + end];
+                    if let Some(semicolon) = osc_content.find(';') {
+                        let title = &osc_content[semicolon + 1..];
+                        // Call on_title_change hook
+                        if let Some(ref executor) = self.hooks_executor {
+                            if let Some(ref script) = self.config.hooks.on_title_change {
+                                if let Err(e) = executor.on_title_change(script, title) {
+                                    warn!("on_title_change hook failed: {}", e);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // Parse OSC 7 for directory tracking
         if output.contains("\x1b]7;") {
             if let Some(start) = output.find("\x1b]7;") {
                 if let Some(end) = output[start..].find('\x07') {
-                    let dir = &output[start + 4..start + end];
-                    self.keybindings.update_directory(dir.to_string());
+                    // Ensure we have enough characters for the prefix
+                    if end > 4 {
+                        let dir = &output[start + 4..start + end];
+                        self.keybindings.update_directory(dir.to_string());
+                    }
                 }
             }
         }
@@ -1823,8 +2111,35 @@ impl Terminal {
         if output.contains("\x1b]133;") {
             if let Some(start) = output.find("\x1b]133;C;") {
                 if let Some(end) = output[start..].find('\x07') {
-                    let cmd = &output[start + 10..start + end];
-                    self.keybindings.update_last_command(cmd.to_string());
+                    // Ensure we have enough characters for the prefix
+                    if end > 10 {
+                        let cmd = &output[start + 10..start + end];
+                        self.keybindings.update_last_command(cmd.to_string());
+                    }
+                }
+            }
+            
+            // Parse OSC 133;D for command end with exit code
+            // Format: ESC ] 133 ; D ; exit_code BEL
+            if let Some(start) = output.find("\x1b]133;D;") {
+                if let Some(end) = output[start..].find('\x07') {
+                    // Ensure we have enough characters for the prefix
+                    if end > 10 {
+                        let exit_code_str = &output[start + 10..start + end];
+                        if let Ok(exit_code) = exit_code_str.parse::<i32>() {
+                            // Call on_command_end hook
+                            if let Some(ref executor) = self.hooks_executor {
+                                if let Some(ref script) = self.config.hooks.on_command_end {
+                                    let command = self.keybindings.shell_integration().last_command
+                                        .as_deref()
+                                        .unwrap_or("");
+                                    if let Err(e) = executor.on_command_end(script, command, exit_code) {
+                                        warn!("on_command_end hook failed: {}", e);
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -2057,6 +2372,250 @@ impl Terminal {
             self.is_split_pane_enabled(),
             self.max_history()
         )
+    }
+
+    /// Load background image from file
+    fn load_background_image(path: &str) -> Result<(Vec<u8>, u16, u16)> {
+        use image::GenericImageView;
+        
+        // Load image from path
+        let img = image::open(path)
+            .with_context(|| format!("Failed to load background image from: {}", path))?;
+        
+        // Get dimensions
+        let (width, height) = img.dimensions();
+        
+        // Convert to RGBA bytes
+        let rgba = img.to_rgba8();
+        let bytes = rgba.into_raw();
+        
+        debug!("Loaded background image: {}x{} from {}", width, height, path);
+        
+        Ok((bytes, width as u16, height as u16))
+    }
+
+    /// Handle mouse event for text selection
+    fn handle_mouse_selection(&mut self, event: crossterm::event::MouseEvent) {
+        use crossterm::event::MouseEventKind;
+        
+        match event.kind {
+            MouseEventKind::Down(crossterm::event::MouseButton::Left) => {
+                // Start selection
+                self.selection_start = Some((event.column, event.row));
+                self.selection_end = Some((event.column, event.row));
+                self.selection_active = true;
+                self.dirty = true;
+            }
+            MouseEventKind::Drag(crossterm::event::MouseButton::Left) => {
+                // Update selection end
+                if self.selection_active {
+                    self.selection_end = Some((event.column, event.row));
+                    self.dirty = true;
+                }
+            }
+            MouseEventKind::Up(crossterm::event::MouseButton::Left) => {
+                // Finalize selection and copy to clipboard
+                if self.selection_active {
+                    self.selection_end = Some((event.column, event.row));
+                    if let Err(e) = self.copy_selection_to_clipboard() {
+                        warn!("Failed to copy selection to clipboard: {}", e);
+                    }
+                    self.selection_active = false;
+                    self.dirty = true;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Check if a position is within the current selection
+    fn is_position_selected(&self, col: u16, row: u16) -> bool {
+        if let (Some(start), Some(end)) = (self.selection_start, self.selection_end) {
+            let (start_row, start_col) = if start.1 < end.1 || (start.1 == end.1 && start.0 <= end.0) {
+                (start.1, start.0)
+            } else {
+                (end.1, end.0)
+            };
+            let (end_row, end_col) = if start.1 < end.1 || (start.1 == end.1 && start.0 <= end.0) {
+                (end.1, end.0)
+            } else {
+                (start.1, start.0)
+            };
+
+            if row > start_row && row < end_row {
+                return true;
+            }
+            if row == start_row && row == end_row {
+                return col >= start_col && col <= end_col;
+            }
+            if row == start_row {
+                return col >= start_col;
+            }
+            if row == end_row {
+                return col <= end_col;
+            }
+        }
+        false
+    }
+
+    /// Copy selected text to clipboard
+    fn copy_selection_to_clipboard(&self) -> Result<()> {
+        use arboard::Clipboard;
+        
+        if let (Some(start), Some(end)) = (self.selection_start, self.selection_end) {
+            let text = self.get_selected_text(start, end)?;
+            let mut clipboard = Clipboard::new().context("Failed to access clipboard")?;
+            clipboard.set_text(text).context("Failed to set clipboard text")?;
+            debug!("Copied selection to clipboard");
+        }
+        Ok(())
+    }
+
+    /// Get the text within the selection range
+    fn get_selected_text(&self, start: (u16, u16), end: (u16, u16)) -> Result<String> {
+        // Normalize start and end positions
+        let (start_pos, end_pos) = if start.1 < end.1 || (start.1 == end.1 && start.0 <= end.0) {
+            (start, end)
+        } else {
+            (end, start)
+        };
+
+        // Get the output buffer for current session
+        if let Some(buffer) = self.output_buffers.get(self.active_session) {
+            // Parse the buffer to get styled lines
+            let output_str = String::from_utf8_lossy(buffer);
+            let lines: Vec<&str> = output_str.lines().collect();
+            
+            let mut selected_text = String::new();
+            for row in start_pos.1..=end_pos.1 {
+                if let Some(line) = lines.get(row as usize) {
+                    let line_start = if row == start_pos.1 { start_pos.0 as usize } else { 0 };
+                    let line_end = if row == end_pos.1 { 
+                        (end_pos.0 as usize).min(line.len()) 
+                    } else { 
+                        line.len() 
+                    };
+                    
+                    if line_start < line.len() {
+                        let substring = &line[line_start..line_end.min(line.len())];
+                        selected_text.push_str(substring);
+                        if row < end_pos.1 {
+                            selected_text.push('\n');
+                        }
+                    }
+                }
+            }
+            Ok(selected_text)
+        } else {
+            Ok(String::new())
+        }
+    }
+
+    /// Update cursor trail with current cursor position
+    fn update_cursor_trail(&mut self, col: u16, row: u16) {
+        if let Some(ref trail_config) = self.config.theme.cursor_trail {
+            if trail_config.enabled {
+                let now = std::time::Instant::now();
+                self.cursor_trail_positions.push((col, row, now));
+                
+                // Limit trail length
+                while self.cursor_trail_positions.len() > trail_config.length {
+                    self.cursor_trail_positions.remove(0);
+                }
+            }
+        }
+    }
+
+    /// Render background image if configured
+    fn render_background(&self, f: &mut ratatui::Frame) {
+        if let Some(ref bg_config) = self.config.theme.background_image {
+            // Log the configured mode and blur for GPU implementation reference
+            debug!("Background config: mode={}, blur={}", bg_config.mode, bg_config.blur);
+            
+            // For now, render a colored background as placeholder
+            // Full image rendering requires GPU or custom backend
+            if let Some(ref color_str) = bg_config.color {
+                if let Ok(color) = crate::colors::TrueColor::from_hex(color_str) {
+                    let opacity = bg_config.opacity;
+                    let adjusted_color = if opacity < 1.0 {
+                        // Blend with black background based on opacity
+                        let r = (color.r as f32 * opacity) as u8;
+                        let g = (color.g as f32 * opacity) as u8;
+                        let b = (color.b as f32 * opacity) as u8;
+                        Color::Rgb(r, g, b)
+                    } else {
+                        Color::Rgb(color.r, color.g, color.b)
+                    };
+                    
+                    // Render background block
+                    let block = Block::default().style(Style::default().bg(adjusted_color));
+                    f.render_widget(block, f.size());
+                }
+            }
+            
+            // Note: Actual image rendering with mode (fill, fit, stretch, tile, center)
+            // and blur effects requires GPU renderer implementation
+            // The mode and blur values are logged above for GPU implementation
+            // This is documented in IMPLEMENTATION_PLAN.md as GPU-only feature
+        }
+    }
+
+    /// Render cursor trail if configured
+    fn render_cursor_trail(&self, f: &mut ratatui::Frame) {
+        if let Some(ref trail_config) = self.config.theme.cursor_trail {
+            if trail_config.enabled && !self.cursor_trail_positions.is_empty() {
+                let now = std::time::Instant::now();
+                
+                // Parse trail color
+                let trail_color = if let Ok(color) = crate::colors::TrueColor::from_hex(&trail_config.color) {
+                    Color::Rgb(color.r, color.g, color.b)
+                } else {
+                    Color::Yellow
+                };
+
+                // Render trail positions with fading
+                for (i, (col, row, timestamp)) in self.cursor_trail_positions.iter().enumerate() {
+                    let age_ms = now.duration_since(*timestamp).as_millis() as f32;
+                    let max_age_ms = trail_config.animation_speed as f32;
+                    
+                    // Skip if too old
+                    if age_ms > max_age_ms {
+                        continue;
+                    }
+                    
+                    // Calculate alpha based on position and age
+                    let position_ratio = i as f32 / trail_config.length as f32;
+                    let age_ratio = 1.0 - (age_ms / max_age_ms);
+                    
+                    let alpha = match trail_config.fade_mode.as_str() {
+                        "linear" => position_ratio * age_ratio,
+                        "exponential" => (position_ratio * age_ratio).powf(2.0),
+                        "smooth" => 1.0 - (1.0 - position_ratio * age_ratio).powf(3.0),
+                        _ => position_ratio * age_ratio,
+                    };
+                    
+                    // Only render if visible
+                    if alpha > 0.1 && *col < f.size().width && *row < f.size().height {
+                        // Render trail character with faded style
+                        let area = Rect {
+                            x: *col,
+                            y: *row,
+                            width: (trail_config.width.max(1.0) as u16),
+                            height: 1,
+                        };
+                        
+                        let style = Style::default()
+                            .fg(trail_color)
+                            .add_modifier(Modifier::DIM);
+                        
+                        let trail_char = if alpha > 0.7 { "●" } else if alpha > 0.4 { "○" } else { "·" };
+                        let span = Span::styled(trail_char, style);
+                        let paragraph = Paragraph::new(Line::from(span));
+                        f.render_widget(paragraph, area);
+                    }
+                }
+            }
+        }
     }
 }
 
