@@ -1587,7 +1587,6 @@ impl Terminal {
     /// Toggle split pane orientation
     ///
     /// Cycles through: None -> Horizontal -> Vertical -> None
-    #[allow(dead_code)] // Used in tests and public API for split pane control
     pub fn toggle_split_orientation(&mut self) {
         if !self.enable_split_pane {
             return;
@@ -1603,7 +1602,6 @@ impl Terminal {
     }
 
     /// Set split ratio (0.0-1.0)
-    #[allow(dead_code)] // Used in tests and public API for split pane control
     pub fn set_split_ratio(&mut self, ratio: f32) {
         self.split_ratio = ratio.clamp(0.1, 0.9);
     }
