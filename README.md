@@ -25,7 +25,7 @@ Furnace is a cross-platform terminal emulator written in Rust. It combines Cross
 ## Installation
 
 ### Prerequisites
-- Rust 1.70+ (install via [rustup.rs](https://rustup.rs))
+- Rust 1.70+ MSRV (install via [rustup.rs](https://rustup.rs))
 - A terminal on Windows, Linux, or macOS
 
 ### Build from source
@@ -55,7 +55,8 @@ Furnace looks for `~/.furnace/config.lua` by default. All optional UI modules ar
 ```lua
 config = {
     shell = {
-        default_shell = "/bin/bash", -- on Windows use the PowerShell path in your PATH (e.g. "pwsh" / "pwsh.exe" or "powershell.exe")
+        -- On Windows set this to a PowerShell executable in your PATH (e.g. "pwsh", "pwsh.exe", or "powershell.exe")
+        default_shell = "/bin/bash",
         working_dir = nil,
         env = {}
     },
@@ -140,7 +141,7 @@ See `config.example.lua` for more options, including additional hook ideas, them
 | Close Tab | `Ctrl+W` | Requires `terminal.enable_tabs = true` |
 | Next Tab | `Ctrl+Tab` | Requires `terminal.enable_tabs = true` |
 | Previous Tab | `Ctrl+Shift+Tab` | Requires `terminal.enable_tabs = true` |
-| Split Vertical | `Ctrl+Shift+V` | Requires `terminal.enable_split_pane = true`; overlaps with Paste by default -- rebind if you need vertical splits |
+| Split Vertical | `Ctrl+Shift+V` | Requires `terminal.enable_split_pane = true`; overlaps with Paste by default, so rebind (e.g. `Ctrl+\\|`) if you need vertical splits |
 | Split Horizontal | `Ctrl+Shift+H` | Requires `terminal.enable_split_pane = true` |
 | Focus Next Pane | `Ctrl+O` | Requires split panes |
 | Copy | `Ctrl+Shift+C` | |
