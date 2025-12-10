@@ -232,6 +232,9 @@ impl Terminal {
         // Store hooks for later execution
         let on_startup_hook = config.hooks.on_startup.clone();
         
+        // Clone keybindings config before moving config
+        let kb_config = config.keybindings.clone();
+        
         // Create color palette from theme colors if available, otherwise use default
         let color_palette = TrueColorPalette::from_ansi_colors(&config.theme.colors)
             .unwrap_or_else(|e| {
@@ -256,7 +259,42 @@ impl Terminal {
                 None
             },
             show_resources: false,
-            keybindings: KeybindingManager::new(),
+            keybindings: {
+                let mut kb = KeybindingManager::new();
+                // Register custom keybindings from config
+                // These override the defaults loaded by KeybindingManager::new()
+                if !kb_config.new_tab.is_empty() {
+                    let _ = kb.add_binding_from_string(&kb_config.new_tab, crate::keybindings::Action::NewTab);
+                }
+                if !kb_config.close_tab.is_empty() {
+                    let _ = kb.add_binding_from_string(&kb_config.close_tab, crate::keybindings::Action::CloseTab);
+                }
+                if !kb_config.next_tab.is_empty() {
+                    let _ = kb.add_binding_from_string(&kb_config.next_tab, crate::keybindings::Action::NextTab);
+                }
+                if !kb_config.prev_tab.is_empty() {
+                    let _ = kb.add_binding_from_string(&kb_config.prev_tab, crate::keybindings::Action::PrevTab);
+                }
+                if !kb_config.split_vertical.is_empty() {
+                    let _ = kb.add_binding_from_string(&kb_config.split_vertical, crate::keybindings::Action::SplitVertical);
+                }
+                if !kb_config.split_horizontal.is_empty() {
+                    let _ = kb.add_binding_from_string(&kb_config.split_horizontal, crate::keybindings::Action::SplitHorizontal);
+                }
+                if !kb_config.copy.is_empty() {
+                    let _ = kb.add_binding_from_string(&kb_config.copy, crate::keybindings::Action::Copy);
+                }
+                if !kb_config.paste.is_empty() {
+                    let _ = kb.add_binding_from_string(&kb_config.paste, crate::keybindings::Action::Paste);
+                }
+                if !kb_config.search.is_empty() {
+                    let _ = kb.add_binding_from_string(&kb_config.search, crate::keybindings::Action::Search);
+                }
+                if !kb_config.clear.is_empty() {
+                    let _ = kb.add_binding_from_string(&kb_config.clear, crate::keybindings::Action::Clear);
+                }
+                kb
+            },
             session_manager,
             color_palette,
             theme_manager,

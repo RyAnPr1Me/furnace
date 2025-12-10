@@ -154,6 +154,73 @@ impl KeybindingManager {
         self.bindings.insert(binding, action);
     }
 
+    /// Parse and add a keybinding from a config string like "Ctrl+T" or "Ctrl+Shift+C"
+    ///
+    /// # Arguments
+    /// * `combo` - Key combination string (e.g., "Ctrl+T", "Ctrl+Shift+V", "Alt+F")
+    /// * `action` - Action to bind to this combination
+    ///
+    /// # Returns
+    /// Ok(()) if binding was added successfully, Err if combo string is invalid
+    ///
+    /// # Examples
+    /// ```ignore
+    /// manager.add_binding_from_string("Ctrl+T", Action::NewTab)?;
+    /// manager.add_binding_from_string("Ctrl+Shift+C", Action::Copy)?;
+    /// ```
+    pub fn add_binding_from_string(&mut self, combo: &str, action: Action) -> Result<(), String> {
+        if combo.is_empty() {
+            return Err("Empty key combination".to_string());
+        }
+
+        let parts: Vec<&str> = combo.split('+').map(str::trim).collect();
+        if parts.is_empty() {
+            return Err("Invalid key combination format".to_string());
+        }
+
+        // Last part is the key, everything before is modifiers
+        let key = parts.last().unwrap();
+        let modifiers: Vec<&str> = parts[..parts.len().saturating_sub(1)].to_vec();
+
+        // Validate and normalize modifiers
+        let normalized_mods: Vec<&str> = modifiers
+            .iter()
+            .filter_map(|m| {
+                match m.to_lowercase().as_str() {
+                    "ctrl" | "control" => Some("Ctrl"),
+                    "shift" => Some("Shift"),
+                    "alt" => Some("Alt"),
+                    _ => None, // Ignore unknown modifiers
+                }
+            })
+            .collect();
+
+        // Normalize key name
+        let key_lower = key.to_lowercase();
+        let normalized_key = match key_lower.as_str() {
+            "tab" => "Tab",
+            "enter" | "return" => "Enter",
+            "esc" | "escape" => "Esc",
+            "up" => "Up",
+            "down" => "Down",
+            "left" => "Left",
+            "right" => "Right",
+            "space" => " ",
+            // Single character - use lowercase
+            k if k.len() == 1 => {
+                let c = k.chars().next().unwrap();
+                // For single characters, convert to lowercase for consistency
+                let char_str = c.to_lowercase().to_string();
+                self.add_binding(&char_str, &normalized_mods, action);
+                return Ok(());
+            }
+            k => k,
+        };
+
+        self.add_binding(normalized_key, &normalized_mods, action);
+        Ok(())
+    }
+
     /// Get action for key event
     ///
     /// BUG FIX #6: Normalize character keys to lowercase for consistent matching.
