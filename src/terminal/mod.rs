@@ -1697,6 +1697,13 @@ impl Terminal {
         // This would be used by a GPU renderer or when implementing custom cursor rendering
         f.set_cursor(cursor_x, cursor_y);
         
+        // Update cursor trail with current position
+        if let Some(ref trail_config) = self.config.theme.cursor_trail {
+            if trail_config.enabled {
+                self.update_cursor_trail(cursor_x, cursor_y);
+            }
+        }
+        
         // Debug trace for cursor style (used in GPU rendering pipeline)
         #[cfg(debug_assertions)]
         if self.frame_count.is_multiple_of(60) {
@@ -2369,11 +2376,22 @@ impl Terminal {
 
     /// Load background image from file
     fn load_background_image(path: &str) -> Result<(Vec<u8>, u16, u16)> {
-        // Image loading requires the `image` crate
-        // For now, log that image loading is not supported without GPU feature
-        // This would be fully implemented in the GPU renderer module
-        warn!("Background image loading requires GPU renderer feature. Path: {}", path);
-        anyhow::bail!("Background image loading requires GPU renderer (not yet implemented)")
+        use image::GenericImageView;
+        
+        // Load image from path
+        let img = image::open(path)
+            .with_context(|| format!("Failed to load background image from: {}", path))?;
+        
+        // Get dimensions
+        let (width, height) = img.dimensions();
+        
+        // Convert to RGBA bytes
+        let rgba = img.to_rgba8();
+        let bytes = rgba.into_raw();
+        
+        debug!("Loaded background image: {}x{} from {}", width, height, path);
+        
+        Ok((bytes, width as u16, height as u16))
     }
 
     /// Handle mouse event for text selection
