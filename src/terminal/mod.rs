@@ -1862,8 +1862,11 @@ impl Terminal {
         if output.contains("\x1b]7;") {
             if let Some(start) = output.find("\x1b]7;") {
                 if let Some(end) = output[start..].find('\x07') {
-                    let dir = &output[start + 4..start + end];
-                    self.keybindings.update_directory(dir.to_string());
+                    // Ensure we have enough characters for the prefix
+                    if end > 4 {
+                        let dir = &output[start + 4..start + end];
+                        self.keybindings.update_directory(dir.to_string());
+                    }
                 }
             }
         }
@@ -1872,8 +1875,11 @@ impl Terminal {
         if output.contains("\x1b]133;") {
             if let Some(start) = output.find("\x1b]133;C;") {
                 if let Some(end) = output[start..].find('\x07') {
-                    let cmd = &output[start + 10..start + end];
-                    self.keybindings.update_last_command(cmd.to_string());
+                    // Ensure we have enough characters for the prefix
+                    if end > 10 {
+                        let cmd = &output[start + 10..start + end];
+                        self.keybindings.update_last_command(cmd.to_string());
+                    }
                 }
             }
             
@@ -1881,16 +1887,19 @@ impl Terminal {
             // Format: ESC ] 133 ; D ; exit_code BEL
             if let Some(start) = output.find("\x1b]133;D;") {
                 if let Some(end) = output[start..].find('\x07') {
-                    let exit_code_str = &output[start + 10..start + end];
-                    if let Ok(exit_code) = exit_code_str.parse::<i32>() {
-                        // Call on_command_end hook
-                        if let Some(ref executor) = self.hooks_executor {
-                            if let Some(ref script) = self.config.hooks.on_command_end {
-                                let command = self.keybindings.shell_integration().last_command
-                                    .as_deref()
-                                    .unwrap_or("");
-                                if let Err(e) = executor.on_command_end(script, command, exit_code) {
-                                    warn!("on_command_end hook failed: {}", e);
+                    // Ensure we have enough characters for the prefix
+                    if end > 10 {
+                        let exit_code_str = &output[start + 10..start + end];
+                        if let Ok(exit_code) = exit_code_str.parse::<i32>() {
+                            // Call on_command_end hook
+                            if let Some(ref executor) = self.hooks_executor {
+                                if let Some(ref script) = self.config.hooks.on_command_end {
+                                    let command = self.keybindings.shell_integration().last_command
+                                        .as_deref()
+                                        .unwrap_or("");
+                                    if let Err(e) = executor.on_command_end(script, command, exit_code) {
+                                        warn!("on_command_end hook failed: {}", e);
+                                    }
                                 }
                             }
                         }

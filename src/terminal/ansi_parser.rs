@@ -123,6 +123,10 @@ impl AnsiParser {
     ///
     /// # Returns
     /// Vector of styled lines ready for rendering
+    ///
+    /// # Note
+    /// The palette is cloned because AnsiParser needs to own it for the VTE parser callback.
+    /// This is a small clone (51 bytes + Vec) and only happens once per render frame.
     #[must_use]
     pub fn parse_with_palette(text: &str, palette: &TrueColorPalette) -> Vec<Line<'static>> {
         let mut parser = Parser::new();
