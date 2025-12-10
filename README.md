@@ -140,7 +140,7 @@ See `config.example.lua` for more options, including additional hook ideas, them
 | Close Tab | `Ctrl+W` | Requires `terminal.enable_tabs = true` |
 | Next Tab | `Ctrl+Tab` | Requires `terminal.enable_tabs = true` |
 | Previous Tab | `Ctrl+Shift+Tab` | Requires `terminal.enable_tabs = true` |
-| Split Vertical | `Ctrl+Shift+V` | Requires `terminal.enable_split_pane = true`; overlaps with Paste by default—rebind if you need vertical splits |
+| Split Vertical | `Ctrl+Shift+V` | Requires `terminal.enable_split_pane = true`; overlaps with Paste by default -- rebind if you need vertical splits |
 | Split Horizontal | `Ctrl+Shift+H` | Requires `terminal.enable_split_pane = true` |
 | Focus Next Pane | `Ctrl+O` | Requires split panes |
 | Copy | `Ctrl+Shift+C` | |
