@@ -153,6 +153,15 @@ See `config.example.lua` for more options, including additional hook ideas, them
 | Clear | `Ctrl+L` | |
 | Quit | `Ctrl+C` or `Ctrl+D` | |
 
+To resolve the default split-vertical/paste conflict or any other shortcut, override keybindings in your config:
+
+```lua
+keybindings = {
+    split_vertical = "Ctrl+|",
+    paste = "Ctrl+Shift+V"
+}
+```
+
 ## Architecture
 
 ```
