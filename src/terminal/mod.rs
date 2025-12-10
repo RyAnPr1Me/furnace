@@ -1320,7 +1320,8 @@ impl Terminal {
             if let Some(buffer) = self.output_buffers.get(self.active_session) {
                 // Use String::from_utf8_lossy which returns Cow - doesn't allocate if valid UTF-8
                 let raw_output = String::from_utf8_lossy(buffer);
-                let all_lines = AnsiParser::parse(&raw_output);
+                // Use custom color palette for theme-aware ANSI parsing
+                let all_lines = AnsiParser::parse_with_palette(&raw_output, &self.color_palette);
                 // Leave 1 line at bottom for breathing room (ensure prompt is visible)
                 let height = (area.height as usize).saturating_sub(1).max(1);
                 let skip_count = all_lines.len().saturating_sub(height);

@@ -12,6 +12,8 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use vte::{Params, Parser, Perform};
 
+use crate::colors::TrueColorPalette;
+
 /// Convert a u16 color value to u8, clamping to valid range
 /// This is marked inline to allow the compiler to optimize it away when possible
 #[inline]
@@ -35,6 +37,9 @@ pub struct AnsiParser {
     current_line_spans: Vec<Span<'static>>,
     /// Completed lines
     lines: Vec<Line<'static>>,
+    /// Color palette for mapping ANSI colors to true colors
+    /// None means use default ratatui colors
+    color_palette: Option<TrueColorPalette>,
 }
 
 impl AnsiParser {
@@ -47,6 +52,19 @@ impl AnsiParser {
             current_text: String::with_capacity(256), // Pre-allocate for typical line length
             current_line_spans: Vec::with_capacity(8), // Pre-allocate for typical spans per line
             lines: Vec::with_capacity(24),            // Pre-allocate for typical terminal height
+            color_palette: None, // Use default ratatui colors
+        }
+    }
+
+    /// Create a new ANSI parser with a custom color palette
+    #[must_use]
+    pub fn with_palette(palette: TrueColorPalette) -> Self {
+        Self {
+            current_style: Style::default().fg(Color::Reset).bg(Color::Reset),
+            current_text: String::with_capacity(256),
+            current_line_spans: Vec::with_capacity(8),
+            lines: Vec::with_capacity(24),
+            color_palette: Some(palette),
         }
     }
 
@@ -94,6 +112,32 @@ impl AnsiParser {
         performer.lines
     }
 
+    /// Parse ANSI-encoded text with a custom color palette
+    ///
+    /// Same as `parse()` but uses a custom color palette for ANSI color codes.
+    /// This enables theme customization without GPU rendering.
+    ///
+    /// # Arguments
+    /// * `text` - Input text with ANSI escape sequences
+    /// * `palette` - Custom color palette for ANSI color mapping
+    ///
+    /// # Returns
+    /// Vector of styled lines ready for rendering
+    #[must_use]
+    pub fn parse_with_palette(text: &str, palette: &TrueColorPalette) -> Vec<Line<'static>> {
+        let mut parser = Parser::new();
+        let mut performer = AnsiParser::with_palette(palette.clone());
+
+        // VTE 0.15 expects a slice of bytes
+        parser.advance(&mut performer, text.as_bytes());
+
+        // Flush any remaining content
+        performer.flush_text();
+        performer.flush_line();
+
+        performer.lines
+    }
+
     /// Flush accumulated text to a span
     fn flush_text(&mut self) {
         if !self.current_text.is_empty() {
@@ -112,6 +156,47 @@ impl AnsiParser {
         } else {
             let spans = std::mem::take(&mut self.current_line_spans);
             self.lines.push(Line::from(spans));
+        }
+    }
+
+    /// Convert a standard ANSI color index (0-15) to a Color
+    /// Uses the custom palette if available, otherwise falls back to ratatui defaults
+    fn ansi_color_to_color(&self, index: u8) -> Color {
+        if let Some(ref palette) = self.color_palette {
+            let tc = palette.get_256(index);
+            Color::Rgb(tc.r, tc.g, tc.b)
+        } else {
+            // Fallback to ratatui's default colors
+            match index {
+                0 => Color::Black,
+                1 => Color::Red,
+                2 => Color::Green,
+                3 => Color::Yellow,
+                4 => Color::Blue,
+                5 => Color::Magenta,
+                6 => Color::Cyan,
+                7 => Color::White,
+                8 => Color::DarkGray,
+                9 => Color::LightRed,
+                10 => Color::LightGreen,
+                11 => Color::LightYellow,
+                12 => Color::LightBlue,
+                13 => Color::LightMagenta,
+                14 => Color::LightCyan,
+                15 => Color::White,
+                _ => Color::Reset,
+            }
+        }
+    }
+
+    /// Convert a 256-color index to a Color
+    /// Uses the custom palette if available, otherwise uses indexed color
+    fn indexed_color_to_color(&self, index: u8) -> Color {
+        if let Some(ref palette) = self.color_palette {
+            let tc = palette.get_256(index);
+            Color::Rgb(tc.r, tc.g, tc.b)
+        } else {
+            Color::Indexed(index)
         }
     }
 
@@ -223,14 +308,14 @@ impl AnsiParser {
                     self.current_style = self.current_style.remove_modifier(Modifier::CROSSED_OUT);
                 }
                 // Standard foreground colors (30-37)
-                30 => self.current_style = self.current_style.fg(Color::Black),
-                31 => self.current_style = self.current_style.fg(Color::Red),
-                32 => self.current_style = self.current_style.fg(Color::Green),
-                33 => self.current_style = self.current_style.fg(Color::Yellow),
-                34 => self.current_style = self.current_style.fg(Color::Blue),
-                35 => self.current_style = self.current_style.fg(Color::Magenta),
-                36 => self.current_style = self.current_style.fg(Color::Cyan),
-                37 => self.current_style = self.current_style.fg(Color::White),
+                30 => self.current_style = self.current_style.fg(self.ansi_color_to_color(0)),
+                31 => self.current_style = self.current_style.fg(self.ansi_color_to_color(1)),
+                32 => self.current_style = self.current_style.fg(self.ansi_color_to_color(2)),
+                33 => self.current_style = self.current_style.fg(self.ansi_color_to_color(3)),
+                34 => self.current_style = self.current_style.fg(self.ansi_color_to_color(4)),
+                35 => self.current_style = self.current_style.fg(self.ansi_color_to_color(5)),
+                36 => self.current_style = self.current_style.fg(self.ansi_color_to_color(6)),
+                37 => self.current_style = self.current_style.fg(self.ansi_color_to_color(7)),
                 // Extended foreground color (256-color or RGB)
                 38 => {
                     if let Some(next) = iter.next() {
@@ -242,7 +327,7 @@ impl AnsiParser {
                                         if !color_param.is_empty() {
                                             self.current_style = self
                                                 .current_style
-                                                .fg(Color::Indexed(to_color_u8(color_param[0])));
+                                                .fg(self.indexed_color_to_color(to_color_u8(color_param[0])));
                                         }
                                     }
                                 }
@@ -269,14 +354,14 @@ impl AnsiParser {
                     self.current_style = self.current_style.fg(Color::Reset);
                 }
                 // Standard background colors (40-47)
-                40 => self.current_style = self.current_style.bg(Color::Black),
-                41 => self.current_style = self.current_style.bg(Color::Red),
-                42 => self.current_style = self.current_style.bg(Color::Green),
-                43 => self.current_style = self.current_style.bg(Color::Yellow),
-                44 => self.current_style = self.current_style.bg(Color::Blue),
-                45 => self.current_style = self.current_style.bg(Color::Magenta),
-                46 => self.current_style = self.current_style.bg(Color::Cyan),
-                47 => self.current_style = self.current_style.bg(Color::White),
+                40 => self.current_style = self.current_style.bg(self.ansi_color_to_color(0)),
+                41 => self.current_style = self.current_style.bg(self.ansi_color_to_color(1)),
+                42 => self.current_style = self.current_style.bg(self.ansi_color_to_color(2)),
+                43 => self.current_style = self.current_style.bg(self.ansi_color_to_color(3)),
+                44 => self.current_style = self.current_style.bg(self.ansi_color_to_color(4)),
+                45 => self.current_style = self.current_style.bg(self.ansi_color_to_color(5)),
+                46 => self.current_style = self.current_style.bg(self.ansi_color_to_color(6)),
+                47 => self.current_style = self.current_style.bg(self.ansi_color_to_color(7)),
                 // Extended background color (256-color or RGB)
                 48 => {
                     if let Some(next) = iter.next() {
@@ -288,7 +373,7 @@ impl AnsiParser {
                                         if !color_param.is_empty() {
                                             self.current_style = self
                                                 .current_style
-                                                .bg(Color::Indexed(to_color_u8(color_param[0])));
+                                                .bg(self.indexed_color_to_color(to_color_u8(color_param[0])));
                                         }
                                     }
                                 }
@@ -315,23 +400,23 @@ impl AnsiParser {
                     self.current_style = self.current_style.bg(Color::Reset);
                 }
                 // Bright foreground colors (90-97)
-                90 => self.current_style = self.current_style.fg(Color::DarkGray),
-                91 => self.current_style = self.current_style.fg(Color::LightRed),
-                92 => self.current_style = self.current_style.fg(Color::LightGreen),
-                93 => self.current_style = self.current_style.fg(Color::LightYellow),
-                94 => self.current_style = self.current_style.fg(Color::LightBlue),
-                95 => self.current_style = self.current_style.fg(Color::LightMagenta),
-                96 => self.current_style = self.current_style.fg(Color::LightCyan),
-                97 => self.current_style = self.current_style.fg(Color::White),
+                90 => self.current_style = self.current_style.fg(self.ansi_color_to_color(8)),
+                91 => self.current_style = self.current_style.fg(self.ansi_color_to_color(9)),
+                92 => self.current_style = self.current_style.fg(self.ansi_color_to_color(10)),
+                93 => self.current_style = self.current_style.fg(self.ansi_color_to_color(11)),
+                94 => self.current_style = self.current_style.fg(self.ansi_color_to_color(12)),
+                95 => self.current_style = self.current_style.fg(self.ansi_color_to_color(13)),
+                96 => self.current_style = self.current_style.fg(self.ansi_color_to_color(14)),
+                97 => self.current_style = self.current_style.fg(self.ansi_color_to_color(15)),
                 // Bright background colors (100-107)
-                100 => self.current_style = self.current_style.bg(Color::DarkGray),
-                101 => self.current_style = self.current_style.bg(Color::LightRed),
-                102 => self.current_style = self.current_style.bg(Color::LightGreen),
-                103 => self.current_style = self.current_style.bg(Color::LightYellow),
-                104 => self.current_style = self.current_style.bg(Color::LightBlue),
-                105 => self.current_style = self.current_style.bg(Color::LightMagenta),
-                106 => self.current_style = self.current_style.bg(Color::LightCyan),
-                107 => self.current_style = self.current_style.bg(Color::White),
+                100 => self.current_style = self.current_style.bg(self.ansi_color_to_color(8)),
+                101 => self.current_style = self.current_style.bg(self.ansi_color_to_color(9)),
+                102 => self.current_style = self.current_style.bg(self.ansi_color_to_color(10)),
+                103 => self.current_style = self.current_style.bg(self.ansi_color_to_color(11)),
+                104 => self.current_style = self.current_style.bg(self.ansi_color_to_color(12)),
+                105 => self.current_style = self.current_style.bg(self.ansi_color_to_color(13)),
+                106 => self.current_style = self.current_style.bg(self.ansi_color_to_color(14)),
+                107 => self.current_style = self.current_style.bg(self.ansi_color_to_color(15)),
                 _ => {}
             }
         }
