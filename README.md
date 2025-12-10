@@ -55,7 +55,7 @@ Furnace looks for `~/.furnace/config.lua` by default. All optional UI modules ar
 ```lua
 config = {
     shell = {
-        default_shell = "/bin/bash", -- use "pwsh.exe" (PowerShell 7+) or "powershell.exe" on Windows
+        default_shell = "/bin/bash", -- on Windows use the PowerShell path in your PATH (e.g. "pwsh" / "pwsh.exe" or "powershell.exe")
         working_dir = nil,
         env = {}
     },
@@ -131,7 +131,7 @@ See `config.example.lua` for more options, including additional hook ideas, them
 | Action | Default Key | Notes |
 |--------|-------------|-------|
 | Resource Monitor | `Ctrl+R` | Requires `features.resource_monitor = true` |
-| Toggle Autocomplete | `Alt+Tab` | Requires `features.autocomplete = true` |
+| Toggle Autocomplete | `Alt+Tab` | Requires `features.autocomplete = true`; many desktops reserve Alt+Tab, so consider remapping in config |
 | Next Theme | `Ctrl+]` | Requires `features.theme_manager = true` |
 | Previous Theme | `Ctrl+[` | Requires `features.theme_manager = true` |
 | Save Session | `Ctrl+S` | Requires `features.session_manager = true` |
@@ -140,7 +140,7 @@ See `config.example.lua` for more options, including additional hook ideas, them
 | Close Tab | `Ctrl+W` | Requires `terminal.enable_tabs = true` |
 | Next Tab | `Ctrl+Tab` | Requires `terminal.enable_tabs = true` |
 | Previous Tab | `Ctrl+Shift+Tab` | Requires `terminal.enable_tabs = true` |
-| Split Vertical | `Ctrl+Shift+V` | Requires `terminal.enable_split_pane = true` |
+| Split Vertical | `Ctrl+Shift+V` | Requires `terminal.enable_split_pane = true`; overlaps with Paste by default—rebind if you need vertical splits |
 | Split Horizontal | `Ctrl+Shift+H` | Requires `terminal.enable_split_pane = true` |
 | Focus Next Pane | `Ctrl+O` | Requires split panes |
 | Copy | `Ctrl+Shift+C` | |
