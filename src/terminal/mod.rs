@@ -588,11 +588,37 @@ impl Terminal {
                                 self.output_buffers[self.active_session].extend_from_slice(&self.read_buffer[..n]);
                                 self.dirty = true;
 
+                                // Convert output to String to avoid borrow checker issues
+                                let output_str = String::from_utf8_lossy(&self.read_buffer[..n]).into_owned();
+
+                                // Update shell integration state and trigger related hooks
+                                // This handles OSC sequences for title changes, command tracking, etc.
+                                self.update_shell_integration_state(&output_str);
+
+                                // Call on_output hook if configured
+                                if let Some(ref executor) = self.hooks_executor {
+                                    if let Some(ref script) = self.config.hooks.on_output {
+                                        if let Err(e) = executor.on_output(script, &output_str) {
+                                            warn!("on_output hook failed: {}", e);
+                                        }
+                                    }
+                                }
+
+                                // Check for bell character (0x07) and call on_bell hook
+                                if self.read_buffer[..n].contains(&0x07) {
+                                    if let Some(ref executor) = self.hooks_executor {
+                                        if let Some(ref script) = self.config.hooks.on_bell {
+                                            if let Err(e) = executor.on_bell(script) {
+                                                warn!("on_bell hook failed: {}", e);
+                                            }
+                                        }
+                                    }
+                                }
+
                                 // Bug #9: Improved prompt detection for various shells
                                 let should_stop_progress = if let Some(ref pb) = self.progress_bar {
                                     if pb.visible {
-                                        let recent_output = String::from_utf8_lossy(&self.read_buffer[..n]);
-                                        Self::detect_prompt(&recent_output)
+                                        Self::detect_prompt(&output_str)
                                     } else {
                                         false
                                     }
@@ -1810,6 +1836,28 @@ impl Terminal {
 
     /// Use all shell integration features
     fn update_shell_integration_state(&mut self, output: &str) {
+        // Parse OSC 0, 1, or 2 for window title changes
+        if output.contains("\x1b]0;") || output.contains("\x1b]1;") || output.contains("\x1b]2;") {
+            if let Some(start) = output.find("\x1b]") {
+                if let Some(end) = output[start..].find('\x07') {
+                    // OSC sequences: 0 = icon+title, 1 = icon, 2 = title
+                    // Format: ESC ] number ; text BEL
+                    let osc_content = &output[start..start + end];
+                    if let Some(semicolon) = osc_content.find(';') {
+                        let title = &osc_content[semicolon + 1..];
+                        // Call on_title_change hook
+                        if let Some(ref executor) = self.hooks_executor {
+                            if let Some(ref script) = self.config.hooks.on_title_change {
+                                if let Err(e) = executor.on_title_change(script, title) {
+                                    warn!("on_title_change hook failed: {}", e);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // Parse OSC 7 for directory tracking
         if output.contains("\x1b]7;") {
             if let Some(start) = output.find("\x1b]7;") {
@@ -1826,6 +1874,27 @@ impl Terminal {
                 if let Some(end) = output[start..].find('\x07') {
                     let cmd = &output[start + 10..start + end];
                     self.keybindings.update_last_command(cmd.to_string());
+                }
+            }
+            
+            // Parse OSC 133;D for command end with exit code
+            // Format: ESC ] 133 ; D ; exit_code BEL
+            if let Some(start) = output.find("\x1b]133;D;") {
+                if let Some(end) = output[start..].find('\x07') {
+                    let exit_code_str = &output[start + 10..start + end];
+                    if let Ok(exit_code) = exit_code_str.parse::<i32>() {
+                        // Call on_command_end hook
+                        if let Some(ref executor) = self.hooks_executor {
+                            if let Some(ref script) = self.config.hooks.on_command_end {
+                                let command = self.keybindings.shell_integration().last_command
+                                    .as_deref()
+                                    .unwrap_or("");
+                                if let Err(e) = executor.on_command_end(script, command, exit_code) {
+                                    warn!("on_command_end hook failed: {}", e);
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
