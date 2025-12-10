@@ -623,11 +623,23 @@ impl Terminal {
                     if let Some(session) = self.sessions.get(self.active_session) {
                         if let Ok(n) = session.read_output(&mut self.read_buffer).await {
                             if n > 0 && self.active_session < self.output_buffers.len() {
-                                self.output_buffers[self.active_session].extend_from_slice(&self.read_buffer[..n]);
-                                self.dirty = true;
+                                // Convert output to String
+                                let mut output_str = String::from_utf8_lossy(&self.read_buffer[..n]).into_owned();
 
-                                // Convert output to String to avoid borrow checker issues
-                                let output_str = String::from_utf8_lossy(&self.read_buffer[..n]).into_owned();
+                                // Apply output filters if configured
+                                if !self.config.hooks.output_filters.is_empty() {
+                                    if let Some(ref executor) = self.hooks_executor {
+                                        output_str = executor.apply_output_filters(&output_str, &self.config.hooks.output_filters)
+                                            .unwrap_or_else(|e| {
+                                                warn!("Output filter pipeline failed: {}", e);
+                                                output_str  // Use unfiltered output on error
+                                            });
+                                    }
+                                }
+
+                                // Store the (potentially filtered) output in buffer
+                                self.output_buffers[self.active_session].extend_from_slice(output_str.as_bytes());
+                                self.dirty = true;
 
                                 // Update shell integration state and trigger related hooks
                                 // This handles OSC sequences for title changes, command tracking, etc.
