@@ -4,8 +4,6 @@ Furnace is a cross-platform terminal emulator written in Rust. It combines Cross
 
 ## Features
 
-> GPU rendering and a command palette are not implemented yet; the `hardware_acceleration` flag and related fields are reserved for future GPU work.
-
 - Cross-platform PTY shell sessions (Windows, Linux, macOS) with async read/write.
 - Lua configuration (`~/.furnace/config.lua` by default or `--config`) with lifecycle hooks (`on_startup`, `on_shutdown`, `on_key_press`, `on_command_start`, `on_command_end`, `on_output`, `on_bell`, `on_title_change`), output filters, custom keybindings, and custom widgets.
 - 24-bit color pipeline with ANSI parsing and themeable palettes.
@@ -18,6 +16,11 @@ Furnace is a cross-platform terminal emulator written in Rust. It combines Cross
   - Theme manager to cycle bundled themes.
 - Clipboard copy/paste, search mode, configurable cursor styles and font sizing metadata, and scrollback/history limits.
 - Background color overlays and cursor trail effects from the theme configuration.
+
+### Not yet implemented
+
+- GPU rendering (the `hardware_acceleration` flag is reserved for future work)
+- Command palette (keybinding placeholders are intentionally omitted)
 
 ## Installation
 
@@ -52,7 +55,7 @@ Furnace looks for `~/.furnace/config.lua` by default. All optional UI modules ar
 ```lua
 config = {
     shell = {
-        default_shell = "/bin/bash", -- use "pwsh.exe" on Windows if preferred
+        default_shell = "/bin/bash", -- use "pwsh.exe" (or "powershell.exe") on Windows
         working_dir = nil,
         env = {}
     },
@@ -64,7 +67,7 @@ config = {
         font_size = 12,
         cursor_style = "block",
         scrollback_lines = 10000,
-        hardware_acceleration = true
+        hardware_acceleration = false
     },
 
     features = {
@@ -121,7 +124,7 @@ config = {
 }
 ```
 
-See `config.example.lua` for more options.
+See `config.example.lua` for more options, including additional hook ideas, theme settings, and feature toggles.
 
 ## Key bindings
 
