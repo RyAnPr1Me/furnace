@@ -525,13 +525,6 @@ impl Terminal {
             self.config.theme.cursor
         );
         
-        if self.config.theme.background_image.is_some() {
-            debug!("Background image configured in theme");
-        }
-        if self.config.theme.cursor_trail.is_some() {
-            debug!("Cursor trail effects configured in theme");
-        }
-        
         // Log hooks configuration
         if self.config.hooks.on_startup.is_some() {
             debug!("Lua hooks configured");

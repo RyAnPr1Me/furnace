@@ -10,7 +10,6 @@ pub struct Config {
     pub shell: ShellConfig,
     pub terminal: TerminalConfig,
     pub theme: ThemeConfig,
-    pub keybindings: KeyBindings,
     pub features: FeaturesConfig,
     pub hooks: HooksConfig,
 }
@@ -26,15 +25,6 @@ pub struct HooksConfig {
     pub on_output: Option<String>,
     pub on_bell: Option<String>,
     pub on_title_change: Option<String>,
-
-    /// Custom keybinding handlers (key -> lua function string)
-    pub custom_keybindings: HashMap<String, String>,
-
-    /// Output filters (Lua functions that transform output)
-    pub output_filters: Vec<String>,
-
-    /// Custom widgets (Lua code for rendering custom UI)
-    pub custom_widgets: Vec<String>,
 }
 
 impl HooksConfig {
@@ -48,37 +38,6 @@ impl HooksConfig {
         let on_bell = table.get::<_, Option<String>>("on_bell")?;
         let on_title_change = table.get::<_, Option<String>>("on_title_change")?;
 
-        let custom_keybindings = if let Ok(kb_table) = table.get::<_, Table>("custom_keybindings") {
-            let mut map = HashMap::new();
-            for pair in kb_table.pairs::<String, String>() {
-                let (key, func) = pair?;
-                map.insert(key, func);
-            }
-            map
-        } else {
-            HashMap::new()
-        };
-
-        let output_filters = if let Ok(filters_table) = table.get::<_, Table>("output_filters") {
-            let mut filters = Vec::new();
-            for pair in filters_table.sequence_values::<String>() {
-                filters.push(pair?);
-            }
-            filters
-        } else {
-            Vec::new()
-        };
-
-        let custom_widgets = if let Ok(widgets_table) = table.get::<_, Table>("custom_widgets") {
-            let mut widgets = Vec::new();
-            for pair in widgets_table.sequence_values::<String>() {
-                widgets.push(pair?);
-            }
-            widgets
-        } else {
-            Vec::new()
-        };
-
         Ok(Self {
             on_startup,
             on_shutdown,
@@ -88,9 +47,6 @@ impl HooksConfig {
             on_output,
             on_bell,
             on_title_change,
-            custom_keybindings,
-            output_filters,
-            custom_widgets,
         })
     }
 }
@@ -133,45 +89,10 @@ pub struct ThemeConfig {
     pub foreground: String,
     pub background: String,
     pub cursor: String,
-    pub selection: String,
     pub colors: AnsiColors,
-    pub background_image: Option<BackgroundConfig>,
-    pub cursor_trail: Option<CursorTrailConfig>,
 }
 
-/// Background configuration for future background image support
-#[derive(Debug, Clone)]
-pub struct BackgroundConfig {
-    /// Path to background image file (supports PNG, JPEG, etc.)
-    pub image_path: Option<String>,
-    /// Solid color as fallback or alternative
-    pub color: Option<String>,
-    /// Opacity/transparency (0.0 = fully transparent, 1.0 = fully opaque)
-    pub opacity: f32,
-    /// How the image should be displayed: "fill", "fit", "stretch", "tile", "center"
-    pub mode: String,
-    /// Blur effect strength (0.0 = no blur, higher = more blur)
-    pub blur: f32,
-}
-
-/// Cursor trail configuration for future cursor effects
-#[derive(Debug, Clone)]
-pub struct CursorTrailConfig {
-    /// Enable cursor trail effect
-    pub enabled: bool,
-    /// Length of the trail (number of past positions to show)
-    pub length: usize,
-    /// Trail color (with alpha channel support like "#RRGGBBAA")
-    pub color: String,
-    /// Fade mode: "linear", "exponential", "smooth"
-    pub fade_mode: String,
-    /// Trail width (multiplier of cursor size)
-    pub width: f32,
-    /// Animation speed (milliseconds per trail update)
-    pub animation_speed: u64,
-}
-
-/// ANSI colors configuration (future theme integration)
+/// ANSI colors configuration for theme customization
 #[derive(Debug, Clone)]
 pub struct AnsiColors {
     pub black: String,
@@ -190,21 +111,6 @@ pub struct AnsiColors {
     pub bright_magenta: String,
     pub bright_cyan: String,
     pub bright_white: String,
-}
-
-/// Keybinding configuration (future custom keybinding loading)
-#[derive(Debug, Clone)]
-pub struct KeyBindings {
-    pub new_tab: String,
-    pub close_tab: String,
-    pub next_tab: String,
-    pub prev_tab: String,
-    pub split_vertical: String,
-    pub split_horizontal: String,
-    pub copy: String,
-    pub paste: String,
-    pub search: String,
-    pub clear: String,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -328,69 +234,8 @@ impl Default for ThemeConfig {
             foreground: "#FFFFFF".to_string(),
             background: "#1E1E1E".to_string(),
             cursor: "#00FF00".to_string(),
-            selection: "#264F78".to_string(),
             colors: AnsiColors::default(),
-            background_image: None,
-            cursor_trail: None,
         }
-    }
-}
-
-impl Default for BackgroundConfig {
-    fn default() -> Self {
-        Self {
-            image_path: None,
-            color: None,
-            opacity: 1.0,
-            mode: "fill".to_string(),
-            blur: 0.0,
-        }
-    }
-}
-
-impl Default for CursorTrailConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            length: 10,
-            color: "#00FF0080".to_string(), // Green with 50% alpha
-            fade_mode: "exponential".to_string(),
-            width: 1.0,
-            animation_speed: 16, // ~60 FPS
-        }
-    }
-}
-
-impl BackgroundConfig {
-    fn from_lua_table(table: &Table) -> Result<Self> {
-        Ok(Self {
-            image_path: table.get::<_, Option<String>>("image_path")?,
-            color: table.get::<_, Option<String>>("color")?,
-            opacity: table.get::<_, Option<f32>>("opacity")?.unwrap_or(1.0),
-            mode: table
-                .get::<_, Option<String>>("mode")?
-                .unwrap_or_else(|| "fill".to_string()),
-            blur: table.get::<_, Option<f32>>("blur")?.unwrap_or(0.0),
-        })
-    }
-}
-
-impl CursorTrailConfig {
-    fn from_lua_table(table: &Table) -> Result<Self> {
-        Ok(Self {
-            enabled: table.get::<_, Option<bool>>("enabled")?.unwrap_or(false),
-            length: table.get::<_, Option<usize>>("length")?.unwrap_or(10),
-            color: table
-                .get::<_, Option<String>>("color")?
-                .unwrap_or_else(|| "#00FF0080".to_string()),
-            fade_mode: table
-                .get::<_, Option<String>>("fade_mode")?
-                .unwrap_or_else(|| "exponential".to_string()),
-            width: table.get::<_, Option<f32>>("width")?.unwrap_or(1.0),
-            animation_speed: table
-                .get::<_, Option<u64>>("animation_speed")?
-                .unwrap_or(16),
-        })
     }
 }
 
@@ -408,9 +253,6 @@ impl ThemeConfig {
         let cursor = table
             .get::<_, Option<String>>("cursor")?
             .unwrap_or_else(|| "#00FF00".to_string());
-        let selection = table
-            .get::<_, Option<String>>("selection")?
-            .unwrap_or_else(|| "#264F78".to_string());
 
         let colors = if let Ok(colors_table) = table.get::<_, Table>("colors") {
             AnsiColors::from_lua_table(&colors_table)?
@@ -418,27 +260,12 @@ impl ThemeConfig {
             AnsiColors::default()
         };
 
-        let background_image = if let Ok(bg_table) = table.get::<_, Table>("background_image") {
-            Some(BackgroundConfig::from_lua_table(&bg_table)?)
-        } else {
-            None
-        };
-
-        let cursor_trail = if let Ok(trail_table) = table.get::<_, Table>("cursor_trail") {
-            Some(CursorTrailConfig::from_lua_table(&trail_table)?)
-        } else {
-            None
-        };
-
         Ok(Self {
             name,
             foreground,
             background,
             cursor,
-            selection,
             colors,
-            background_image,
-            cursor_trail,
         })
     }
 }
@@ -521,60 +348,6 @@ impl AnsiColors {
     }
 }
 
-impl Default for KeyBindings {
-    fn default() -> Self {
-        Self {
-            new_tab: "Ctrl+T".to_string(),
-            close_tab: "Ctrl+W".to_string(),
-            next_tab: "Ctrl+Tab".to_string(),
-            prev_tab: "Ctrl+Shift+Tab".to_string(),
-            split_vertical: "Ctrl+Shift+V".to_string(),
-            split_horizontal: "Ctrl+Shift+H".to_string(),
-            copy: "Ctrl+Shift+C".to_string(),
-            paste: "Ctrl+Shift+V".to_string(),
-            search: "Ctrl+F".to_string(),
-            clear: "Ctrl+L".to_string(),
-        }
-    }
-}
-
-impl KeyBindings {
-    fn from_lua_table(table: &Table) -> Result<Self> {
-        Ok(Self {
-            new_tab: table
-                .get::<_, Option<String>>("new_tab")?
-                .unwrap_or_else(|| "Ctrl+T".to_string()),
-            close_tab: table
-                .get::<_, Option<String>>("close_tab")?
-                .unwrap_or_else(|| "Ctrl+W".to_string()),
-            next_tab: table
-                .get::<_, Option<String>>("next_tab")?
-                .unwrap_or_else(|| "Ctrl+Tab".to_string()),
-            prev_tab: table
-                .get::<_, Option<String>>("prev_tab")?
-                .unwrap_or_else(|| "Ctrl+Shift+Tab".to_string()),
-            split_vertical: table
-                .get::<_, Option<String>>("split_vertical")?
-                .unwrap_or_else(|| "Ctrl+Shift+V".to_string()),
-            split_horizontal: table
-                .get::<_, Option<String>>("split_horizontal")?
-                .unwrap_or_else(|| "Ctrl+Shift+H".to_string()),
-            copy: table
-                .get::<_, Option<String>>("copy")?
-                .unwrap_or_else(|| "Ctrl+Shift+C".to_string()),
-            paste: table
-                .get::<_, Option<String>>("paste")?
-                .unwrap_or_else(|| "Ctrl+Shift+V".to_string()),
-            search: table
-                .get::<_, Option<String>>("search")?
-                .unwrap_or_else(|| "Ctrl+F".to_string()),
-            clear: table
-                .get::<_, Option<String>>("clear")?
-                .unwrap_or_else(|| "Ctrl+L".to_string()),
-        })
-    }
-}
-
 impl Config {
     /// Load configuration from default location
     ///
@@ -639,12 +412,6 @@ impl Config {
             ThemeConfig::default()
         };
 
-        let keybindings = if let Ok(kb_table) = table.get::<_, Table>("keybindings") {
-            KeyBindings::from_lua_table(&kb_table)?
-        } else {
-            KeyBindings::default()
-        };
-
         let features = if let Ok(features_table) = table.get::<_, Table>("features") {
             FeaturesConfig::from_lua_table(&features_table)?
         } else {
@@ -661,7 +428,6 @@ impl Config {
             shell,
             terminal,
             theme,
-            keybindings,
             features,
             hooks,
         })
@@ -758,16 +524,7 @@ config = {
         name = 'custom_theme',
         foreground = 'ffffff',
         background = '000000',
-        cursor = 'ff0000',
-        selection = '00ff00'
-    },
-    keybindings = {
-        new_tab = 'Ctrl',
-        close_tab = 'Ctrl',
-        next_tab = 'Ctrl',
-        prev_tab = 'Ctrl',
-        split_horizontal = 'Ctrl',
-        split_vertical = 'Ctrl'
+        cursor = 'ff0000'
     },
     features = {
         resource_monitor = true,
@@ -807,9 +564,6 @@ config = {
         
         // Verify theme config
         assert_eq!(config.theme.name, "custom_theme");
-        
-        // Verify keybindings config loaded
-        assert!(!config.keybindings.new_tab.is_empty());
         
         // Verify features config
         assert!(config.features.resource_monitor);
