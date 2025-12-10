@@ -52,7 +52,7 @@ Furnace looks for `~/.furnace/config.lua` by default. All optional UI modules ar
 ```lua
 config = {
     shell = {
-        default_shell = "/bin/bash", -- use \"pwsh.exe\" on Windows if preferred
+        default_shell = "/bin/bash", -- use "pwsh.exe" on Windows if preferred
         working_dir = nil,
         env = {}
     },
@@ -185,4 +185,4 @@ Contributions are welcome! Please ensure:
 
 ## License
 
-MIT License - see LICENSE for details.
+MIT License - see LICENSE file for details.
