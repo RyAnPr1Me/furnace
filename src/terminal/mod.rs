@@ -29,6 +29,7 @@ use ratatui::{
 };
 use std::borrow::Cow;
 use std::io;
+use std::time::Instant;
 use tokio::time::{interval, Duration};
 use tracing::{debug, info, warn};
 use unicode_width::UnicodeWidthStr;
@@ -151,6 +152,16 @@ pub struct Terminal {
     split_ratio: f32,
     // Lua hooks executor for custom functionality
     hooks_executor: Option<HooksExecutor>,
+    // Text selection state
+    selection_start: Option<(u16, u16)>, // (col, row)
+    selection_end: Option<(u16, u16)>,
+    selection_active: bool,
+    // Background image data (loaded once)
+    background_image: Option<Vec<u8>>, // Raw image data
+    background_image_width: u16,
+    background_image_height: u16,
+    // Cursor trail state
+    cursor_trail_positions: Vec<(u16, u16, std::time::Instant)>, // (col, row, timestamp)
 }
 
 /// Split pane orientation
@@ -245,7 +256,7 @@ impl Terminal {
                 TrueColorPalette::default_dark()
             });
 
-        let terminal = Self {
+        let mut terminal = Self {
             config,
             sessions: Vec::with_capacity(8),
             active_session: 0,
@@ -335,7 +346,34 @@ impl Terminal {
             split_orientation: SplitOrientation::None,
             split_ratio: 0.5, // Default 50/50 split
             hooks_executor,
+            // Initialize text selection state
+            selection_start: None,
+            selection_end: None,
+            selection_active: false,
+            // Initialize background image state (load if configured)
+            background_image: None,
+            background_image_width: 0,
+            background_image_height: 0,
+            // Initialize cursor trail state
+            cursor_trail_positions: Vec::with_capacity(20), // Pre-allocate for trail
         };
+        
+        // Load background image if configured
+        if let Some(ref bg_config) = terminal.config.theme.background_image {
+            if let Some(ref image_path) = bg_config.image_path {
+                match Self::load_background_image(image_path) {
+                    Ok((data, width, height)) => {
+                        terminal.background_image = Some(data);
+                        terminal.background_image_width = width;
+                        terminal.background_image_height = height;
+                        debug!("Loaded background image: {}x{}", width, height);
+                    }
+                    Err(e) => {
+                        warn!("Failed to load background image: {}", e);
+                    }
+                }
+            }
+        }
         
         // Execute startup hook if configured
         if let (Some(executor), Some(script)) = (&terminal.hooks_executor, on_startup_hook) {
@@ -788,9 +826,9 @@ impl Terminal {
 
     /// Handle mouse events
     #[allow(clippy::unused_self)]
-    fn handle_mouse_event(&mut self, _mouse: MouseEvent) {
-        // Mouse events currently not handled
-        // Keeping &mut self for future implementation
+    fn handle_mouse_event(&mut self, mouse: MouseEvent) {
+        // Handle text selection
+        self.handle_mouse_selection(mouse);
     }
 
     /// Handle keyboard events with optimal input processing
@@ -1261,6 +1299,9 @@ impl Terminal {
     /// when hardware acceleration is enabled.
     #[allow(clippy::too_many_lines)]
     fn render(&mut self, f: &mut ratatui::Frame) {
+        // Render background image/color if configured
+        self.render_background(f);
+        
         // Note: When hardware_acceleration is enabled, this would delegate to GPU renderer
         // For now, we use ratatui (CPU rendering) but config values are available
         // for future GPU rendering pipeline integration
@@ -1409,6 +1450,9 @@ impl Terminal {
         if !self.config.hooks.custom_widgets.is_empty() {
             self.render_custom_widgets(f);
         }
+
+        // Render cursor trail overlay
+        self.render_cursor_trail(f);
     }
 
     /// Bug #3: Render terminal output with zero-copy caching
@@ -1470,6 +1514,60 @@ impl Terminal {
 
         let mut display_lines = Vec::with_capacity(capacity);
         display_lines.extend_from_slice(styled_lines);
+
+        // Apply text selection highlighting if active
+        if !self.config.theme.selection.is_empty() {
+            if self.selection_start.is_some() || self.selection_end.is_some() {
+                if let Ok(sel_color) = crate::colors::TrueColor::from_hex(&self.config.theme.selection) {
+                    let selection_bg = Color::Rgb(sel_color.r, sel_color.g, sel_color.b);
+                    
+                    // Apply selection background to selected positions
+                    for (row_idx, line) in display_lines.iter_mut().enumerate() {
+                        let mut new_spans = Vec::new();
+                        let mut col = 0u16;
+                        
+                        for span in &line.spans {
+                            let span_width = span.content.len() as u16;
+                            let mut span_start = 0;
+                            
+                            for char_idx in 0..span_width {
+                                let char_col = col + char_idx;
+                                if self.is_position_selected(char_col, row_idx as u16) {
+                                    // This character is selected
+                                    if span_start < char_idx {
+                                        // Add non-selected part
+                                        new_spans.push(Span::styled(
+                                            span.content[span_start as usize..char_idx as usize].to_string(),
+                                            span.style
+                                        ));
+                                    }
+                                    // Add selected character
+                                    new_spans.push(Span::styled(
+                                        span.content[char_idx as usize..(char_idx + 1) as usize].to_string(),
+                                        span.style.bg(selection_bg)
+                                    ));
+                                    span_start = char_idx + 1;
+                                }
+                            }
+                            
+                            // Add remaining non-selected part
+                            if span_start < span_width {
+                                new_spans.push(Span::styled(
+                                    span.content[span_start as usize..].to_string(),
+                                    span.style
+                                ));
+                            }
+                            
+                            col += span_width;
+                        }
+                        
+                        if !new_spans.is_empty() {
+                            *line = Line::from(new_spans);
+                        }
+                    }
+                }
+            }
+        }
 
         if let Some(cmd_buf) = self.command_buffers.get(self.active_session) {
             if !cmd_buf.is_empty() {
@@ -2267,6 +2365,239 @@ impl Terminal {
             self.is_split_pane_enabled(),
             self.max_history()
         )
+    }
+
+    /// Load background image from file
+    fn load_background_image(path: &str) -> Result<(Vec<u8>, u16, u16)> {
+        // Image loading requires the `image` crate
+        // For now, log that image loading is not supported without GPU feature
+        // This would be fully implemented in the GPU renderer module
+        warn!("Background image loading requires GPU renderer feature. Path: {}", path);
+        anyhow::bail!("Background image loading requires GPU renderer (not yet implemented)")
+    }
+
+    /// Handle mouse event for text selection
+    fn handle_mouse_selection(&mut self, event: crossterm::event::MouseEvent) {
+        use crossterm::event::MouseEventKind;
+        
+        match event.kind {
+            MouseEventKind::Down(crossterm::event::MouseButton::Left) => {
+                // Start selection
+                self.selection_start = Some((event.column, event.row));
+                self.selection_end = Some((event.column, event.row));
+                self.selection_active = true;
+                self.dirty = true;
+            }
+            MouseEventKind::Drag(crossterm::event::MouseButton::Left) => {
+                // Update selection end
+                if self.selection_active {
+                    self.selection_end = Some((event.column, event.row));
+                    self.dirty = true;
+                }
+            }
+            MouseEventKind::Up(crossterm::event::MouseButton::Left) => {
+                // Finalize selection and copy to clipboard
+                if self.selection_active {
+                    self.selection_end = Some((event.column, event.row));
+                    if let Err(e) = self.copy_selection_to_clipboard() {
+                        warn!("Failed to copy selection to clipboard: {}", e);
+                    }
+                    self.selection_active = false;
+                    self.dirty = true;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Check if a position is within the current selection
+    fn is_position_selected(&self, col: u16, row: u16) -> bool {
+        if let (Some(start), Some(end)) = (self.selection_start, self.selection_end) {
+            let (start_row, start_col) = if start.1 < end.1 || (start.1 == end.1 && start.0 <= end.0) {
+                (start.1, start.0)
+            } else {
+                (end.1, end.0)
+            };
+            let (end_row, end_col) = if start.1 < end.1 || (start.1 == end.1 && start.0 <= end.0) {
+                (end.1, end.0)
+            } else {
+                (start.1, start.0)
+            };
+
+            if row > start_row && row < end_row {
+                return true;
+            }
+            if row == start_row && row == end_row {
+                return col >= start_col && col <= end_col;
+            }
+            if row == start_row {
+                return col >= start_col;
+            }
+            if row == end_row {
+                return col <= end_col;
+            }
+        }
+        false
+    }
+
+    /// Copy selected text to clipboard
+    fn copy_selection_to_clipboard(&self) -> Result<()> {
+        use arboard::Clipboard;
+        
+        if let (Some(start), Some(end)) = (self.selection_start, self.selection_end) {
+            let text = self.get_selected_text(start, end)?;
+            let mut clipboard = Clipboard::new().context("Failed to access clipboard")?;
+            clipboard.set_text(text).context("Failed to set clipboard text")?;
+            debug!("Copied selection to clipboard");
+        }
+        Ok(())
+    }
+
+    /// Get the text within the selection range
+    fn get_selected_text(&self, start: (u16, u16), end: (u16, u16)) -> Result<String> {
+        // Normalize start and end positions
+        let (start_pos, end_pos) = if start.1 < end.1 || (start.1 == end.1 && start.0 <= end.0) {
+            (start, end)
+        } else {
+            (end, start)
+        };
+
+        // Get the output buffer for current session
+        if let Some(buffer) = self.output_buffers.get(self.active_session) {
+            // Parse the buffer to get styled lines
+            let output_str = String::from_utf8_lossy(buffer);
+            let lines: Vec<&str> = output_str.lines().collect();
+            
+            let mut selected_text = String::new();
+            for row in start_pos.1..=end_pos.1 {
+                if let Some(line) = lines.get(row as usize) {
+                    let line_start = if row == start_pos.1 { start_pos.0 as usize } else { 0 };
+                    let line_end = if row == end_pos.1 { 
+                        (end_pos.0 as usize).min(line.len()) 
+                    } else { 
+                        line.len() 
+                    };
+                    
+                    if line_start < line.len() {
+                        let substring = &line[line_start..line_end.min(line.len())];
+                        selected_text.push_str(substring);
+                        if row < end_pos.1 {
+                            selected_text.push('\n');
+                        }
+                    }
+                }
+            }
+            Ok(selected_text)
+        } else {
+            Ok(String::new())
+        }
+    }
+
+    /// Update cursor trail with current cursor position
+    fn update_cursor_trail(&mut self, col: u16, row: u16) {
+        if let Some(ref trail_config) = self.config.theme.cursor_trail {
+            if trail_config.enabled {
+                let now = std::time::Instant::now();
+                self.cursor_trail_positions.push((col, row, now));
+                
+                // Limit trail length
+                while self.cursor_trail_positions.len() > trail_config.length {
+                    self.cursor_trail_positions.remove(0);
+                }
+            }
+        }
+    }
+
+    /// Render background image if configured
+    fn render_background(&self, f: &mut ratatui::Frame) {
+        if let Some(ref bg_config) = self.config.theme.background_image {
+            // Log the configured mode and blur for GPU implementation reference
+            debug!("Background config: mode={}, blur={}", bg_config.mode, bg_config.blur);
+            
+            // For now, render a colored background as placeholder
+            // Full image rendering requires GPU or custom backend
+            if let Some(ref color_str) = bg_config.color {
+                if let Ok(color) = crate::colors::TrueColor::from_hex(color_str) {
+                    let opacity = bg_config.opacity;
+                    let adjusted_color = if opacity < 1.0 {
+                        // Blend with black background based on opacity
+                        let r = (color.r as f32 * opacity) as u8;
+                        let g = (color.g as f32 * opacity) as u8;
+                        let b = (color.b as f32 * opacity) as u8;
+                        Color::Rgb(r, g, b)
+                    } else {
+                        Color::Rgb(color.r, color.g, color.b)
+                    };
+                    
+                    // Render background block
+                    let block = Block::default().style(Style::default().bg(adjusted_color));
+                    f.render_widget(block, f.size());
+                }
+            }
+            
+            // Note: Actual image rendering with mode (fill, fit, stretch, tile, center)
+            // and blur effects requires GPU renderer implementation
+            // The mode and blur values are logged above for GPU implementation
+            // This is documented in IMPLEMENTATION_PLAN.md as GPU-only feature
+        }
+    }
+
+    /// Render cursor trail if configured
+    fn render_cursor_trail(&self, f: &mut ratatui::Frame) {
+        if let Some(ref trail_config) = self.config.theme.cursor_trail {
+            if trail_config.enabled && !self.cursor_trail_positions.is_empty() {
+                let now = std::time::Instant::now();
+                
+                // Parse trail color
+                let trail_color = if let Ok(color) = crate::colors::TrueColor::from_hex(&trail_config.color) {
+                    Color::Rgb(color.r, color.g, color.b)
+                } else {
+                    Color::Yellow
+                };
+
+                // Render trail positions with fading
+                for (i, (col, row, timestamp)) in self.cursor_trail_positions.iter().enumerate() {
+                    let age_ms = now.duration_since(*timestamp).as_millis() as f32;
+                    let max_age_ms = trail_config.animation_speed as f32;
+                    
+                    // Skip if too old
+                    if age_ms > max_age_ms {
+                        continue;
+                    }
+                    
+                    // Calculate alpha based on position and age
+                    let position_ratio = i as f32 / trail_config.length as f32;
+                    let age_ratio = 1.0 - (age_ms / max_age_ms);
+                    
+                    let alpha = match trail_config.fade_mode.as_str() {
+                        "linear" => position_ratio * age_ratio,
+                        "exponential" => (position_ratio * age_ratio).powf(2.0),
+                        "smooth" => 1.0 - (1.0 - position_ratio * age_ratio).powf(3.0),
+                        _ => position_ratio * age_ratio,
+                    };
+                    
+                    // Only render if visible
+                    if alpha > 0.1 && *col < f.size().width && *row < f.size().height {
+                        // Render trail character with faded style
+                        let area = Rect {
+                            x: *col,
+                            y: *row,
+                            width: (trail_config.width.max(1.0) as u16),
+                            height: 1,
+                        };
+                        
+                        let style = Style::default()
+                            .fg(trail_color)
+                            .add_modifier(Modifier::DIM);
+                        
+                        let trail_char = if alpha > 0.7 { "●" } else if alpha > 0.4 { "○" } else { "·" };
+                        let span = Span::styled(trail_char, style);
+                        let paragraph = Paragraph::new(Line::from(span));
+                        f.render_widget(paragraph, area);
+                    }
+                }
+            }
+        }
     }
 }
 
