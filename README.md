@@ -12,7 +12,7 @@ Furnace is a cross-platform terminal emulator written in Rust. It combines Cross
   - Resource monitor (Ctrl+R) powered by `sysinfo`.
   - Autocomplete suggestions sourced from history and common commands.
   - Progress bar for long-running commands.
-  - Session manager to save/restore sessions (default bindings: Ctrl+S / Ctrl+Shift+L).
+  - Session manager to save/restore sessions.
   - Theme manager to cycle bundled themes.
 - Clipboard copy/paste, search mode, configurable cursor styles and font sizing metadata, and scrollback/history limits.
 - Background color overlays and cursor trail effects from the theme configuration.
@@ -55,7 +55,7 @@ Furnace looks for `~/.furnace/config.lua` by default. All optional UI modules ar
 ```lua
 config = {
     shell = {
-        default_shell = "/bin/bash", -- use "pwsh.exe" (or "powershell.exe") on Windows
+        default_shell = "/bin/bash", -- use "pwsh.exe" (PowerShell 7+) or "powershell.exe" on Windows
         working_dir = nil,
         env = {}
     },
@@ -67,7 +67,7 @@ config = {
         font_size = 12,
         cursor_style = "block",
         scrollback_lines = 10000,
-        hardware_acceleration = false
+        hardware_acceleration = false -- reserved for future GPU rendering
     },
 
     features = {
