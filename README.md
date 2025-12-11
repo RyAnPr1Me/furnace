@@ -9,7 +9,7 @@ Furnace is a cross-platform terminal emulator written in Rust. It combines Cross
 - 24-bit color pipeline with ANSI parsing and themeable palettes.
 - Tabs for multiple sessions and optional split panes when `terminal.enable_split_pane` is enabled.
 - Optional GPU rendering via `wgpu` when built with `--features gpu` and `terminal.hardware_acceleration` enabled (falls back to CPU if unavailable at runtime).
-- Optional modules (disabled by default):
+- Optional modules (disabled by default; enable via `features.*` in config):
   - Resource monitor (Ctrl+R) powered by `sysinfo`.
   - Autocomplete suggestions sourced from history and common commands.
   - Progress bar for long-running commands.
@@ -17,6 +17,13 @@ Furnace is a cross-platform terminal emulator written in Rust. It combines Cross
   - Theme manager to cycle bundled themes.
 - Clipboard copy/paste, search mode, configurable cursor styles and font sizing metadata, and scrollback/history limits.
 - Background color overlays and cursor trail effects from the theme configuration.
+
+### Current defaults
+
+- Tabs: disabled by default (`terminal.enable_tabs = false`)
+- Split panes: disabled by default (`terminal.enable_split_pane = false`)
+- Hardware acceleration: enabled by default; automatically falls back to CPU when GPU support is unavailable at build time or runtime
+- Optional UI modules: disabled until explicitly enabled in config (`features.*`)
 
 ### Not yet implemented
 
