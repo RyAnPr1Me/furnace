@@ -15,18 +15,21 @@ impl HooksExecutor {
     /// Create a new hooks executor
     pub fn new() -> Result<Self> {
         let lua = Lua::new();
-        
+
         // Set up a safe Lua environment
         // Disable potentially dangerous functions
-        lua.load(r#"
+        lua.load(
+            r#"
             -- Disable dangerous functions
             os.execute = nil
             os.exit = nil
             io.popen = nil
             loadfile = nil
             dofile = nil
-        "#).exec()?;
-        
+        "#,
+        )
+        .exec()?;
+
         Ok(Self { lua })
     }
 
@@ -41,17 +44,20 @@ impl HooksExecutor {
         }
 
         // Create a table with context
-        self.lua.load(format!(
-            r#"
+        self.lua
+            .load(format!(
+                r#"
             local context = "{}"
             {}
             "#,
-            context.replace('"', r#"\""#),
-            script
-        )).exec().map_err(|e| {
-            warn!("Lua hook execution failed: {}", e);
-            anyhow::anyhow!("Lua hook error: {}", e)
-        })?;
+                context.replace('"', r#"\""#),
+                script
+            ))
+            .exec()
+            .map_err(|e| {
+                warn!("Lua hook execution failed: {}", e);
+                anyhow::anyhow!("Lua hook error: {}", e)
+            })?;
 
         debug!("Executed Lua hook successfully");
         Ok(())
@@ -126,7 +132,7 @@ impl HooksExecutor {
         }
 
         let mut result = output.to_string();
-        
+
         for (idx, filter) in filters.iter().enumerate() {
             if filter.trim().is_empty() {
                 continue;
@@ -136,7 +142,7 @@ impl HooksExecutor {
             let globals = self.lua.globals();
             globals.set("input", result.clone())?;
             globals.set("output", result.clone())?; // Default: output = input
-            
+
             // Execute the filter
             match self.lua.load(filter).exec() {
                 Ok(()) => {
@@ -158,7 +164,7 @@ impl HooksExecutor {
                 }
             }
         }
-        
+
         Ok(result)
     }
 
@@ -167,7 +173,12 @@ impl HooksExecutor {
     /// # Arguments
     /// * `lua_code` - Lua function code to execute
     /// * `context` - Context data (cwd, last_command, etc.)
-    pub fn execute_custom_keybinding(&self, lua_code: &str, cwd: &str, last_command: &str) -> Result<()> {
+    pub fn execute_custom_keybinding(
+        &self,
+        lua_code: &str,
+        cwd: &str,
+        last_command: &str,
+    ) -> Result<()> {
         if lua_code.trim().is_empty() {
             return Ok(());
         }
@@ -178,7 +189,7 @@ impl HooksExecutor {
         ctx_table.set("cwd", cwd)?;
         ctx_table.set("last_command", last_command)?;
         globals.set("context", ctx_table)?;
-        
+
         // Execute Lua code
         self.lua.load(lua_code).exec().map_err(|e| {
             warn!("Custom keybinding execution failed: {}", e);
@@ -222,7 +233,8 @@ impl HooksExecutor {
 
         // Extract widget definition from globals
         let globals = self.lua.globals();
-        let widget_table: mlua::Table = globals.get("widget")
+        let widget_table: mlua::Table = globals
+            .get("widget")
             .map_err(|_| anyhow::anyhow!("Widget code must set 'widget' global table"))?;
 
         // Extract position and dimensions
@@ -241,7 +253,9 @@ impl HooksExecutor {
         // Extract optional style
         let fg_color = widget_table.get::<_, Option<String>>("fg_color")?;
         let bg_color = widget_table.get::<_, Option<String>>("bg_color")?;
-        let bold = widget_table.get::<_, Option<bool>>("bold")?.unwrap_or(false);
+        let bold = widget_table
+            .get::<_, Option<bool>>("bold")?
+            .unwrap_or(false);
 
         Ok(LuaWidget {
             x,
@@ -274,9 +288,7 @@ impl Default for HooksExecutor {
         Self::new().unwrap_or_else(|e| {
             warn!("Failed to create Lua hooks executor: {}", e);
             // Create a dummy executor that will fail gracefully
-            Self {
-                lua: Lua::new(),
-            }
+            Self { lua: Lua::new() }
         })
     }
 }

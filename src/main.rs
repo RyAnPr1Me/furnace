@@ -6,6 +6,8 @@ use tracing_subscriber::FmtSubscriber;
 
 mod colors;
 mod config;
+#[cfg(feature = "gpu")]
+mod gpu;
 mod hooks;
 mod keybindings;
 mod progress_bar;
@@ -13,8 +15,6 @@ mod session;
 mod shell;
 mod terminal;
 mod ui;
-#[cfg(feature = "gpu")]
-mod gpu;
 
 use config::Config;
 use terminal::Terminal;

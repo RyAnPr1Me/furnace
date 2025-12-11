@@ -786,13 +786,16 @@ config = {
         let globals = lua.globals();
         let config_table: Table = globals.get("config").unwrap();
         let config = Config::from_lua_table(&config_table).unwrap();
-        
+
         // Verify shell config
         assert_eq!(config.shell.default_shell, "/bin/bash");
         assert_eq!(config.shell.working_dir, Some("/home/user".to_string()));
         assert_eq!(config.shell.env.len(), 2);
-        assert_eq!(config.shell.env.get("MY_VAR"), Some(&"test_value".to_string()));
-        
+        assert_eq!(
+            config.shell.env.get("MY_VAR"),
+            Some(&"test_value".to_string())
+        );
+
         // Verify terminal config
         assert_eq!(config.terminal.max_history, 5000);
         assert!(config.terminal.enable_tabs);
@@ -801,10 +804,10 @@ config = {
         assert_eq!(config.terminal.cursor_style, "underline");
         assert_eq!(config.terminal.font_size, 14);
         assert_eq!(config.terminal.scrollback_lines, 20000);
-        
+
         // Verify theme config
         assert_eq!(config.theme.name, "custom_theme");
-        
+
         // Verify features config
         assert!(config.features.resource_monitor);
         assert!(config.features.autocomplete);
@@ -812,7 +815,7 @@ config = {
         assert!(config.features.theme_manager);
         assert!(config.features.progress_bar);
         assert!(config.features.command_palette);
-        
+
         // Verify hooks config are loaded
         assert!(config.hooks.on_startup.is_some());
         assert!(config.hooks.on_shutdown.is_some());
@@ -824,8 +827,11 @@ config = {
     fn test_config_file_loading() {
         // Test that config.lua exists
         let config_path = std::path::Path::new("config.lua");
-        assert!(config_path.exists(), "config.lua should exist in repository root");
-        
+        assert!(
+            config_path.exists(),
+            "config.lua should exist in repository root"
+        );
+
         // Note: The actual file has platform detection code using os.execute
         // which won't work in a sandboxed test environment.
         // The important thing is the file exists and the structure is valid for real usage.

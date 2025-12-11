@@ -20,6 +20,7 @@ impl ShellSession {
     ///
     /// # Errors
     /// Returns an error if PTY creation or shell process spawn fails
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn new(shell_cmd: &str, working_dir: Option<&str>, rows: u16, cols: u16) -> Result<Self> {
         Self::new_with_env(shell_cmd, working_dir, rows, cols, &[])
     }
@@ -96,7 +97,7 @@ impl ShellSession {
     pub async fn read_output(&self, buffer: &mut [u8]) -> Result<usize> {
         let reader = self.reader.clone();
         let buffer_len = buffer.len();
-        
+
         // Spawn blocking task to perform synchronous read without blocking async runtime
         let data = tokio::task::spawn_blocking(move || -> Result<Vec<u8>> {
             let mut reader = reader.blocking_lock();
@@ -112,7 +113,7 @@ impl ShellSession {
         })
         .await
         .context("Task join error")??;
-        
+
         // Copy data to caller's buffer
         let n = data.len();
         if n > 0 {
@@ -141,7 +142,7 @@ impl ShellSession {
         let writer = self.writer.clone();
         let data = data.to_vec();
         let len = data.len();
-        
+
         tokio::task::spawn_blocking(move || {
             let mut writer = writer.blocking_lock();
             writer.write_all(&data)?;
@@ -151,7 +152,7 @@ impl ShellSession {
         .await
         .context("Task join error")?
         .context(format!("Failed to write {} bytes to shell", len))?;
-        
+
         debug!("Wrote {} bytes to shell", len);
         Ok(len)
     }
