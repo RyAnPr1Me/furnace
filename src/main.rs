@@ -13,6 +13,8 @@ mod session;
 mod shell;
 mod terminal;
 mod ui;
+#[cfg(feature = "gpu")]
+mod gpu;
 
 use config::Config;
 use terminal::Terminal;

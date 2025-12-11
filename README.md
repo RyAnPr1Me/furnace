@@ -8,7 +8,8 @@ Furnace is a cross-platform terminal emulator written in Rust. It combines Cross
 - Lua configuration (`~/.furnace/config.lua` by default or `--config`) with lifecycle hooks (`on_startup`, `on_shutdown`, `on_key_press`, `on_command_start`, `on_command_end`, `on_output`, `on_bell`, `on_title_change`), output filters, custom keybindings, and custom widgets.
 - 24-bit color pipeline with ANSI parsing and themeable palettes.
 - Tabs for multiple sessions and optional split panes when `terminal.enable_split_pane` is enabled.
-- Optional modules (disabled by default):
+- Optional GPU rendering via `wgpu` when built with `--features gpu` and `terminal.hardware_acceleration` enabled (falls back to CPU if unavailable at runtime).
+- Optional modules (disabled by default; enable via `features.*` in config):
   - Resource monitor (Ctrl+R) powered by `sysinfo`.
   - Autocomplete suggestions sourced from history and common commands.
   - Progress bar for long-running commands.
@@ -17,9 +18,15 @@ Furnace is a cross-platform terminal emulator written in Rust. It combines Cross
 - Clipboard copy/paste, search mode, configurable cursor styles and font sizing metadata, and scrollback/history limits.
 - Background color overlays and cursor trail effects from the theme configuration.
 
+### Current defaults
+
+- Tabs: disabled by default (`terminal.enable_tabs = false`)
+- Split panes: disabled by default (`terminal.enable_split_pane = false`)
+- Hardware acceleration: enabled by default; automatically falls back to CPU when GPU support is unavailable at build time or runtime
+- Optional UI modules: disabled until explicitly enabled in config (`features.*`)
+
 ### Not yet implemented
 
-- GPU rendering (the `hardware_acceleration` flag is reserved for future work)
 - Command palette (keybinding placeholders are intentionally omitted)
 
 ## Installation
@@ -46,6 +53,12 @@ furnace --debug             # Enable debug logging to stderr
 furnace --shell /bin/bash   # Override the detected shell
 ```
 
+## Hardware acceleration
+
+- Build with GPU support: `cargo build --release --features gpu`
+- Runtime toggle: `terminal.hardware_acceleration = true` (default)
+- Fallback: If the binary is built without `--features gpu` or no compatible GPU is detected, Furnace automatically uses CPU rendering and logs a warning when hardware acceleration is requested.
+
 ## Configuration
 
 Furnace looks for `~/.furnace/config.lua` by default. All optional UI modules are disabled until you opt in.
@@ -68,7 +81,7 @@ config = {
         font_size = 12,
         cursor_style = "block",
         scrollback_lines = 10000,
-        hardware_acceleration = false -- reserved for future GPU rendering
+        hardware_acceleration = true -- defaults to GPU when built with `--features gpu`, automatically falls back to CPU otherwise
     },
 
     features = {

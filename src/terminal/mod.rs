@@ -29,7 +29,6 @@ use ratatui::{
 };
 use std::borrow::Cow;
 use std::io;
-use std::time::Instant;
 use tokio::time::{interval, Duration};
 use tracing::{debug, info, warn};
 use unicode_width::UnicodeWidthStr;
@@ -92,6 +91,31 @@ const COLOR_PURE_BLACK: (u8, u8, u8) = (0x00, 0x00, 0x00); // Pure black backgro
 const COLOR_MUTED_GREEN: (u8, u8, u8) = (0x6A, 0x9A, 0x7A); // Muted green
 const COLOR_MAGENTA_RED: (u8, u8, u8) = (0xB0, 0x5A, 0x7A); // Magenta-red
 const _COLOR_DARK_GRAY: (u8, u8, u8) = (0x5A, 0x4A, 0x4A); // Dark gray for future use
+
+#[cfg(feature = "gpu")]
+const GPU_PROBE_TIMEOUT_MS: u64 = 250;
+
+#[cfg(feature = "gpu")]
+fn gpu_available_cached() -> bool {
+    use std::{
+        sync::{mpsc, OnceLock},
+        thread,
+        time::Duration,
+    };
+
+    static GPU_AVAILABLE: OnceLock<bool> = OnceLock::new();
+
+    *GPU_AVAILABLE.get_or_init(|| {
+        let (tx, rx) = mpsc::channel();
+        let _ = thread::Builder::new()
+            .name("gpu-probe".into())
+            .spawn(move || {
+                let _ = tx.send(crate::gpu::is_gpu_available());
+            });
+        rx.recv_timeout(Duration::from_millis(GPU_PROBE_TIMEOUT_MS))
+            .unwrap_or(false)
+    })
+}
 
 /// High-performance terminal with GPU-accelerated rendering at 170 FPS
 #[allow(clippy::struct_field_names)]
@@ -237,7 +261,23 @@ impl Terminal {
         let cursor_style = config.terminal.cursor_style.clone();
         let max_history = config.terminal.max_history;
         let font_size = config.terminal.font_size;
-        let hardware_acceleration = config.terminal.hardware_acceleration;
+        let hardware_acceleration = config.terminal.hardware_acceleration
+            && {
+                #[cfg(feature = "gpu")]
+                {
+                    if gpu_available_cached() {
+                        true
+                    } else {
+                        warn!("Hardware acceleration requested but no compatible GPU detected. Falling back to CPU rendering.");
+                        false
+                    }
+                }
+                #[cfg(not(feature = "gpu"))]
+                {
+                    warn!("Hardware acceleration requested but binary was built without the `gpu` feature. Falling back to CPU rendering.");
+                    false
+                }
+            };
         let enable_split_pane = config.terminal.enable_split_pane;
         
         // Store hooks for later execution
@@ -2676,7 +2716,11 @@ mod tests {
         assert_eq!(terminal.cursor_style(), "block");
         assert_eq!(terminal.max_history(), 5000);
         assert_eq!(terminal.font_size(), 14);
-        assert!(terminal.is_hardware_acceleration_enabled());
+        #[cfg(feature = "gpu")]
+        let expected_hw_accel = gpu_available_cached();
+        #[cfg(not(feature = "gpu"))]
+        let expected_hw_accel = false;
+        assert_eq!(terminal.is_hardware_acceleration_enabled(), expected_hw_accel);
         assert!(!terminal.is_split_pane_enabled());
     }
 
@@ -2689,6 +2733,15 @@ mod tests {
         assert!(!terminal.cursor_style().is_empty());
         assert!(terminal.max_history() > 0);
         assert!(terminal.font_size() > 0);
+    }
+
+    #[test]
+    fn test_hardware_acceleration_respects_config() {
+        let mut config = Config::default();
+        config.terminal.hardware_acceleration = false;
+
+        let terminal = Terminal::new(config).unwrap();
+        assert!(!terminal.is_hardware_acceleration_enabled());
     }
 
     #[test]
