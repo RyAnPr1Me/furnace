@@ -97,7 +97,6 @@ impl AnsiParser {
     /// ```ignore
     /// let lines = AnsiParser::parse("\x1b[31mRed text\x1b[0m");
     /// ```
-    #[cfg_attr(not(test), allow(dead_code))]
     #[must_use]
     pub fn parse(text: &str) -> Vec<Line<'static>> {
         let mut parser = Parser::new();

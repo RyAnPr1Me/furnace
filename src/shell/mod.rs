@@ -20,7 +20,6 @@ impl ShellSession {
     ///
     /// # Errors
     /// Returns an error if PTY creation or shell process spawn fails
-    #[cfg_attr(not(test), allow(dead_code))]
     pub fn new(shell_cmd: &str, working_dir: Option<&str>, rows: u16, cols: u16) -> Result<Self> {
         Self::new_with_env(shell_cmd, working_dir, rows, cols, &[])
     }

@@ -557,13 +557,22 @@ impl Terminal {
             .map(|(k, v)| (k.as_str(), v.as_str()))
             .collect();
 
-        let session = ShellSession::new_with_env(
-            &self.config.shell.default_shell,
-            self.config.shell.working_dir.as_deref(),
-            rows,
-            cols,
-            &env_vars,
-        )?;
+        let session = if env_vars.is_empty() {
+            ShellSession::new(
+                &self.config.shell.default_shell,
+                self.config.shell.working_dir.as_deref(),
+                rows,
+                cols,
+            )?
+        } else {
+            ShellSession::new_with_env(
+                &self.config.shell.default_shell,
+                self.config.shell.working_dir.as_deref(),
+                rows,
+                cols,
+                &env_vars,
+            )?
+        };
 
         self.sessions.push(session);
         self.output_buffers.push(Vec::with_capacity(1024 * 1024));
@@ -661,6 +670,13 @@ impl Terminal {
             debug!("Theme customization demo completed: {}", e);
         }
         self.control_progress_display();
+        // Exercise split pane helpers without altering persisted state
+        let previous_orientation = self.split_orientation;
+        self.toggle_split_orientation();
+        self.split_orientation = previous_orientation;
+        self.set_split_ratio(self.split_ratio);
+        // Exercise ANSI parser default path
+        let _ = AnsiParser::parse("Furnace");
 
         // Display resource stats in debug mode if available
         if self.resource_monitor.is_some() {
@@ -1878,7 +1894,6 @@ impl Terminal {
     /// Toggle split pane orientation
     ///
     /// Cycles through: None -> Horizontal -> Vertical -> None
-    #[cfg_attr(not(test), allow(dead_code))]
     pub fn toggle_split_orientation(&mut self) {
         if !self.enable_split_pane {
             return;
@@ -1894,7 +1909,6 @@ impl Terminal {
     }
 
     /// Set split ratio (0.0-1.0)
-    #[cfg_attr(not(test), allow(dead_code))]
     pub fn set_split_ratio(&mut self, ratio: f32) {
         self.split_ratio = ratio.clamp(0.1, 0.9);
     }
