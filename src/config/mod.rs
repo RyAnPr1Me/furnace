@@ -220,6 +220,8 @@ pub struct FeaturesConfig {
     pub session_manager: bool,
     /// Enable theme manager for theme switching
     pub theme_manager: bool,
+    /// Enable command palette
+    pub command_palette: bool,
 }
 
 impl FeaturesConfig {
@@ -239,6 +241,9 @@ impl FeaturesConfig {
                 .unwrap_or(false),
             theme_manager: table
                 .get::<_, Option<bool>>("theme_manager")?
+                .unwrap_or(false),
+            command_palette: table
+                .get::<_, Option<bool>>("command_palette")?
                 .unwrap_or(false),
         })
     }
@@ -765,7 +770,8 @@ config = {
         autocomplete = true,
         session_manager = true,
         theme_manager = true,
-        progress_bar = true
+        progress_bar = true,
+        command_palette = true
     },
     hooks = {
         on_startup = 'print(1)',
@@ -805,6 +811,7 @@ config = {
         assert!(config.features.session_manager);
         assert!(config.features.theme_manager);
         assert!(config.features.progress_bar);
+        assert!(config.features.command_palette);
         
         // Verify hooks config are loaded
         assert!(config.hooks.on_startup.is_some());

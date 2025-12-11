@@ -257,6 +257,7 @@ impl Terminal {
         let enable_resource_monitor = config.features.resource_monitor;
         let enable_autocomplete = config.features.autocomplete;
         let enable_progress_bar = config.features.progress_bar;
+        let enable_command_palette = config.features.command_palette;
         // Store config values for use in the terminal
         let cursor_style = config.terminal.cursor_style.clone();
         let max_history = config.terminal.max_history;
@@ -397,6 +398,10 @@ impl Terminal {
             // Initialize cursor trail state
             cursor_trail_positions: Vec::with_capacity(20), // Pre-allocate for trail
         };
+        
+        if enable_command_palette {
+            debug!("Command palette feature enabled via config (not yet implemented)");
+        }
         
         // Load background image if configured
         if let Some(ref bg_config) = terminal.config.theme.background_image {
