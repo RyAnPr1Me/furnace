@@ -1,8 +1,8 @@
 Furnace Terminal Emulator - Build Information
 =============================================
 
-Build Date: 2025-12-11 02:59:12 UTC
-Git Commit: b320742678ac226dff5c733d9f257d6691999828
+Build Date: 2025-12-11 17:14:53 UTC
+Git Commit: 4eb24f0e05b738c076bdb534be0a6767f2ebe239
 Git Branch: main
 
 Binaries:
@@ -13,6 +13,6 @@ Build Configuration:
 - Optimization: Release (Level 3)
 - LTO: Fat (Full Link-Time Optimization)
 - Strip: Yes (Debug symbols removed)
-- Rust Version: rustc 1.91.1 (ed61e7d7e 2025-11-07)
+- Rust Version: rustc 1.92.0 (ded5c06cf 2025-12-08)
 
 Checksums: See SHA256SUMS file
