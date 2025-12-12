@@ -61,7 +61,7 @@ furnace --shell /bin/bash   # Override the detected shell
 
 ## Configuration
 
-Furnace looks for `~/.furnace/config.lua` by default. The loader executes a Lua file that defines a global `config` table; any fields you omit fall back to built-in defaults. The YAML example is for reference only—the runtime only loads Lua. All optional UI modules are disabled until you opt in.
+Furnace looks for `~/.furnace/config.lua` by default. All optional UI modules are disabled until you opt in.
 
 ### Basic example
 
@@ -119,8 +119,6 @@ config = {
 }
 ```
 
-The example above enables most optional modules for demonstration. See the reference below for the exact defaults applied when you omit fields.
-
 ### Hooks and scripting
 
 Lua hooks let you extend Furnace without plugins. Example output filter and notification inside your config table:
@@ -141,49 +139,6 @@ config = {
 ```
 
 See `config.example.lua` for more options, including additional hook ideas, theme settings, and feature toggles.
-
-### Configuration reference
-
-- **File location**: `~/.furnace/config.lua` by default (override with `--config`).
-- **Format**: Lua script that sets a global `config` table. The file is executed, so only load trusted configs.
-- **Fallback behavior**: Missing sections or keys use the defaults listed below.
-
-#### `shell` (defaults)
-- `default_shell`: auto-detected. On Windows prefers `pwsh.exe`, then `powershell.exe`, else `cmd.exe`; on Unix uses `$SHELL` or `/bin/bash`.
-- `working_dir`: `nil` (home directory).
-- `env`: `{}` (no extra environment variables).
-
-#### `terminal` (defaults)
-- `max_history`: `10000`
-- `enable_tabs`: `false`
-- `enable_split_pane`: `false`
-- `font_size`: `12`
-- `cursor_style`: `"block"`
-- `scrollback_lines`: `10000`
-- `hardware_acceleration`: `true`
-
-#### `theme` (defaults)
-- `name`: `"default"`, `foreground`: `#FFFFFF`, `background`: `#1E1E1E`, `cursor`: `#00FF00`, `selection`: `#264F78`.
-- `colors` (ANSI palette):
-  - Normal: `black #000000`, `red #FF0000`, `green #00FF00`, `yellow #FFFF00`, `blue #0000FF`, `magenta #FF00FF`, `cyan #00FFFF`, `white #FFFFFF`
-  - Bright: `bright_black #808080`, `bright_red #FF8080`, `bright_green #80FF80`, `bright_yellow #FFFF80`, `bright_blue #8080FF`, `bright_magenta #FF80FF`, `bright_cyan #80FFFF`, `bright_white #FFFFFF`
-- Optional `background_image`: set `image_path` for an image and optionally `color` as the fallback if the image is missing or fails to load (setting only `color` uses a solid background; omitting both skips the section). Defaults when present: `opacity 1.0`, `mode "fill"` (`fill`/`fit`/`stretch`/`tile`/`center`), `blur 0.0`.
-- Optional `cursor_trail`: enables a cursor effect (`enabled`/`length`/`color`/`fade_mode` of `linear`|`exponential`|`smooth`/`width`/`animation_speed`). Defaults when provided: `enabled false`, `length 10`, `color "#00FF0080"`, `fade_mode "exponential"`, `width 1.0`, `animation_speed 16`.
-
-#### `keybindings` (defaults)
-- `new_tab` `Ctrl+T`, `close_tab` `Ctrl+W`, `next_tab` `Ctrl+Tab`, `prev_tab` `Ctrl+Shift+Tab`
-- `split_vertical` `Ctrl+Shift+V`, `split_horizontal` `Ctrl+Shift+H`
-- `copy` `Ctrl+Shift+C`, `paste` `Ctrl+Shift+V`, `search` `Ctrl+F`, `clear` `Ctrl+L`
-- Note: `split_vertical` conflicts with the default `paste` binding; rebind `split_vertical` (for example to `Ctrl+Shift+|` or `Ctrl+Alt+V`) if you enable split panes.
-
-#### `features` (all default to `false`)
-- `resource_monitor`, `autocomplete`, `progress_bar`, `session_manager`, `theme_manager`, `command_palette`
-
-#### `hooks` (all optional)
-- Lifecycle hooks: `on_startup`, `on_shutdown`, `on_key_press`, `on_command_start`, `on_command_end`, `on_output`, `on_bell`, `on_title_change`
-- `custom_keybindings`: map of key -> Lua function string
-- `output_filters`: list of Lua functions that transform output text
-- `custom_widgets`: list of Lua snippets for extra UI elements
 
 ## Key bindings
 
