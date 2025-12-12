@@ -182,7 +182,6 @@ impl KeybindingManager {
         }
 
         // Last part is the key, everything before is modifiers
-        // SAFETY: We checked that parts is not empty above
         let key = match parts.last() {
             Some(k) => *k,
             None => return Err("Invalid key combination format".to_string()),
@@ -213,9 +212,8 @@ impl KeybindingManager {
             "left" => "Left",
             "right" => "Right",
             "space" => " ",
-            // Single character - use lowercase
-            k if k.len() == 1 => {
-                // SAFETY: We know k has exactly 1 char because of the guard condition
+            // Single character - use character count for UTF-8 safety
+            k if k.chars().count() == 1 => {
                 if let Some(c) = k.chars().next() {
                     // For single characters, convert to lowercase for consistency
                     let char_str = c.to_lowercase().to_string();
