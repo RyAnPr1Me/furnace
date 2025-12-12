@@ -2618,6 +2618,8 @@ impl Terminal {
     }
 
     /// Get the text within the selection range
+    ///
+    /// Uses character-based indexing to safely handle UTF-8 strings.
     fn get_selected_text(&self, start: (u16, u16), end: (u16, u16)) -> Result<String> {
         // Normalize start and end positions
         let (start_pos, end_pos) = if start.1 < end.1 || (start.1 == end.1 && start.0 <= end.0) {
@@ -2635,20 +2637,27 @@ impl Terminal {
             let mut selected_text = String::new();
             for row in start_pos.1..=end_pos.1 {
                 if let Some(line) = lines.get(row as usize) {
+                    // Use character-based indexing for UTF-8 safety
+                    let char_count = line.chars().count();
                     let line_start = if row == start_pos.1 {
-                        start_pos.0 as usize
+                        (start_pos.0 as usize).min(char_count)
                     } else {
                         0
                     };
                     let line_end = if row == end_pos.1 {
-                        (end_pos.0 as usize).min(line.len())
+                        (end_pos.0 as usize).min(char_count)
                     } else {
-                        line.len()
+                        char_count
                     };
 
-                    if line_start < line.len() {
-                        let substring = &line[line_start..line_end.min(line.len())];
-                        selected_text.push_str(substring);
+                    if line_start < char_count {
+                        // Safely extract substring using character indices
+                        let substring: String = line
+                            .chars()
+                            .skip(line_start)
+                            .take(line_end.saturating_sub(line_start))
+                            .collect();
+                        selected_text.push_str(&substring);
                         if row < end_pos.1 {
                             selected_text.push('\n');
                         }

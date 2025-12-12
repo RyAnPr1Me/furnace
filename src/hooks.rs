@@ -43,6 +43,15 @@ impl HooksExecutor {
             return Ok(());
         }
 
+        // Escape special characters for Lua string literal safety
+        // This prevents script injection and ensures proper parsing
+        let escaped_context = context
+            .replace('\\', r"\\") // Escape backslashes first
+            .replace('"', r#"\""#) // Escape double quotes
+            .replace('\n', r"\n") // Escape newlines
+            .replace('\r', r"\r") // Escape carriage returns
+            .replace('\t', r"\t"); // Escape tabs
+
         // Create a table with context
         self.lua
             .load(format!(
@@ -50,8 +59,7 @@ impl HooksExecutor {
             local context = "{}"
             {}
             "#,
-                context.replace('"', r#"\""#),
-                script
+                escaped_context, script
             ))
             .exec()
             .map_err(|e| {
