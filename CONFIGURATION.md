@@ -86,14 +86,6 @@ Context string passed to hooks (available as local `context`):
 - `on_output`: `"output:<text>"` (truncated to 1000 chars)
 - `on_bell`: `"bell"`
 - `on_title_change`: `"title_change:<title>"`
-- `on_startup`
-- `on_shutdown`
-- `on_key_press`
-- `on_command_start`
-- `on_command_end`
-- `on_output`
-- `on_bell`
-- `on_title_change`
 
 Other extensibility (also inside `config.hooks`):
 - `custom_keybindings`: map of key → Lua function (string).
