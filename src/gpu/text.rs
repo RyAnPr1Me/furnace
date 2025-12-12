@@ -2,6 +2,8 @@
 
 // Allow pedantic warnings for optional GPU feature code
 #![allow(clippy::pedantic)]
+// These functions are part of the public GPU API and may be used by external callers
+#![allow(dead_code)]
 
 use super::{CellStyle, GpuCell};
 

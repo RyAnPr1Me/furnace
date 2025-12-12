@@ -11,6 +11,11 @@
 //! - Background blur and transparency effects
 //! - Smooth cursor animation
 
+// Allow dead code for public API types that may be used by external callers
+#![allow(dead_code)]
+// Allow unused imports for conditionally compiled re-exports
+#![allow(unused_imports)]
+
 #[cfg(feature = "gpu")]
 pub mod renderer;
 

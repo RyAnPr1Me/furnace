@@ -36,6 +36,8 @@
 
 // Allow pedantic warnings for optional GPU feature code
 #![allow(clippy::pedantic)]
+// Allow dead code for utility functions that are part of the public API
+#![allow(dead_code)]
 
 use wgpu::util::DeviceExt;
 
