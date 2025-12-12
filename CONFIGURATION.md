@@ -64,7 +64,7 @@ This document lists every supported configuration field, their defaults, and exa
 | `search` | `Ctrl+F` |
 | `clear` | `Ctrl+L` |
 
-> `split_vertical` conflicts with the default `paste` binding. Rebind `split_vertical` (e.g., `Ctrl+Shift+|` or `Ctrl+Alt+V`) if you enable splits.
+> `split_vertical` conflicts with the default `paste` binding. Rebind `split_vertical` (for example `Ctrl+Alt+V`) if you enable splits.
 
 ## Features (all default to `false`)
 - `resource_monitor`
@@ -75,7 +75,7 @@ This document lists every supported configuration field, their defaults, and exa
 - `command_palette`
 
 ## Hooks (all optional)
-All fields in this section live under `config.hooks`. Lifecycle hooks expect Lua code **strings** (inline code). To keep Lua in a separate file, read that file's contents into the string yourself.
+All fields in this section live under `config.hooks`. Lifecycle hooks expect Lua code **strings** (inline code). To run code from a separate file, read that file and load/execute it from the string (paths alone are not executed automatically because `loadfile`/`dofile` are disabled).
 
 Context string passed to hooks (available as local `context`):
 - `on_startup`: `"startup"`
@@ -117,8 +117,8 @@ config = {
 config = {
     hooks = {
         on_command_end = [[
-            local cmd, code = context:match("^command_end:(.*):(%-?%d+)$")
-            code = tonumber(code) or 0
+            local code = tonumber(context:match(":(%-?%d+)$") or "0") or 0
+            local cmd = context:match("^command_end:(.*):%-?%d+$")
             if code ~= 0 then
                 print(("Command failed: %s (exit %d)"):format(cmd or "?", code))
             end
@@ -128,7 +128,7 @@ config = {
             "function(text) return text:gsub('SUCCESS', '✅ SUCCESS') end"
         },
         custom_keybindings = {
-            ["Ctrl+Shift+G"] = [[ function() print(os.date()) end ]]
+            ["Ctrl+Shift+G"] = [[function() print(os.date()) end]]
         }
     }
 }
