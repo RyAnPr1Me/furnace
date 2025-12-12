@@ -117,7 +117,7 @@ config = {
 config = {
     hooks = {
         on_command_end = [[
-            local cmd, code = context:match("^command_end:(.*):([%-0-9]+)$")
+            local cmd, code = context:match("^command_end:(.*):(%-?%d+)$")
             code = tonumber(code) or 0
             if code ~= 0 then
                 print(("Command failed: %s (exit %d)"):format(cmd or "?", code))
@@ -128,7 +128,7 @@ config = {
             "function(text) return text:gsub('SUCCESS', '✅ SUCCESS') end"
         },
         custom_keybindings = {
-            ["Ctrl+Shift+G"] = [[function() print(os.date()) end]]
+            ["Ctrl+Shift+G"] = [[ function() print(os.date()) end ]]
         }
     }
 }
