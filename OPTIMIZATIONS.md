@@ -23,7 +23,7 @@ fn process_data(data: &str) -> String {
 
 **Benefits:**
 - 60-80% reduction in heap allocations
-- Lower GC pressure (though Rust has no GC)
+- Reduced memory allocation overhead
 - Improved cache locality
 
 ### 2. Dirty-Flag Rendering
