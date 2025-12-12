@@ -34,8 +34,9 @@
 //!
 //! See `examples/gpu_rendering.rs` (TODO) for complete usage example.
 
-// Allow pedantic warnings for optional GPU feature code
+// Allow pedantic warnings and dead code for optional GPU feature code under development
 #![allow(clippy::pedantic)]
+#![allow(dead_code)]
 
 use wgpu::util::DeviceExt;
 

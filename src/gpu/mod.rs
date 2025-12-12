@@ -10,6 +10,14 @@
 //! - Efficient glyph caching to minimize GPU uploads
 //! - Background blur and transparency effects
 //! - Smooth cursor animation
+//!
+//! # Status
+//! This module is currently under development. The infrastructure is in place
+//! but not yet fully integrated with the main terminal rendering pipeline.
+//! Enable the `gpu` feature to include this code in builds.
+
+// Allow dead code in this module as it's being developed for future integration
+#![allow(dead_code)]
 
 #[cfg(feature = "gpu")]
 pub mod renderer;
@@ -21,6 +29,7 @@ pub mod text;
 pub mod glyph_cache;
 
 #[cfg(feature = "gpu")]
+#[allow(unused_imports)]
 pub use renderer::GpuRenderer;
 
 /// GPU rendering configuration

@@ -1,7 +1,10 @@
 //! GPU text rendering utilities
+//!
+//! Provides color conversion and text parsing utilities for GPU rendering.
 
-// Allow pedantic warnings for optional GPU feature code
+// Allow pedantic warnings and dead code for optional GPU feature code under development
 #![allow(clippy::pedantic)]
+#![allow(dead_code)]
 
 use super::{CellStyle, GpuCell};
 

@@ -56,7 +56,7 @@ jobs:
         key: ${{ runner.os }}-cargo-build-release-${{ hashFiles('**/Cargo.lock') }}
     
     - name: Build release binary
-      run: cargo build --release --target ${{ matrix.target }}
+      run: cargo build --release --all-features --target ${{ matrix.target }}
       
     - name: Prepare binary
       shell: bash
@@ -184,6 +184,7 @@ jobs:
         - Optimization: Release (Level 3)
         - LTO: Fat (Full Link-Time Optimization)
         - Strip: Yes (Debug symbols removed)
+        - Features: All features enabled (including GPU)
         - Rust Version: $(rustc --version 2>/dev/null || echo "N/A")
         
         Checksums: See SHA256SUMS file

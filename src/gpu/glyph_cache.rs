@@ -3,6 +3,9 @@
 //! Caches rasterized glyphs in a texture atlas for efficient GPU rendering.
 //! Uses fontdue for font rasterization to provide actual glyph bitmaps.
 
+// Allow dead code for optional GPU feature code under development
+#![allow(dead_code)]
+
 use std::collections::HashMap;
 
 /// Glyph cache for efficient text rendering with fontdue font rasterization
