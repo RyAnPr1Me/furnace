@@ -108,14 +108,23 @@ impl ProgressBar {
     }
 
     /// Bug #16: Get display text with truncated command
+    ///
+    /// This function safely handles UTF-8 strings by truncating at character
+    /// boundaries rather than byte boundaries, preventing panics on multi-byte
+    /// characters.
     #[must_use]
     pub fn display_text_truncated(&self, max_cmd_len: usize) -> String {
         if self.visible {
-            if self.command.len() > max_cmd_len {
+            // Count characters (not bytes) to safely handle UTF-8
+            let char_count = self.command.chars().count();
+            if char_count > max_cmd_len {
+                // Safely truncate at character boundary
+                let truncate_len = max_cmd_len.saturating_sub(3);
+                let truncated: String = self.command.chars().take(truncate_len).collect();
                 format!(
                     "{} Running: {}... ({})",
                     self.spinner_char(),
-                    &self.command[..max_cmd_len.saturating_sub(3)],
+                    truncated,
                     self.elapsed()
                 )
             } else {
@@ -227,5 +236,18 @@ mod tests {
 
         let text = pb.display_text_truncated(10);
         assert!(text.contains("very-lo..."));
+    }
+
+    #[test]
+    fn test_truncated_display_utf8() {
+        // Test with multi-byte UTF-8 characters (emoji, Chinese, etc.)
+        let mut pb = ProgressBar::new();
+        pb.start("🔥火炉🔥command".to_string());
+
+        // Should not panic on UTF-8 strings
+        let text = pb.display_text_truncated(5);
+        assert!(!text.is_empty());
+        // Verify it truncates at character boundary, not byte boundary
+        assert!(text.contains("..."));
     }
 }

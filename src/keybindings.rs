@@ -182,7 +182,10 @@ impl KeybindingManager {
         }
 
         // Last part is the key, everything before is modifiers
-        let key = parts.last().unwrap();
+        let key = match parts.last() {
+            Some(k) => *k,
+            None => return Err("Invalid key combination format".to_string()),
+        };
         let modifiers: Vec<&str> = parts[..parts.len().saturating_sub(1)].to_vec();
 
         // Validate and normalize modifiers
@@ -209,13 +212,15 @@ impl KeybindingManager {
             "left" => "Left",
             "right" => "Right",
             "space" => " ",
-            // Single character - use lowercase
-            k if k.len() == 1 => {
-                let c = k.chars().next().unwrap();
-                // For single characters, convert to lowercase for consistency
-                let char_str = c.to_lowercase().to_string();
-                self.add_binding(&char_str, &normalized_mods, action);
-                return Ok(());
+            // Single character - use character count for UTF-8 safety
+            k if k.chars().count() == 1 => {
+                if let Some(c) = k.chars().next() {
+                    // For single characters, convert to lowercase for consistency
+                    let char_str = c.to_lowercase().to_string();
+                    self.add_binding(&char_str, &normalized_mods, action);
+                    return Ok(());
+                }
+                k
             }
             k => k,
         };
