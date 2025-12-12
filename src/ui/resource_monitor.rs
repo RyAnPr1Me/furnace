@@ -127,18 +127,18 @@ impl ResourceMonitor {
     /// Returns `(rx_bytes, tx_bytes)`
     fn get_network_stats() -> (u64, u64) {
         use sysinfo::Networks;
-        
+
         // Get network information
         let networks = Networks::new_with_refreshed_list();
-        
+
         let mut total_rx = 0u64;
         let mut total_tx = 0u64;
-        
+
         for (_interface_name, network) in networks.iter() {
             total_rx = total_rx.saturating_add(network.total_received());
             total_tx = total_tx.saturating_add(network.total_transmitted());
         }
-        
+
         (total_rx, total_tx)
     }
 

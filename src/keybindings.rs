@@ -61,7 +61,7 @@ pub enum Action {
 
     // Custom
     Custom(String),
-    
+
     // Lua execution
     ExecuteLua(String),
 }
@@ -107,7 +107,7 @@ impl KeybindingManager {
         // Tab management
         self.add_binding("t", &["Ctrl"], Action::NewTab);
         self.add_binding("w", &["Ctrl"], Action::CloseTab);
-        
+
         // BUG FIX #7: Ctrl+Tab is not reliably supported by crossterm on all terminals
         // Most terminals intercept Ctrl+Tab before it reaches the application.
         // Using Ctrl+PageDown/PageUp or Alt+number is more reliable, but we keep

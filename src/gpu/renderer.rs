@@ -190,9 +190,9 @@ impl GpuRenderer {
         // BUG FIX #3: Don't hardcode 1920x1080 - use config dimensions or defaults
         let (initial_width, initial_height) = (
             config.initial_width.unwrap_or(1280.0),
-            config.initial_height.unwrap_or(720.0)
+            config.initial_height.unwrap_or(720.0),
         );
-        
+
         let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Uniform Buffer"),
             contents: bytemuck::cast_slice(&[Uniforms {
@@ -454,7 +454,7 @@ impl GpuRenderer {
         // Create glyph cache with font loading
         let glyph_cache =
             super::glyph_cache::GlyphCache::new(config.font_size, &config.font_family);
-        
+
         // BUG FIX #4: Upload glyph atlas data to GPU texture
         // This ensures glyphs are actually visible when rendered
         queue.write_texture(
@@ -522,13 +522,13 @@ impl GpuRenderer {
     pub fn update_cells(&mut self, cells: &[GpuCell], cols: u32, rows: u32) {
         self.terminal_size = (cols, rows);
         let new_size = (cols * rows) as usize;
-        
+
         // Resize tracking vectors if needed
         if self.prev_cells.len() != new_size {
             self.prev_cells.resize(new_size, GpuCell::default());
             self.dirty_cells.resize(new_size, true);
         }
-        
+
         // Mark changed cells as dirty
         for (i, new_cell) in cells.iter().enumerate() {
             if i < self.prev_cells.len() {
@@ -545,10 +545,10 @@ impl GpuRenderer {
                 self.dirty_cells[i] = true;
             }
         }
-        
+
         self.cells.clear();
         self.cells.extend_from_slice(cells);
-        
+
         // Update previous frame cells
         self.prev_cells.clear();
         self.prev_cells.extend_from_slice(cells);
@@ -617,15 +617,15 @@ impl GpuRenderer {
             view_formats: vec![],
             desired_maximum_frame_latency: 2,
         };
-        
+
         surface.configure(&self.device, &config);
         self.surface = Some(surface);
         self.surface_config = Some(config);
-        
+
         // Update uniforms for new size
         self.resize(width, height);
     }
-    
+
     /// Upload glyph atlas to GPU
     ///
     /// BUG FIX #4: Provide method to upload glyph atlas data when new glyphs are cached.
@@ -769,7 +769,7 @@ impl GpuRenderer {
 
         // Clear dirty flags after successful render
         self.dirty_cells.fill(false);
-        
+
         // Log dirty cell optimization stats occasionally
         if self.stats.frame_count.is_multiple_of(100) {
             tracing::debug!(
@@ -934,18 +934,18 @@ mod tests {
     async fn test_gpu_renderer_creation() {
         let config = GpuConfig::default();
         let result = GpuRenderer::new(config).await;
-        
+
         // Should either succeed or fail gracefully
         // (May fail if no GPU is available in test environment)
         match result {
             Ok(renderer) => {
                 // Test that we can access the instance
                 let _instance = renderer.instance();
-                
+
                 // Test that we can get device info
                 let device_info = renderer.get_device_info();
                 assert!(!device_info.is_empty());
-                
+
                 // Test adapter info access
                 let adapter_info = renderer.get_adapter_info();
                 assert!(!adapter_info.name.is_empty());
@@ -961,14 +961,14 @@ mod tests {
     async fn test_gpu_renderer_glyph_atlas_access() {
         let config = GpuConfig::default();
         let result = GpuRenderer::new(config).await;
-        
+
         if let Ok(renderer) = result {
             // Test glyph atlas view access
             let _atlas_view = renderer.glyph_atlas_view();
-            
+
             // Test glyph sampler access
             let _sampler = renderer.glyph_sampler();
-            
+
             // These should not panic - just verifies the methods work
         }
     }
@@ -977,7 +977,7 @@ mod tests {
     async fn test_gpu_renderer_update_glyph_atlas() {
         let config = GpuConfig::default();
         let result = GpuRenderer::new(config).await;
-        
+
         if let Ok(mut renderer) = result {
             // Test that we can update the glyph atlas
             // This should not panic
@@ -989,11 +989,11 @@ mod tests {
     async fn test_gpu_backend_support() {
         let config = GpuConfig::default();
         let result = GpuRenderer::new(config).await;
-        
+
         if let Ok(renderer) = result {
             // Test current backend method
             let backend = renderer.current_backend();
-            
+
             // Get adapter info to verify backend is reported correctly
             let info = renderer.get_adapter_info();
             assert_eq!(backend, info.backend);

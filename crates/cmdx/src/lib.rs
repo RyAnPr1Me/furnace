@@ -120,7 +120,6 @@ pub struct CommandMapping {
 }
 
 #[derive(Debug)]
-#[allow(dead_code)] // Public API - description may be used by consumers
 pub struct TranslationResult {
     pub translated: bool,
     pub original_command: String,
@@ -134,7 +133,6 @@ pub struct TranslationResult {
 
 /// Errors that can occur during command translation
 #[derive(Debug, Clone)]
-#[allow(dead_code)] // Public API - all variants available for consumers
 pub enum TranslationError {
     /// Command not found in translation map
     UnknownCommand(String),
@@ -180,7 +178,6 @@ pub enum PipelineOperator {
 
 impl PipelineOperator {
     /// Parse a pipeline operator from a string
-    #[allow(dead_code)] // Used in tests
     fn from_str(s: &str) -> Option<Self> {
         match s {
             "|" => Some(Self::Pipe),
@@ -208,7 +205,6 @@ impl PipelineOperator {
     }
 
     /// Translate operator between Linux and Windows
-    #[allow(dead_code)]
     fn translate(&self, _target_os: OsType) -> &'static str {
         // Most operators are the same across platforms
         // PowerShell and cmd.exe support |, >, >>, <, &&, ||, ;
@@ -3388,20 +3384,17 @@ impl CommandTranslator {
     }
 
     /// Enable or disable command translation
-    #[allow(dead_code)] // Public API
     pub fn set_enabled(&mut self, enabled: bool) {
         self.enabled = enabled;
     }
 
     /// Check if translation is enabled
-    #[allow(dead_code)] // Public API
     #[must_use]
     pub fn is_enabled(&self) -> bool {
         self.enabled
     }
 
     /// Get current OS type
-    #[allow(dead_code)] // Public API
     #[must_use]
     pub fn current_os(&self) -> OsType {
         self.current_os
@@ -3417,6 +3410,15 @@ mod tests {
     #[test]
     fn test_translator_creation() {
         let translator = CommandTranslator::new(true);
+        assert!(translator.is_enabled());
+    }
+
+    #[test]
+    fn test_translator_enable_toggle() {
+        let mut translator = CommandTranslator::new(true);
+        translator.set_enabled(false);
+        assert!(!translator.is_enabled());
+        translator.set_enabled(true);
         assert!(translator.is_enabled());
     }
 
@@ -3767,6 +3769,22 @@ mod tests {
         assert_eq!(get_flag_value("--lines=5", 'n', Some("lines")), Some("5"));
         assert_eq!(get_flag_value("-c 4 host", 'c', None), Some("4"));
         assert_eq!(get_flag_value("-a file.txt", 'n', None), None);
+    }
+
+    #[test]
+    fn test_pipeline_operator_translate_and_from_str() {
+        let pipe = PipelineOperator::from_str("|").unwrap();
+        assert_eq!(pipe.translate(OsType::Linux), "|");
+        let redirect = PipelineOperator::from_str(">>").unwrap();
+        assert_eq!(redirect.translate(OsType::Windows), ">>");
+    }
+
+    #[test]
+    fn test_translation_error_display() {
+        let err = TranslationError::UnknownCommand("foo".to_string());
+        assert!(format!("{err}").contains("Unknown command"));
+        let err = TranslationError::InvalidSyntax("bad".to_string());
+        assert!(format!("{err}").contains("Invalid syntax"));
     }
 
     // ========== Argument Translator Tests ==========

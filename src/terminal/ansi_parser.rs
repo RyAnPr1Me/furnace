@@ -52,7 +52,7 @@ impl AnsiParser {
             current_text: String::with_capacity(256), // Pre-allocate for typical line length
             current_line_spans: Vec::with_capacity(8), // Pre-allocate for typical spans per line
             lines: Vec::with_capacity(24),            // Pre-allocate for typical terminal height
-            color_palette: None, // Use default ratatui colors
+            color_palette: None,                      // Use default ratatui colors
         }
     }
 
@@ -329,9 +329,10 @@ impl AnsiParser {
                                 5 => {
                                     if let Some(color_param) = iter.next() {
                                         if !color_param.is_empty() {
-                                            self.current_style = self
-                                                .current_style
-                                                .fg(self.indexed_color_to_color(to_color_u8(color_param[0])));
+                                            self.current_style =
+                                                self.current_style.fg(self.indexed_color_to_color(
+                                                    to_color_u8(color_param[0]),
+                                                ));
                                         }
                                     }
                                 }
@@ -375,9 +376,10 @@ impl AnsiParser {
                                 5 => {
                                     if let Some(color_param) = iter.next() {
                                         if !color_param.is_empty() {
-                                            self.current_style = self
-                                                .current_style
-                                                .bg(self.indexed_color_to_color(to_color_u8(color_param[0])));
+                                            self.current_style =
+                                                self.current_style.bg(self.indexed_color_to_color(
+                                                    to_color_u8(color_param[0]),
+                                                ));
                                         }
                                     }
                                 }

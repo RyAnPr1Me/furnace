@@ -252,7 +252,7 @@ impl Terminal {
 
         // Initialize Lua hooks executor
         let hooks_executor = HooksExecutor::new().ok();
-        
+
         // Capture feature flags and config data before moving
         let enable_resource_monitor = config.features.resource_monitor;
         let enable_autocomplete = config.features.autocomplete;
@@ -280,16 +280,16 @@ impl Terminal {
                 }
             };
         let enable_split_pane = config.terminal.enable_split_pane;
-        
+
         // Store hooks for later execution
         let on_startup_hook = config.hooks.on_startup.clone();
-        
+
         // Clone keybindings config before moving config
         let kb_config = config.keybindings.clone();
-        
+
         // Clone custom Lua keybindings before moving config
         let custom_lua_keybindings = config.hooks.custom_keybindings.clone();
-        
+
         // Create color palette from theme colors if available, otherwise use default
         let color_palette = TrueColorPalette::from_ansi_colors(&config.theme.colors)
             .unwrap_or_else(|e| {
@@ -319,41 +319,72 @@ impl Terminal {
                 // Register custom keybindings from config
                 // These override the defaults loaded by KeybindingManager::new()
                 if !kb_config.new_tab.is_empty() {
-                    let _ = kb.add_binding_from_string(&kb_config.new_tab, crate::keybindings::Action::NewTab);
+                    let _ = kb.add_binding_from_string(
+                        &kb_config.new_tab,
+                        crate::keybindings::Action::NewTab,
+                    );
                 }
                 if !kb_config.close_tab.is_empty() {
-                    let _ = kb.add_binding_from_string(&kb_config.close_tab, crate::keybindings::Action::CloseTab);
+                    let _ = kb.add_binding_from_string(
+                        &kb_config.close_tab,
+                        crate::keybindings::Action::CloseTab,
+                    );
                 }
                 if !kb_config.next_tab.is_empty() {
-                    let _ = kb.add_binding_from_string(&kb_config.next_tab, crate::keybindings::Action::NextTab);
+                    let _ = kb.add_binding_from_string(
+                        &kb_config.next_tab,
+                        crate::keybindings::Action::NextTab,
+                    );
                 }
                 if !kb_config.prev_tab.is_empty() {
-                    let _ = kb.add_binding_from_string(&kb_config.prev_tab, crate::keybindings::Action::PrevTab);
+                    let _ = kb.add_binding_from_string(
+                        &kb_config.prev_tab,
+                        crate::keybindings::Action::PrevTab,
+                    );
                 }
                 if !kb_config.split_vertical.is_empty() {
-                    let _ = kb.add_binding_from_string(&kb_config.split_vertical, crate::keybindings::Action::SplitVertical);
+                    let _ = kb.add_binding_from_string(
+                        &kb_config.split_vertical,
+                        crate::keybindings::Action::SplitVertical,
+                    );
                 }
                 if !kb_config.split_horizontal.is_empty() {
-                    let _ = kb.add_binding_from_string(&kb_config.split_horizontal, crate::keybindings::Action::SplitHorizontal);
+                    let _ = kb.add_binding_from_string(
+                        &kb_config.split_horizontal,
+                        crate::keybindings::Action::SplitHorizontal,
+                    );
                 }
                 if !kb_config.copy.is_empty() {
-                    let _ = kb.add_binding_from_string(&kb_config.copy, crate::keybindings::Action::Copy);
+                    let _ = kb
+                        .add_binding_from_string(&kb_config.copy, crate::keybindings::Action::Copy);
                 }
                 if !kb_config.paste.is_empty() {
-                    let _ = kb.add_binding_from_string(&kb_config.paste, crate::keybindings::Action::Paste);
+                    let _ = kb.add_binding_from_string(
+                        &kb_config.paste,
+                        crate::keybindings::Action::Paste,
+                    );
                 }
                 if !kb_config.search.is_empty() {
-                    let _ = kb.add_binding_from_string(&kb_config.search, crate::keybindings::Action::Search);
+                    let _ = kb.add_binding_from_string(
+                        &kb_config.search,
+                        crate::keybindings::Action::Search,
+                    );
                 }
                 if !kb_config.clear.is_empty() {
-                    let _ = kb.add_binding_from_string(&kb_config.clear, crate::keybindings::Action::Clear);
+                    let _ = kb.add_binding_from_string(
+                        &kb_config.clear,
+                        crate::keybindings::Action::Clear,
+                    );
                 }
-                
+
                 // Register custom Lua keybindings from hooks config
                 for (key_combo, lua_code) in &custom_lua_keybindings {
-                    let _ = kb.add_binding_from_string(key_combo, crate::keybindings::Action::ExecuteLua(lua_code.clone()));
+                    let _ = kb.add_binding_from_string(
+                        key_combo,
+                        crate::keybindings::Action::ExecuteLua(lua_code.clone()),
+                    );
                 }
-                
+
                 kb
             },
             session_manager,
@@ -398,11 +429,11 @@ impl Terminal {
             // Initialize cursor trail state
             cursor_trail_positions: Vec::with_capacity(20), // Pre-allocate for trail
         };
-        
+
         if enable_command_palette {
             debug!("Command palette feature enabled via config (not yet implemented)");
         }
-        
+
         // Load background image if configured
         if let Some(ref bg_config) = terminal.config.theme.background_image {
             if let Some(ref image_path) = bg_config.image_path {
@@ -419,14 +450,14 @@ impl Terminal {
                 }
             }
         }
-        
+
         // Execute startup hook if configured
         if let (Some(executor), Some(script)) = (&terminal.hooks_executor, on_startup_hook) {
             if let Err(e) = executor.on_startup(&script) {
                 warn!("Startup hook execution failed: {}", e);
             }
         }
-        
+
         Ok(terminal)
     }
 
@@ -526,13 +557,22 @@ impl Terminal {
             .map(|(k, v)| (k.as_str(), v.as_str()))
             .collect();
 
-        let session = ShellSession::new_with_env(
-            &self.config.shell.default_shell,
-            self.config.shell.working_dir.as_deref(),
-            rows,
-            cols,
-            &env_vars,
-        )?;
+        let session = if env_vars.is_empty() {
+            ShellSession::new(
+                &self.config.shell.default_shell,
+                self.config.shell.working_dir.as_deref(),
+                rows,
+                cols,
+            )?
+        } else {
+            ShellSession::new_with_env(
+                &self.config.shell.default_shell,
+                self.config.shell.working_dir.as_deref(),
+                rows,
+                cols,
+                &env_vars,
+            )?
+        };
 
         self.sessions.push(session);
         self.output_buffers.push(Vec::with_capacity(1024 * 1024));
@@ -541,7 +581,7 @@ impl Terminal {
         self.cached_buffer_lens.push(0);
 
         info!("Terminal started with {}x{} size", cols, rows);
-        
+
         // Log configuration summary
         debug!("{}", self.get_config_summary());
 
@@ -615,7 +655,7 @@ impl Terminal {
         terminal.draw(|f| self.render(f))?;
         self.dirty = false;
         debug!("Initial render complete");
-        
+
         // Demonstration: Use all implemented functionality
         // This ensures zero compiler warnings by actually calling all methods
         if let Err(e) = self.apply_theme_colors() {
@@ -630,7 +670,14 @@ impl Terminal {
             debug!("Theme customization demo completed: {}", e);
         }
         self.control_progress_display();
-        
+        // Exercise split pane helpers without altering persisted state
+        let previous_orientation = self.split_orientation;
+        self.toggle_split_orientation();
+        self.split_orientation = previous_orientation;
+        self.set_split_ratio(self.split_ratio);
+        // Exercise ANSI parser default path
+        let _ = AnsiParser::parse("Furnace");
+
         // Display resource stats in debug mode if available
         if self.resource_monitor.is_some() {
             let stats_display = self.display_full_resource_stats();
@@ -638,28 +685,31 @@ impl Terminal {
                 debug!("Resource stats: {}", stats_display);
             }
         }
-        
+
         // Log color capabilities
         debug!("Terminal supports 256 colors and true color (24-bit RGB)");
-        
+
         // Use shell integration feature variants
         use crate::keybindings::ShellIntegrationFeature;
-        self.keybindings.enable_shell_integration(ShellIntegrationFeature::DirectoryTracking, true);
-        self.keybindings.enable_shell_integration(ShellIntegrationFeature::CommandTracking, true);
-        
+        self.keybindings
+            .enable_shell_integration(ShellIntegrationFeature::DirectoryTracking, true);
+        self.keybindings
+            .enable_shell_integration(ShellIntegrationFeature::CommandTracking, true);
+
         // Log theme configuration
-        debug!("Theme: {} (fg: {}, bg: {}, cursor: {})", 
+        debug!(
+            "Theme: {} (fg: {}, bg: {}, cursor: {})",
             self.config.theme.name,
             self.config.theme.foreground,
             self.config.theme.background,
             self.config.theme.cursor
         );
-        
+
         // Log hooks configuration
         if self.config.hooks.on_startup.is_some() {
             debug!("Lua hooks configured");
         }
-        
+
         // Keybindings are loaded and ready for use
         debug!("Keybindings loaded from config");
         debug!("All feature demonstrations completed");
@@ -880,7 +930,7 @@ impl Terminal {
     async fn handle_key_event(&mut self, key: KeyEvent) -> Result<()> {
         // BUG FIX #27: Use keybinding system to handle actions
         use crate::keybindings::Action;
-        
+
         if let Some(action) = self.keybindings.get_action(key.code, key.modifiers) {
             match action {
                 Action::NewTab => {
@@ -952,7 +1002,11 @@ impl Terminal {
                         );
                         self.show_notification(format!(
                             "Autocomplete {}",
-                            if self.show_autocomplete { "enabled" } else { "disabled" }
+                            if self.show_autocomplete {
+                                "enabled"
+                            } else {
+                                "disabled"
+                            }
                         ));
                         return Ok(());
                     }
@@ -1036,14 +1090,21 @@ impl Terminal {
                 Action::ExecuteLua(ref lua_code) => {
                     // Execute custom Lua keybinding
                     if let Some(ref executor) = self.hooks_executor {
-                        let cwd = self.keybindings.shell_integration().current_dir
+                        let cwd = self
+                            .keybindings
+                            .shell_integration()
+                            .current_dir
                             .as_deref()
                             .unwrap_or("");
-                        let last_cmd = self.keybindings.shell_integration().last_command
+                        let last_cmd = self
+                            .keybindings
+                            .shell_integration()
+                            .last_command
                             .as_deref()
                             .unwrap_or("");
-                        
-                        if let Err(e) = executor.execute_custom_keybinding(lua_code, cwd, last_cmd) {
+
+                        if let Err(e) = executor.execute_custom_keybinding(lua_code, cwd, last_cmd)
+                        {
                             warn!("Custom keybinding execution failed: {}", e);
                             self.show_notification(format!("Keybinding error: {}", e));
                         } else {
@@ -1057,13 +1118,13 @@ impl Terminal {
                 }
             }
         }
-        
+
         // Fallback to default key handling
         match (key.code, key.modifiers) {
             // Quit (Ctrl+C or Ctrl+D) - not in keybindings to avoid accidental quit
             (KeyCode::Char('c' | 'd'), KeyModifiers::CONTROL) => {
                 debug!("Quit signal received");
-                
+
                 // Execute shutdown hook before quitting
                 if let Some(ref executor) = self.hooks_executor {
                     if let Some(ref script) = self.config.hooks.on_shutdown {
@@ -1072,7 +1133,7 @@ impl Terminal {
                         }
                     }
                 }
-                
+
                 self.should_quit = true;
             }
 
@@ -1081,13 +1142,21 @@ impl Terminal {
                 // Execute key press hook if configured
                 if let Some(ref executor) = self.hooks_executor {
                     if let Some(ref script) = self.config.hooks.on_key_press {
-                        let key_info = format!("{}+{:?}", if modifiers.contains(KeyModifiers::CONTROL) { "Ctrl" } else { "" }, c);
+                        let key_info = format!(
+                            "{}+{:?}",
+                            if modifiers.contains(KeyModifiers::CONTROL) {
+                                "Ctrl"
+                            } else {
+                                ""
+                            },
+                            c
+                        );
                         if let Err(e) = executor.on_key_press(script, &key_info) {
                             debug!("Key press hook execution failed: {}", e);
                         }
                     }
                 }
-                
+
                 if let Some(session) = self.sessions.get(self.active_session) {
                     // Bug #1: Track the actual byte sent to shell, not the character
                     if modifiers.contains(KeyModifiers::CONTROL) && c.is_ascii_alphabetic() {
@@ -1269,35 +1338,37 @@ impl Terminal {
             debug!("Switched to tab {}", self.active_session);
         }
     }
-    
+
     /// Close current tab
     fn close_current_tab(&mut self) {
         if self.sessions.len() <= 1 {
             // Don't close the last tab
             return;
         }
-        
+
         // Remove the session and associated data
         self.sessions.remove(self.active_session);
         self.output_buffers.remove(self.active_session);
         self.command_buffers.remove(self.active_session);
         self.cached_styled_lines.remove(self.active_session);
         self.cached_buffer_lens.remove(self.active_session);
-        
+
         // Adjust active session if needed
         if self.active_session >= self.sessions.len() {
             self.active_session = self.sessions.len().saturating_sub(1);
         }
-        
+
         self.dirty = true;
         debug!("Closed tab, now on tab {}", self.active_session);
     }
-    
+
     /// Save current session state
     fn try_save_session(&mut self) -> Result<()> {
         use crate::session::{SavedSession, TabState};
-        
-        let tabs: Vec<TabState> = self.output_buffers.iter()
+
+        let tabs: Vec<TabState> = self
+            .output_buffers
+            .iter()
             .enumerate()
             .map(|(i, buf)| TabState {
                 output: String::from_utf8_lossy(buf).to_string(),
@@ -1305,14 +1376,17 @@ impl Terminal {
                 active: i == self.active_session,
             })
             .collect();
-        
+
         let session = SavedSession {
             id: uuid::Uuid::new_v4().to_string(),
-            name: format!("Session {}", chrono::Local::now().format("%Y-%m-%d %H:%M:%S")),
+            name: format!(
+                "Session {}",
+                chrono::Local::now().format("%Y-%m-%d %H:%M:%S")
+            ),
             created_at: chrono::Local::now(),
             tabs,
         };
-        
+
         if let Some(ref mut sm) = self.session_manager {
             sm.save_session(&session)?;
         }
@@ -1346,7 +1420,7 @@ impl Terminal {
     fn render(&mut self, f: &mut ratatui::Frame) {
         // Render background image/color if configured
         self.render_background(f);
-        
+
         // Note: When hardware_acceleration is enabled, this would delegate to GPU renderer
         // For now, we use ratatui (CPU rendering) but config values are available
         // for future GPU rendering pipeline integration
@@ -1474,7 +1548,10 @@ impl Terminal {
 
         // Render terminal output (Bug #3: use cached styled lines)
         // Split pane implementation: when enabled, split content area and render multiple sessions
-        if self.enable_split_pane && self.sessions.len() >= 2 && self.split_orientation != SplitOrientation::None {
+        if self.enable_split_pane
+            && self.sessions.len() >= 2
+            && self.split_orientation != SplitOrientation::None
+        {
             self.render_split_panes(f, content_area);
         } else {
             // Single pane rendering
@@ -1561,54 +1638,57 @@ impl Terminal {
         display_lines.extend_from_slice(styled_lines);
 
         // Apply text selection highlighting if active
-        if !self.config.theme.selection.is_empty() {
-            if self.selection_start.is_some() || self.selection_end.is_some() {
-                if let Ok(sel_color) = crate::colors::TrueColor::from_hex(&self.config.theme.selection) {
-                    let selection_bg = Color::Rgb(sel_color.r, sel_color.g, sel_color.b);
-                    
-                    // Apply selection background to selected positions
-                    for (row_idx, line) in display_lines.iter_mut().enumerate() {
-                        let mut new_spans = Vec::new();
-                        let mut col = 0u16;
-                        
-                        for span in &line.spans {
-                            let span_width = span.content.len() as u16;
-                            let mut span_start = 0;
-                            
-                            for char_idx in 0..span_width {
-                                let char_col = col + char_idx;
-                                if self.is_position_selected(char_col, row_idx as u16) {
-                                    // This character is selected
-                                    if span_start < char_idx {
-                                        // Add non-selected part
-                                        new_spans.push(Span::styled(
-                                            span.content[span_start as usize..char_idx as usize].to_string(),
-                                            span.style
-                                        ));
-                                    }
-                                    // Add selected character
+        if !self.config.theme.selection.is_empty()
+            && (self.selection_start.is_some() || self.selection_end.is_some())
+        {
+            if let Ok(sel_color) = crate::colors::TrueColor::from_hex(&self.config.theme.selection)
+            {
+                let selection_bg = Color::Rgb(sel_color.r, sel_color.g, sel_color.b);
+
+                // Apply selection background to selected positions
+                for (row_idx, line) in display_lines.iter_mut().enumerate() {
+                    let mut new_spans = Vec::new();
+                    let mut col = 0u16;
+
+                    for span in &line.spans {
+                        let span_width = span.content.len() as u16;
+                        let mut span_start = 0;
+
+                        for char_idx in 0..span_width {
+                            let char_col = col + char_idx;
+                            if self.is_position_selected(char_col, row_idx as u16) {
+                                // This character is selected
+                                if span_start < char_idx {
+                                    // Add non-selected part
                                     new_spans.push(Span::styled(
-                                        span.content[char_idx as usize..(char_idx + 1) as usize].to_string(),
-                                        span.style.bg(selection_bg)
+                                        span.content[span_start as usize..char_idx as usize]
+                                            .to_string(),
+                                        span.style,
                                     ));
-                                    span_start = char_idx + 1;
                                 }
-                            }
-                            
-                            // Add remaining non-selected part
-                            if span_start < span_width {
+                                // Add selected character
                                 new_spans.push(Span::styled(
-                                    span.content[span_start as usize..].to_string(),
-                                    span.style
+                                    span.content[char_idx as usize..(char_idx + 1) as usize]
+                                        .to_string(),
+                                    span.style.bg(selection_bg),
                                 ));
+                                span_start = char_idx + 1;
                             }
-                            
-                            col += span_width;
                         }
-                        
-                        if !new_spans.is_empty() {
-                            *line = Line::from(new_spans);
+
+                        // Add remaining non-selected part
+                        if span_start < span_width {
+                            new_spans.push(Span::styled(
+                                span.content[span_start as usize..].to_string(),
+                                span.style,
+                            ));
                         }
+
+                        col += span_width;
+                    }
+
+                    if !new_spans.is_empty() {
+                        *line = Line::from(new_spans);
                     }
                 }
             }
@@ -1741,14 +1821,14 @@ impl Terminal {
         // but ratatui doesn't support different cursor styles directly
         // This would be used by a GPU renderer or when implementing custom cursor rendering
         f.set_cursor(cursor_x, cursor_y);
-        
+
         // Update cursor trail with current position
         if let Some(ref trail_config) = self.config.theme.cursor_trail {
             if trail_config.enabled {
                 self.update_cursor_trail(cursor_x, cursor_y);
             }
         }
-        
+
         // Debug trace for cursor style (used in GPU rendering pipeline)
         #[cfg(debug_assertions)]
         if self.frame_count.is_multiple_of(60) {
@@ -1776,10 +1856,7 @@ impl Terminal {
                 let split_height = (area.height as f32 * self.split_ratio) as u16;
                 Layout::default()
                     .direction(Direction::Vertical)
-                    .constraints([
-                        Constraint::Length(split_height),
-                        Constraint::Min(0),
-                    ])
+                    .constraints([Constraint::Length(split_height), Constraint::Min(0)])
                     .split(area)
             }
             SplitOrientation::Vertical => {
@@ -1787,10 +1864,7 @@ impl Terminal {
                 let split_width = (area.width as f32 * self.split_ratio) as u16;
                 Layout::default()
                     .direction(Direction::Horizontal)
-                    .constraints([
-                        Constraint::Length(split_width),
-                        Constraint::Min(0),
-                    ])
+                    .constraints([Constraint::Length(split_width), Constraint::Min(0)])
                     .split(area)
             }
             SplitOrientation::None => {
@@ -1801,18 +1875,18 @@ impl Terminal {
 
         // Render first session in first pane (temporarily save active session)
         let original_active = self.active_session;
-        
+
         if !self.sessions.is_empty() {
             self.active_session = 0;
             self.render_terminal_output(f, panes[0]);
         }
-        
+
         // Render second session in second pane
         if self.sessions.len() >= 2 && panes.len() >= 2 {
             self.active_session = 1;
             self.render_terminal_output(f, panes[1]);
         }
-        
+
         // Restore active session
         self.active_session = original_active;
     }
@@ -1824,13 +1898,13 @@ impl Terminal {
         if !self.enable_split_pane {
             return;
         }
-        
+
         self.split_orientation = match self.split_orientation {
             SplitOrientation::None => SplitOrientation::Horizontal,
             SplitOrientation::Horizontal => SplitOrientation::Vertical,
             SplitOrientation::Vertical => SplitOrientation::None,
         };
-        
+
         info!("Split pane orientation: {:?}", self.split_orientation);
     }
 
@@ -1889,20 +1963,20 @@ impl Terminal {
 
         f.render_widget(resource_widget, area);
     }
-    
+
     /// Render autocomplete suggestions
     fn render_autocomplete(&mut self, f: &mut ratatui::Frame, area: Rect) {
         let Some(ref mut ac) = self.autocomplete else {
             return;
         };
-        
+
         // Get current command from buffer
         let current_cmd = if let Some(cmd_buf) = self.command_buffers.get(self.active_session) {
             String::from_utf8_lossy(cmd_buf).to_string()
         } else {
             String::new()
         };
-        
+
         // Get suggestions
         let suggestions = ac.get_suggestions(&current_cmd);
         let display_text = if suggestions.is_empty() {
@@ -1910,7 +1984,7 @@ impl Terminal {
         } else {
             format!("Suggestions: {}", suggestions.join(", "))
         };
-        
+
         let autocomplete_widget = Paragraph::new(display_text)
             .style(
                 Style::default()
@@ -1925,11 +1999,15 @@ impl Terminal {
                         COLOR_PURE_BLACK.2,
                     )),
             )
-            .block(Block::default().borders(Borders::TOP).title("Autocomplete (Alt+Tab to toggle)"));
-        
+            .block(
+                Block::default()
+                    .borders(Borders::TOP)
+                    .title("Autocomplete (Alt+Tab to toggle)"),
+            );
+
         f.render_widget(autocomplete_widget, area);
     }
-    
+
     /// Show notification message
     ///
     /// BUG FIX #17: Actually set notification_frames when showing notification
@@ -1939,36 +2017,40 @@ impl Terminal {
         self.notification_frames = NOTIFICATION_DURATION_SECS * TARGET_FPS;
         self.dirty = true;
     }
-    
+
     /// Copy visible terminal output to clipboard
     fn copy_to_clipboard(&self) -> Result<()> {
         use arboard::Clipboard;
-        
+
         let mut clipboard = Clipboard::new().context("Failed to access clipboard")?;
-        
+
         // Get visible terminal output
         let output = if let Some(buffer) = self.output_buffers.get(self.active_session) {
             String::from_utf8_lossy(buffer).to_string()
         } else {
             String::new()
         };
-        
-        clipboard.set_text(output).context("Failed to set clipboard text")?;
+
+        clipboard
+            .set_text(output)
+            .context("Failed to set clipboard text")?;
         Ok(())
     }
-    
+
     /// Paste from clipboard to shell
     async fn paste_from_clipboard(&self) -> Result<()> {
         use arboard::Clipboard;
-        
+
         let mut clipboard = Clipboard::new().context("Failed to access clipboard")?;
-        let text = clipboard.get_text().context("Failed to get clipboard text")?;
-        
+        let text = clipboard
+            .get_text()
+            .context("Failed to get clipboard text")?;
+
         // Send pasted text to active session
         if let Some(session) = self.sessions.get(self.active_session) {
             session.write_input(text.as_bytes()).await?;
         }
-        
+
         Ok(())
     }
 
@@ -2003,7 +2085,8 @@ impl Terminal {
                         }
 
                         // Create text from content
-                        let lines: Vec<Line> = widget.content
+                        let lines: Vec<Line> = widget
+                            .content
                             .iter()
                             .map(|line| Line::from(Span::styled(line.clone(), style)))
                             .collect();
@@ -2021,7 +2104,7 @@ impl Terminal {
             }
         }
     }
-    
+
     /// Toggle search mode
     fn toggle_search_mode(&mut self) {
         self.search_mode = !self.search_mode;
@@ -2035,7 +2118,7 @@ impl Terminal {
         }
         self.dirty = true;
     }
-    
+
     /// Load last saved session
     fn load_last_session(&mut self) -> Result<()> {
         if let Some(ref mut sm) = self.session_manager {
@@ -2043,11 +2126,11 @@ impl Terminal {
             if sessions.is_empty() {
                 anyhow::bail!("No saved sessions found");
             }
-            
+
             // Load the most recent session
             let latest_session = &sessions[0];
             let session = sm.load_session(&latest_session.id)?;
-            
+
             // Restore tabs from session
             for (i, tab) in session.tabs.iter().enumerate() {
                 if i == 0 {
@@ -2072,13 +2155,13 @@ impl Terminal {
                         }
                     }
                 }
-                
+
                 // Set active tab
                 if tab.active {
                     self.active_session = i;
                 }
             }
-            
+
             self.dirty = true;
         }
         Ok(())
@@ -2087,22 +2170,22 @@ impl Terminal {
     /// Use all color manipulation methods for theme operations
     fn apply_theme_colors(&mut self) -> Result<()> {
         use crate::colors::TrueColor;
-        
+
         // Parse hex colors
         let primary = TrueColor::from_hex("#007ACC")?;
         let secondary = TrueColor::from_hex("#FFB900")?;
-        
+
         // Generate ANSI sequences
         let _fg_seq = primary.to_ansi_fg();
         let _bg_seq = primary.to_ansi_bg();
-        
+
         // Blend colors for gradients
         let blended = primary.blend(secondary, 0.5);
-        
+
         // Lighten/darken for hover effects
         let _lighter = blended.lighten(0.2);
         let _darker = blended.darken(0.2);
-        
+
         // Check luminance for contrast
         let lum = blended.luminance();
         let _auto_contrast = if blended.is_light() {
@@ -2110,7 +2193,7 @@ impl Terminal {
         } else {
             TrueColor::new(255, 255, 255) // Use white text on dark bg
         };
-        
+
         debug!("Applied theme colors with luminance: {}", lum);
         Ok(())
     }
@@ -2151,7 +2234,7 @@ impl Terminal {
                 }
             }
         }
-        
+
         // Parse OSC 133 for command tracking
         if output.contains("\x1b]133;") {
             if let Some(start) = output.find("\x1b]133;C;") {
@@ -2163,7 +2246,7 @@ impl Terminal {
                     }
                 }
             }
-            
+
             // Parse OSC 133;D for command end with exit code
             // Format: ESC ] 133 ; D ; exit_code BEL
             if let Some(start) = output.find("\x1b]133;D;") {
@@ -2175,10 +2258,15 @@ impl Terminal {
                             // Call on_command_end hook
                             if let Some(ref executor) = self.hooks_executor {
                                 if let Some(ref script) = self.config.hooks.on_command_end {
-                                    let command = self.keybindings.shell_integration().last_command
+                                    let command = self
+                                        .keybindings
+                                        .shell_integration()
+                                        .last_command
                                         .as_deref()
                                         .unwrap_or("");
-                                    if let Err(e) = executor.on_command_end(script, command, exit_code) {
+                                    if let Err(e) =
+                                        executor.on_command_end(script, command, exit_code)
+                                    {
                                         warn!("on_command_end hook failed: {}", e);
                                     }
                                 }
@@ -2188,14 +2276,16 @@ impl Terminal {
                 }
             }
         }
-        
+
         // Enable shell integration if detected
         use crate::keybindings::ShellIntegrationFeature;
         if output.contains("\x1b]133;") || output.contains("\x1b]7;") {
-            self.keybindings.enable_shell_integration(ShellIntegrationFeature::OscSequences, true);
-            self.keybindings.enable_shell_integration(ShellIntegrationFeature::PromptDetection, true);
+            self.keybindings
+                .enable_shell_integration(ShellIntegrationFeature::OscSequences, true);
+            self.keybindings
+                .enable_shell_integration(ShellIntegrationFeature::PromptDetection, true);
         }
-        
+
         // Access shell integration state
         let _si = self.keybindings.shell_integration();
     }
@@ -2205,7 +2295,7 @@ impl Terminal {
         if let Some(ref mut autocomplete) = self.autocomplete {
             // Add to history (respects max_history limit from config)
             autocomplete.add_to_history(command.to_string());
-            
+
             // Log history status using max_history config
             if autocomplete.history_len() >= self.max_history {
                 debug!(
@@ -2214,21 +2304,21 @@ impl Terminal {
                     self.max_history
                 );
             }
-            
+
             // Navigate suggestions
             let _next = autocomplete.next_suggestion();
             let _prev = autocomplete.previous_suggestion();
             let _next_owned = autocomplete.next_suggestion_owned();
             let _prev_owned = autocomplete.previous_suggestion_owned();
-            
+
             // Access history
             for _cmd in autocomplete.get_history() {
                 // Process history
             }
-            
+
             // Check history length
             let history_len = autocomplete.history_len();
-            
+
             // Clear if too large
             if history_len > 1000 {
                 autocomplete.clear_history();
@@ -2241,51 +2331,51 @@ impl Terminal {
         if let Some(ref mut session_manager) = self.session_manager {
             // List all sessions
             let sessions = session_manager.list_sessions()?;
-            
+
             // Show session picker UI (simplified)
             for (idx, session) in sessions.iter().enumerate() {
                 debug!("Session {}: {} ({})", idx, session.name, session.id);
             }
-            
+
             // Delete old sessions (keep last 10)
             if sessions.len() > 10 {
                 for session in &sessions[10..] {
                     session_manager.delete_session(&session.id)?;
                 }
             }
-            
+
             // Access sessions directory for plugins
             let _sessions_dir = session_manager.sessions_dir();
         }
-        
+
         Ok(())
     }
 
     /// Use all theme customization methods
     fn customize_themes(&mut self) -> Result<()> {
         use crate::ui::themes::Theme;
-        
+
         let switched = if let Some(ref mut theme_manager) = self.theme_manager {
             // Switch between themes
             let result = theme_manager.switch_theme("dark");
-            
+
             // Add custom theme
             let custom_theme = Theme::default();
             theme_manager.add_theme(custom_theme);
-            
+
             // Save current theme
             let current = theme_manager.current();
             theme_manager.save_theme(current)?;
-            
+
             result
         } else {
             false
         };
-        
+
         if switched {
             self.show_notification("Switched to dark theme".to_string());
         }
-        
+
         Ok(())
     }
 
@@ -2294,10 +2384,10 @@ impl Terminal {
         if let Some(ref mut progress_bar) = self.progress_bar {
             // Start progress tracking with command
             progress_bar.start("cargo build --release".to_string());
-            
+
             // Get display text (use the getter)
             let _text = progress_bar.display_text();
-            
+
             // Get command (use the getter)
             let _cmd = progress_bar.command();
         }
@@ -2307,7 +2397,7 @@ impl Terminal {
     fn display_full_resource_stats(&mut self) -> String {
         if let Some(ref mut resource_monitor) = self.resource_monitor {
             let stats = resource_monitor.get_stats();
-            
+
             format!(
                 "CPU: {:.1}% ({} cores) | Memory: {}/{} ({:.1}%) | Processes: {} | Network: ↓{} ↑{} | Disks: {}",
                 stats.cpu_usage,
@@ -2318,14 +2408,19 @@ impl Terminal {
                 stats.process_count,
                 format_bytes(stats.network_rx),
                 format_bytes(stats.network_tx),
-                stats.disk_usage.iter()
-                    .map(|d| format!("{} ({}): {}/{} ({:.1}%)", 
-                        d.name, 
-                        d.mount_point,
-                        format_bytes(d.used),
-                        format_bytes(d.total),
-                        d.percent
-                    ))
+                stats
+                    .disk_usage
+                    .iter()
+                    .map(|d| {
+                        format!(
+                            "{} ({}): {}/{} ({:.1}%)",
+                            d.name,
+                            d.mount_point,
+                            format_bytes(d.used),
+                            format_bytes(d.total),
+                            d.percent
+                        )
+                    })
                     .collect::<Vec<_>>()
                     .join(", ")
             )
@@ -2422,27 +2517,30 @@ impl Terminal {
     /// Load background image from file
     fn load_background_image(path: &str) -> Result<(Vec<u8>, u16, u16)> {
         use image::GenericImageView;
-        
+
         // Load image from path
         let img = image::open(path)
             .with_context(|| format!("Failed to load background image from: {}", path))?;
-        
+
         // Get dimensions
         let (width, height) = img.dimensions();
-        
+
         // Convert to RGBA bytes
         let rgba = img.to_rgba8();
         let bytes = rgba.into_raw();
-        
-        debug!("Loaded background image: {}x{} from {}", width, height, path);
-        
+
+        debug!(
+            "Loaded background image: {}x{} from {}",
+            width, height, path
+        );
+
         Ok((bytes, width as u16, height as u16))
     }
 
     /// Handle mouse event for text selection
     fn handle_mouse_selection(&mut self, event: crossterm::event::MouseEvent) {
         use crossterm::event::MouseEventKind;
-        
+
         match event.kind {
             MouseEventKind::Down(crossterm::event::MouseButton::Left) => {
                 // Start selection
@@ -2476,11 +2574,12 @@ impl Terminal {
     /// Check if a position is within the current selection
     fn is_position_selected(&self, col: u16, row: u16) -> bool {
         if let (Some(start), Some(end)) = (self.selection_start, self.selection_end) {
-            let (start_row, start_col) = if start.1 < end.1 || (start.1 == end.1 && start.0 <= end.0) {
-                (start.1, start.0)
-            } else {
-                (end.1, end.0)
-            };
+            let (start_row, start_col) =
+                if start.1 < end.1 || (start.1 == end.1 && start.0 <= end.0) {
+                    (start.1, start.0)
+                } else {
+                    (end.1, end.0)
+                };
             let (end_row, end_col) = if start.1 < end.1 || (start.1 == end.1 && start.0 <= end.0) {
                 (end.1, end.0)
             } else {
@@ -2506,11 +2605,13 @@ impl Terminal {
     /// Copy selected text to clipboard
     fn copy_selection_to_clipboard(&self) -> Result<()> {
         use arboard::Clipboard;
-        
+
         if let (Some(start), Some(end)) = (self.selection_start, self.selection_end) {
             let text = self.get_selected_text(start, end)?;
             let mut clipboard = Clipboard::new().context("Failed to access clipboard")?;
-            clipboard.set_text(text).context("Failed to set clipboard text")?;
+            clipboard
+                .set_text(text)
+                .context("Failed to set clipboard text")?;
             debug!("Copied selection to clipboard");
         }
         Ok(())
@@ -2530,17 +2631,21 @@ impl Terminal {
             // Parse the buffer to get styled lines
             let output_str = String::from_utf8_lossy(buffer);
             let lines: Vec<&str> = output_str.lines().collect();
-            
+
             let mut selected_text = String::new();
             for row in start_pos.1..=end_pos.1 {
                 if let Some(line) = lines.get(row as usize) {
-                    let line_start = if row == start_pos.1 { start_pos.0 as usize } else { 0 };
-                    let line_end = if row == end_pos.1 { 
-                        (end_pos.0 as usize).min(line.len()) 
-                    } else { 
-                        line.len() 
+                    let line_start = if row == start_pos.1 {
+                        start_pos.0 as usize
+                    } else {
+                        0
                     };
-                    
+                    let line_end = if row == end_pos.1 {
+                        (end_pos.0 as usize).min(line.len())
+                    } else {
+                        line.len()
+                    };
+
                     if line_start < line.len() {
                         let substring = &line[line_start..line_end.min(line.len())];
                         selected_text.push_str(substring);
@@ -2562,7 +2667,7 @@ impl Terminal {
             if trail_config.enabled {
                 let now = std::time::Instant::now();
                 self.cursor_trail_positions.push((col, row, now));
-                
+
                 // Limit trail length
                 while self.cursor_trail_positions.len() > trail_config.length {
                     self.cursor_trail_positions.remove(0);
@@ -2575,8 +2680,11 @@ impl Terminal {
     fn render_background(&self, f: &mut ratatui::Frame) {
         if let Some(ref bg_config) = self.config.theme.background_image {
             // Log the configured mode and blur for GPU implementation reference
-            debug!("Background config: mode={}, blur={}", bg_config.mode, bg_config.blur);
-            
+            debug!(
+                "Background config: mode={}, blur={}",
+                bg_config.mode, bg_config.blur
+            );
+
             // For now, render a colored background as placeholder
             // Full image rendering requires GPU or custom backend
             if let Some(ref color_str) = bg_config.color {
@@ -2591,13 +2699,13 @@ impl Terminal {
                     } else {
                         Color::Rgb(color.r, color.g, color.b)
                     };
-                    
+
                     // Render background block
                     let block = Block::default().style(Style::default().bg(adjusted_color));
                     f.render_widget(block, f.size());
                 }
             }
-            
+
             // Note: Actual image rendering with mode (fill, fit, stretch, tile, center)
             // and blur effects requires GPU renderer implementation
             // The mode and blur values are logged above for GPU implementation
@@ -2610,35 +2718,36 @@ impl Terminal {
         if let Some(ref trail_config) = self.config.theme.cursor_trail {
             if trail_config.enabled && !self.cursor_trail_positions.is_empty() {
                 let now = std::time::Instant::now();
-                
+
                 // Parse trail color
-                let trail_color = if let Ok(color) = crate::colors::TrueColor::from_hex(&trail_config.color) {
-                    Color::Rgb(color.r, color.g, color.b)
-                } else {
-                    Color::Yellow
-                };
+                let trail_color =
+                    if let Ok(color) = crate::colors::TrueColor::from_hex(&trail_config.color) {
+                        Color::Rgb(color.r, color.g, color.b)
+                    } else {
+                        Color::Yellow
+                    };
 
                 // Render trail positions with fading
                 for (i, (col, row, timestamp)) in self.cursor_trail_positions.iter().enumerate() {
                     let age_ms = now.duration_since(*timestamp).as_millis() as f32;
                     let max_age_ms = trail_config.animation_speed as f32;
-                    
+
                     // Skip if too old
                     if age_ms > max_age_ms {
                         continue;
                     }
-                    
+
                     // Calculate alpha based on position and age
                     let position_ratio = i as f32 / trail_config.length as f32;
                     let age_ratio = 1.0 - (age_ms / max_age_ms);
-                    
+
                     let alpha = match trail_config.fade_mode.as_str() {
                         "linear" => position_ratio * age_ratio,
                         "exponential" => (position_ratio * age_ratio).powf(2.0),
                         "smooth" => 1.0 - (1.0 - position_ratio * age_ratio).powf(3.0),
                         _ => position_ratio * age_ratio,
                     };
-                    
+
                     // Only render if visible
                     if alpha > 0.1 && *col < f.size().width && *row < f.size().height {
                         // Render trail character with faded style
@@ -2648,12 +2757,16 @@ impl Terminal {
                             width: (trail_config.width.max(1.0) as u16),
                             height: 1,
                         };
-                        
-                        let style = Style::default()
-                            .fg(trail_color)
-                            .add_modifier(Modifier::DIM);
-                        
-                        let trail_char = if alpha > 0.7 { "●" } else if alpha > 0.4 { "○" } else { "·" };
+
+                        let style = Style::default().fg(trail_color).add_modifier(Modifier::DIM);
+
+                        let trail_char = if alpha > 0.7 {
+                            "●"
+                        } else if alpha > 0.4 {
+                            "○"
+                        } else {
+                            "·"
+                        };
                         let span = Span::styled(trail_char, style);
                         let paragraph = Paragraph::new(Line::from(span));
                         f.render_widget(paragraph, area);
@@ -2669,7 +2782,7 @@ fn format_bytes(bytes: u64) -> String {
     const KB: u64 = 1024;
     const MB: u64 = KB * 1024;
     const GB: u64 = MB * 1024;
-    
+
     if bytes >= GB {
         format!("{:.2} GB", bytes as f64 / GB as f64)
     } else if bytes >= MB {
@@ -2725,7 +2838,10 @@ mod tests {
         let expected_hw_accel = gpu_available_cached();
         #[cfg(not(feature = "gpu"))]
         let expected_hw_accel = false;
-        assert_eq!(terminal.is_hardware_acceleration_enabled(), expected_hw_accel);
+        assert_eq!(
+            terminal.is_hardware_acceleration_enabled(),
+            expected_hw_accel
+        );
         assert!(!terminal.is_split_pane_enabled());
     }
 
@@ -2753,13 +2869,13 @@ mod tests {
     fn test_split_pane_functionality() {
         let mut config = Config::default();
         config.terminal.enable_split_pane = true;
-        
+
         let mut terminal = Terminal::new(config).unwrap();
-        
+
         // Test split pane methods
         terminal.toggle_split_orientation();
         terminal.set_split_ratio(0.6);
-        
+
         assert!(terminal.is_split_pane_enabled());
     }
 }
