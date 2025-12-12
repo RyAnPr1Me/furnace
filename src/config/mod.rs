@@ -4,6 +4,8 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+const DEFAULT_CONFIG_LUA: &str = include_str!("../../config.default.lua");
+
 /// Main configuration structure with zero-copy design for performance
 #[derive(Debug, Clone, Default)]
 pub struct Config {
@@ -591,7 +593,7 @@ impl Config {
         if config_path.exists() {
             Self::load_from_file(&config_path)
         } else {
-            Ok(Self::default())
+            Self::load_from_str(DEFAULT_CONFIG_LUA)
         }
     }
 
@@ -611,8 +613,13 @@ impl Config {
     pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
         let contents = fs::read_to_string(path.as_ref()).context("Failed to read config file")?;
 
+        Self::load_from_str(&contents)
+    }
+
+    /// Load configuration from a Lua string
+    fn load_from_str(contents: &str) -> Result<Self> {
         let lua = Lua::new();
-        lua.load(&contents)
+        lua.load(contents)
             .exec()
             .context("Failed to execute Lua config")?;
 
