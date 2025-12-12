@@ -6,6 +6,9 @@
 use std::collections::HashMap;
 
 /// Glyph cache for efficient text rendering with fontdue font rasterization
+///
+/// Manages a texture atlas of pre-rendered glyphs for efficient GPU rendering.
+#[allow(dead_code)] // Public API - used by GPU renderer consumers
 pub struct GlyphCache {
     /// Map from character code to UV coordinates in atlas
     glyph_map: HashMap<u32, GlyphInfo>,
@@ -29,7 +32,10 @@ pub struct GlyphCache {
 }
 
 /// Information about a cached glyph
+///
+/// Contains UV coordinates and metrics for rendering a single glyph.
 #[derive(Debug, Clone, Copy)]
+#[allow(dead_code)] // Public API - used by GPU renderer consumers
 pub struct GlyphInfo {
     /// UV coordinates (x, y, width, height) normalized to 0-1
     pub uv: [f32; 4],
@@ -41,6 +47,7 @@ pub struct GlyphInfo {
     pub size: [f32; 2],
 }
 
+#[allow(dead_code)] // Public API - methods used by GPU text rendering consumers
 impl GlyphCache {
     /// Create a new glyph cache with font loading
     ///

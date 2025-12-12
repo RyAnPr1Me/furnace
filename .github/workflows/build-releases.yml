@@ -56,7 +56,7 @@ jobs:
         key: ${{ runner.os }}-cargo-build-release-${{ hashFiles('**/Cargo.lock') }}
     
     - name: Build release binary
-      run: cargo build --release --target ${{ matrix.target }}
+      run: cargo build --release --all-features --target ${{ matrix.target }}
       
     - name: Prepare binary
       shell: bash

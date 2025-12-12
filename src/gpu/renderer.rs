@@ -55,6 +55,7 @@ use super::{GpuCell, GpuConfig, GpuStats};
 /// # Note
 /// and used in the complete GPU rendering pipeline. The GPU module is an optional feature
 /// that is still under development.
+#[allow(dead_code)] // Public API - struct and fields used by GPU renderer consumers
 pub struct GpuRenderer {
     /// WGPU instance
     instance: wgpu::Instance,
@@ -148,6 +149,7 @@ struct Uniforms {
     _padding: f32,
 }
 
+#[allow(dead_code)] // Public API - methods used by GPU renderer consumers
 impl GpuRenderer {
     /// Create a new GPU renderer
     pub async fn new(config: GpuConfig) -> Result<Self, GpuError> {
@@ -892,7 +894,10 @@ impl GpuRenderer {
 }
 
 /// GPU rendering errors
+///
+/// Error types that can occur during GPU rendering operations.
 #[derive(Debug, thiserror::Error)]
+#[allow(dead_code)] // Public API - error type for GPU renderer consumers
 pub enum GpuError {
     #[error("No GPU adapter available")]
     NoAdapter,
@@ -905,6 +910,9 @@ pub enum GpuError {
 }
 
 /// Create orthographic projection matrix
+///
+/// Creates a 4x4 orthographic projection matrix for 2D rendering.
+#[allow(dead_code)] // Utility function for GPU rendering pipeline
 fn orthographic_projection(width: f32, height: f32) -> [[f32; 4]; 4] {
     let left = 0.0;
     let right = width;
