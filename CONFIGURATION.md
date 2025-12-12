@@ -75,7 +75,7 @@ This document lists every supported configuration field, their defaults, and exa
 - `command_palette`
 
 ## Hooks (all optional)
-All fields in this section live under `config.hooks`. Lifecycle hooks accept Lua code (string path or inline code):
+All fields in this section live under `config.hooks`. Lifecycle hooks expect Lua code **strings** (inline code). To keep Lua in a separate file, read that file's contents into the string yourself.
 - `on_startup`
 - `on_shutdown`
 - `on_key_press`
@@ -124,7 +124,7 @@ config = {
             "function(text) return text:gsub('SUCCESS', '✅ SUCCESS') end"
         },
         custom_keybindings = {
-            ["Ctrl+Shift+G"] = "function() print(os.date()) end"
+            ["Ctrl+Shift+G"] = [[function() print(os.date()) end]]
         }
     }
 }
