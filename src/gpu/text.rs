@@ -1,13 +1,16 @@
 //! GPU text rendering utilities
+//!
+//! Provides color conversion and terminal output parsing for GPU rendering.
 
 // Allow pedantic warnings for optional GPU feature code
 #![allow(clippy::pedantic)]
-// These functions are part of the public GPU API and may be used by external callers
-#![allow(dead_code)]
 
 use super::{CellStyle, GpuCell};
 
 /// Convert ANSI color code to RGBA
+///
+/// Converts standard ANSI color codes (0-255) to RGBA float values.
+#[allow(dead_code)] // Public API - used by GPU text rendering consumers
 pub fn ansi_to_rgba(code: u8) -> [f32; 4] {
     // Standard 16 ANSI colors
     match code {
@@ -44,11 +47,17 @@ pub fn ansi_to_rgba(code: u8) -> [f32; 4] {
 }
 
 /// Convert RGB to RGBA
+///
+/// Converts 8-bit RGB values to normalized RGBA float values.
+#[allow(dead_code)] // Public API - used by GPU text rendering consumers
 pub fn rgb_to_rgba(r: u8, g: u8, b: u8) -> [f32; 4] {
     [r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0, 1.0]
 }
 
 /// Convert hex color string to RGBA
+///
+/// Parses a hex color string (e.g., "#FF0000") to RGBA float values.
+#[allow(dead_code)] // Public API - used by GPU text rendering consumers
 pub fn hex_to_rgba(hex: &str) -> Option<[f32; 4]> {
     let hex = hex.trim_start_matches('#');
     if hex.len() != 6 {
@@ -71,6 +80,7 @@ pub fn hex_to_rgba(hex: &str) -> Option<[f32; 4]> {
 /// The `param_idx` and `current_param` variables are reused throughout the parsing loop
 /// to avoid allocations. The `#[allow(unused_assignments)]` suppresses false positives
 /// from the compiler as these variables are reassigned before each use.
+#[allow(dead_code)] // Public API - used by GPU text rendering consumers
 #[allow(unused_assignments)] // param_idx and current_param are reused in parsing loop
 pub fn parse_terminal_output(output: &str, cols: usize) -> Vec<GpuCell> {
     let mut cells = Vec::with_capacity(cols * 50);

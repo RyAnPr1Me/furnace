@@ -11,11 +11,6 @@
 //! - Background blur and transparency effects
 //! - Smooth cursor animation
 
-// Allow dead code for public API types that may be used by external callers
-#![allow(dead_code)]
-// Allow unused imports for conditionally compiled re-exports
-#![allow(unused_imports)]
-
 #[cfg(feature = "gpu")]
 pub mod renderer;
 
@@ -26,11 +21,16 @@ pub mod text;
 pub mod glyph_cache;
 
 #[cfg(feature = "gpu")]
+#[allow(unused_imports)] // Re-export may not be used internally but is part of public API
 pub use renderer::GpuRenderer;
 
 /// GPU rendering configuration
+///
+/// Configuration options for GPU-accelerated terminal rendering.
+/// These fields are read by the GPU renderer when initializing.
 #[derive(Debug, Clone)]
 #[allow(clippy::struct_excessive_bools)]
+#[allow(dead_code)] // Public API - fields used by GPU renderer consumers
 pub struct GpuConfig {
     /// Enable GPU acceleration (falls back to CPU if unavailable)
     pub enabled: bool,
@@ -116,7 +116,10 @@ impl From<GpuBackend> for wgpu::Backends {
 }
 
 /// Terminal cell for GPU rendering
+///
+/// Represents a single cell in the terminal grid for GPU rendering.
 #[derive(Debug, Clone, Copy)]
+#[allow(dead_code)] // Public API - used by GPU renderer consumers
 pub struct GpuCell {
     /// Character to render (as u32 for Unicode support)
     pub char_code: u32,
@@ -155,7 +158,10 @@ bitflags::bitflags! {
 }
 
 /// GPU rendering statistics
+///
+/// Statistics about GPU rendering performance for monitoring and debugging.
 #[derive(Debug, Clone, Default)]
+#[allow(dead_code)] // Public API - fields used for performance monitoring
 pub struct GpuStats {
     /// Frames rendered
     pub frame_count: u64,
@@ -199,8 +205,11 @@ pub fn is_gpu_available() -> bool {
 }
 
 /// Get GPU device information
+///
+/// Returns information about the available GPU device for debugging.
 #[cfg(feature = "gpu")]
 #[must_use]
+#[allow(dead_code)] // Public API - used for debugging and diagnostics
 pub fn get_gpu_info() -> Option<String> {
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
         backends: wgpu::Backends::all(),
