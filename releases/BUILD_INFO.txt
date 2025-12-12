@@ -1,8 +1,8 @@
 Furnace Terminal Emulator - Build Information
 =============================================
 
-Build Date: 2025-12-12 22:54:04 UTC
-Git Commit: b49635eca275973e44e650ebbeafaf06b8e96769
+Build Date: 2025-12-12 23:29:58 UTC
+Git Commit: 5f3dab4a454f90fb048fa422fce51e05424c4e04
 Git Branch: main
 
 Binaries:
