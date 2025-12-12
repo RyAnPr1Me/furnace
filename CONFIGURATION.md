@@ -75,7 +75,7 @@ This document lists every supported configuration field, their defaults, and exa
 - `command_palette`
 
 ## Hooks (all optional)
-Lifecycle hooks accept Lua code (string path or inline code):
+All fields in this section live under `config.hooks`. Lifecycle hooks accept Lua code (string path or inline code):
 - `on_startup`
 - `on_shutdown`
 - `on_key_press`
@@ -85,7 +85,7 @@ Lifecycle hooks accept Lua code (string path or inline code):
 - `on_bell`
 - `on_title_change`
 
-Other extensibility:
+Other extensibility (also inside `config.hooks`):
 - `custom_keybindings`: map of key → Lua function (string).
 - `output_filters`: array of Lua functions that transform terminal output.
 - `custom_widgets`: array of Lua snippets to render extra UI elements.
