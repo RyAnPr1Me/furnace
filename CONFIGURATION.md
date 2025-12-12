@@ -76,6 +76,16 @@ This document lists every supported configuration field, their defaults, and exa
 
 ## Hooks (all optional)
 All fields in this section live under `config.hooks`. Lifecycle hooks expect Lua code **strings** (inline code). To keep Lua in a separate file, read that file's contents into the string yourself.
+
+Context string passed to hooks (available as local `context`):
+- `on_startup`: `"startup"`
+- `on_shutdown`: `"shutdown"`
+- `on_key_press`: `"key_press:<key>"`
+- `on_command_start`: `"command_start:<command>"`
+- `on_command_end`: `"command_end:<command>:<exit_code>"`
+- `on_output`: `"output:<text>"` (truncated to 1000 chars)
+- `on_bell`: `"bell"`
+- `on_title_change`: `"title_change:<title>"`
 - `on_startup`
 - `on_shutdown`
 - `on_key_press`
@@ -115,8 +125,10 @@ config = {
 config = {
     hooks = {
         on_command_end = [[
-            if exit_code ~= 0 then
-                print("Command failed: " .. command)
+            local cmd, code = context:match("^command_end:(.*):([%-0-9]+)$")
+            code = tonumber(code) or 0
+            if code ~= 0 then
+                print(("Command failed: %s (exit %d)"):format(cmd or "?", code))
             end
         ]],
         output_filters = {
