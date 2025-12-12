@@ -167,13 +167,14 @@ See `config.example.lua` for more options, including additional hook ideas, them
 - `colors` (ANSI palette):
   - Normal: `black #000000`, `red #FF0000`, `green #00FF00`, `yellow #FFFF00`, `blue #0000FF`, `magenta #FF00FF`, `cyan #00FFFF`, `white #FFFFFF`
   - Bright: `bright_black #808080`, `bright_red #FF8080`, `bright_green #80FF80`, `bright_yellow #FFFF80`, `bright_blue #8080FF`, `bright_magenta #FF80FF`, `bright_cyan #80FFFF`, `bright_white #FFFFFF`
-- Optional `background_image` (defaults when provided: `opacity 1.0`, `mode "fill"`, `blur 0.0`, `image_path`/`color` are optional).
-- Optional `cursor_trail` (defaults when provided: `enabled false`, `length 10`, `color "#00FF0080"`, `fade_mode "exponential"`, `width 1.0`, `animation_speed 16`).
+- Optional `background_image`: set `image_path` for an image and optionally `color` as the fallback if the image is missing or fails to load (setting only `color` uses a solid background; omitting both skips the section). Defaults when present: `opacity 1.0`, `mode "fill"` (`fill`/`fit`/`stretch`/`tile`/`center`), `blur 0.0`.
+- Optional `cursor_trail`: enables a cursor effect (`enabled`/`length`/`color`/`fade_mode` of `linear`|`exponential`|`smooth`/`width`/`animation_speed`). Defaults when provided: `enabled false`, `length 10`, `color "#00FF0080"`, `fade_mode "exponential"`, `width 1.0`, `animation_speed 16`.
 
 #### `keybindings` (defaults)
 - `new_tab` `Ctrl+T`, `close_tab` `Ctrl+W`, `next_tab` `Ctrl+Tab`, `prev_tab` `Ctrl+Shift+Tab`
 - `split_vertical` `Ctrl+Shift+V`, `split_horizontal` `Ctrl+Shift+H`
 - `copy` `Ctrl+Shift+C`, `paste` `Ctrl+Shift+V`, `search` `Ctrl+F`, `clear` `Ctrl+L`
+- Note: `split_vertical` conflicts with the default `paste` binding; rebind `split_vertical` (for example to `Ctrl+Shift+|` or `Ctrl+Alt+V`) if you enable split panes.
 
 #### `features` (all default to `false`)
 - `resource_monitor`, `autocomplete`, `progress_bar`, `session_manager`, `theme_manager`, `command_palette`
