@@ -76,9 +76,55 @@ jobs:
         path: releases-temp/${{ matrix.output_name }}
         retention-days: 1
 
+  build-linux-distro:
+    name: Build Linux Distribution Packages
+    needs: build-releases
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      
+    - name: Cache cargo registry
+      uses: actions/cache@v3
+      with:
+        path: ~/.cargo/registry
+        key: ${{ runner.os }}-cargo-registry-distro-${{ hashFiles('**/Cargo.lock') }}
+        
+    - name: Cache cargo build
+      uses: actions/cache@v3
+      with:
+        path: target
+        key: ${{ runner.os }}-cargo-build-distro-${{ hashFiles('**/Cargo.lock') }}
+    
+    - name: Install packaging tools
+      run: |
+        cargo install cargo-deb || echo "cargo-deb already installed"
+        cargo install cargo-generate-rpm || echo "cargo-generate-rpm already installed"
+    
+    - name: Build distribution packages
+      run: |
+        chmod +x build-linux-distro.sh
+        ./build-linux-distro.sh
+    
+    - name: Upload distribution artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: linux-distro-packages
+        path: |
+          dist/*.deb
+          dist/*.rpm
+          dist/*.tar.gz
+          dist/*.AppImage
+          dist/SHA256SUMS
+        retention-days: 1
+
   update-releases:
     name: Update Releases Folder
-    needs: build-releases
+    needs: [build-releases, build-linux-distro]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -159,6 +205,43 @@ jobs:
           fi
         fi
         
+        # Process Linux distribution packages
+        if [ -d "artifacts/linux-distro-packages" ]; then
+          echo "Processing Linux distribution packages..."
+          
+          # Create subdirectory for Linux packages
+          mkdir -p releases/linux-distro
+          
+          # Copy all distribution packages
+          if [ -n "$(ls -A artifacts/linux-distro-packages/*.deb 2>/dev/null)" ]; then
+            cp artifacts/linux-distro-packages/*.deb releases/linux-distro/ 2>/dev/null || true
+            updated=true
+          fi
+          
+          if [ -n "$(ls -A artifacts/linux-distro-packages/*.rpm 2>/dev/null)" ]; then
+            cp artifacts/linux-distro-packages/*.rpm releases/linux-distro/ 2>/dev/null || true
+            updated=true
+          fi
+          
+          if [ -n "$(ls -A artifacts/linux-distro-packages/*.tar.gz 2>/dev/null)" ]; then
+            cp artifacts/linux-distro-packages/*.tar.gz releases/linux-distro/ 2>/dev/null || true
+            updated=true
+          fi
+          
+          if [ -n "$(ls -A artifacts/linux-distro-packages/*.AppImage 2>/dev/null)" ]; then
+            cp artifacts/linux-distro-packages/*.AppImage releases/linux-distro/ 2>/dev/null || true
+            chmod +x releases/linux-distro/*.AppImage 2>/dev/null || true
+            updated=true
+          fi
+          
+          # Copy distro checksums if they exist
+          if [ -f "artifacts/linux-distro-packages/SHA256SUMS" ]; then
+            cp artifacts/linux-distro-packages/SHA256SUMS releases/linux-distro/
+          fi
+          
+          echo "✓ Linux distribution packages updated"
+        fi
+        
         # Update checksums if files were updated
         if [ "$updated" = true ]; then
           echo "Generating checksums..."
@@ -177,8 +260,14 @@ jobs:
         Git Branch: ${{ github.ref_name }}
         
         Binaries:
-        - furnace-linux-x86_64 (Linux x86_64)
+        - furnace-linux-x86_64 (Linux x86_64 binary)
         - furnace-windows-x86_64.exe (Windows x86_64)
+        
+        Linux Distribution Packages (in linux-distro/):
+        - .deb packages (Debian/Ubuntu)
+        - .rpm packages (Fedora/RHEL/CentOS)
+        - .AppImage (Universal Linux)
+        - .tar.gz (Manual installation with script)
         
         Build Configuration:
         - Optimization: Release (Level 3)
@@ -186,7 +275,7 @@ jobs:
         - Strip: Yes (Debug symbols removed)
         - Rust Version: $(rustc --version 2>/dev/null || echo "N/A")
         
-        Checksums: See SHA256SUMS file
+        Checksums: See SHA256SUMS file (binaries) and linux-distro/SHA256SUMS (packages)
         EOF
           
           echo "✓ Releases folder updated"

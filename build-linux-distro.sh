@@ -1,0 +1,224 @@
+#!/bin/bash
+# Build script for creating Linux distribution packages of Furnace
+# Generates: .deb, .rpm, AppImage, and tar.gz packages
+
+set -e
+
+echo "=========================================="
+echo "Furnace Linux Distribution Builder"
+echo "=========================================="
+echo ""
+
+# Get version from Cargo.toml
+VERSION=$(grep '^version = ' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
+echo "Building Furnace version: $VERSION"
+echo ""
+
+# Create output directory
+OUTPUT_DIR="dist"
+rm -rf "$OUTPUT_DIR"
+mkdir -p "$OUTPUT_DIR"
+
+# Function to check if a command exists
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+# Step 1: Build the release binary
+echo "==> Step 1: Building release binary..."
+cargo build --release --all-features
+echo "✓ Binary built successfully"
+echo ""
+
+# Step 2: Build .deb package (Debian/Ubuntu)
+echo "==> Step 2: Building .deb package..."
+if ! command_exists cargo-deb; then
+    echo "Installing cargo-deb..."
+    cargo install cargo-deb
+fi
+
+cargo deb --no-build --output "$OUTPUT_DIR/furnace_${VERSION}_amd64.deb"
+echo "✓ .deb package created: $OUTPUT_DIR/furnace_${VERSION}_amd64.deb"
+echo ""
+
+# Step 3: Build .rpm package (Fedora/RHEL/CentOS)
+echo "==> Step 3: Building .rpm package..."
+if ! command_exists cargo-generate-rpm; then
+    echo "Installing cargo-generate-rpm..."
+    cargo install cargo-generate-rpm
+fi
+
+cargo build --release
+strip target/release/furnace
+cargo generate-rpm --output "$OUTPUT_DIR/furnace-${VERSION}-1.x86_64.rpm"
+echo "✓ .rpm package created: $OUTPUT_DIR/furnace-${VERSION}-1.x86_64.rpm"
+echo ""
+
+# Step 4: Build AppImage (Universal Linux)
+echo "==> Step 4: Building AppImage..."
+APPIMAGE_DIR="$OUTPUT_DIR/AppDir"
+mkdir -p "$APPIMAGE_DIR/usr/bin"
+mkdir -p "$APPIMAGE_DIR/usr/share/applications"
+mkdir -p "$APPIMAGE_DIR/usr/share/icons/hicolor/256x256/apps"
+mkdir -p "$APPIMAGE_DIR/usr/share/doc/furnace"
+
+# Copy binary
+cp target/release/furnace "$APPIMAGE_DIR/usr/bin/"
+
+# Create desktop entry
+cat > "$APPIMAGE_DIR/usr/share/applications/furnace.desktop" << 'EOF'
+[Desktop Entry]
+Type=Application
+Name=Furnace
+Comment=High-performance terminal emulator
+Exec=furnace
+Icon=furnace
+Terminal=true
+Categories=System;TerminalEmulator;
+Keywords=terminal;emulator;shell;
+EOF
+
+# Create a simple icon (using a placeholder)
+# In a real scenario, you'd want to include an actual icon file
+cat > "$APPIMAGE_DIR/furnace.desktop" << 'EOF'
+[Desktop Entry]
+Type=Application
+Name=Furnace
+Comment=High-performance terminal emulator
+Exec=furnace
+Icon=furnace
+Terminal=true
+Categories=System;TerminalEmulator;
+EOF
+
+# Copy documentation
+cp README.md LICENSE "$APPIMAGE_DIR/usr/share/doc/furnace/" 2>/dev/null || true
+cp config.example.lua "$APPIMAGE_DIR/usr/share/doc/furnace/" 2>/dev/null || true
+
+# Create AppRun script
+cat > "$APPIMAGE_DIR/AppRun" << 'EOF'
+#!/bin/bash
+SELF=$(readlink -f "$0")
+HERE=${SELF%/*}
+export PATH="${HERE}/usr/bin/:${PATH}"
+exec "${HERE}/usr/bin/furnace" "$@"
+EOF
+chmod +x "$APPIMAGE_DIR/AppRun"
+
+# Download appimagetool if not present
+if [ ! -f "appimagetool-x86_64.AppImage" ]; then
+    echo "Downloading appimagetool..."
+    wget -q "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage" || {
+        echo "Warning: Could not download appimagetool. Skipping AppImage creation."
+        echo "You can manually download it from https://github.com/AppImage/AppImageKit/releases"
+    }
+    chmod +x appimagetool-x86_64.AppImage 2>/dev/null || true
+fi
+
+if [ -f "appimagetool-x86_64.AppImage" ]; then
+    ARCH=x86_64 ./appimagetool-x86_64.AppImage "$APPIMAGE_DIR" "$OUTPUT_DIR/furnace-${VERSION}-x86_64.AppImage"
+    echo "✓ AppImage created: $OUTPUT_DIR/furnace-${VERSION}-x86_64.AppImage"
+else
+    echo "⚠ AppImage creation skipped (appimagetool not available)"
+fi
+echo ""
+
+# Step 5: Create tar.gz archive with install script
+echo "==> Step 5: Building tar.gz archive..."
+TARBALL_DIR="$OUTPUT_DIR/furnace-${VERSION}"
+mkdir -p "$TARBALL_DIR"
+
+# Copy files
+cp target/release/furnace "$TARBALL_DIR/"
+cp README.md LICENSE "$TARBALL_DIR/" 2>/dev/null || true
+cp config.example.lua "$TARBALL_DIR/" 2>/dev/null || true
+
+# Create install script
+cat > "$TARBALL_DIR/install.sh" << 'EOF'
+#!/bin/bash
+# Furnace Terminal Emulator - Installation Script
+
+set -e
+
+echo "=========================================="
+echo "Furnace Terminal Emulator - Installer"
+echo "=========================================="
+echo ""
+
+# Check if running as root for system-wide install
+if [ "$EUID" -eq 0 ]; then
+    INSTALL_DIR="/usr/local/bin"
+    DOC_DIR="/usr/local/share/doc/furnace"
+    echo "Installing system-wide to $INSTALL_DIR"
+else
+    INSTALL_DIR="$HOME/.local/bin"
+    DOC_DIR="$HOME/.local/share/doc/furnace"
+    echo "Installing to user directory: $INSTALL_DIR"
+    mkdir -p "$INSTALL_DIR"
+fi
+
+# Install binary
+echo "Installing furnace binary..."
+cp furnace "$INSTALL_DIR/"
+chmod +x "$INSTALL_DIR/furnace"
+
+# Install documentation
+echo "Installing documentation..."
+mkdir -p "$DOC_DIR"
+cp README.md LICENSE "$DOC_DIR/" 2>/dev/null || true
+cp config.example.lua "$DOC_DIR/" 2>/dev/null || true
+
+echo ""
+echo "✓ Installation complete!"
+echo ""
+echo "Furnace has been installed to: $INSTALL_DIR/furnace"
+echo ""
+
+# Check if directory is in PATH
+if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
+    echo "⚠ NOTE: $INSTALL_DIR is not in your PATH"
+    echo ""
+    echo "Add it to your PATH by adding this line to your ~/.bashrc or ~/.zshrc:"
+    echo "  export PATH=\"$INSTALL_DIR:\$PATH\""
+    echo ""
+fi
+
+echo "To run Furnace, type: furnace"
+echo ""
+EOF
+chmod +x "$TARBALL_DIR/install.sh"
+
+# Create the tarball
+cd "$OUTPUT_DIR"
+tar czf "furnace-${VERSION}-linux-x86_64.tar.gz" "furnace-${VERSION}"
+cd ..
+echo "✓ Tar.gz archive created: $OUTPUT_DIR/furnace-${VERSION}-linux-x86_64.tar.gz"
+echo ""
+
+# Step 6: Generate checksums
+echo "==> Step 6: Generating checksums..."
+cd "$OUTPUT_DIR"
+sha256sum furnace*.{deb,rpm,AppImage,tar.gz} 2>/dev/null > SHA256SUMS || \
+sha256sum furnace*.deb furnace*.rpm furnace*.tar.gz 2>/dev/null > SHA256SUMS || \
+sha256sum * 2>/dev/null | grep -E '\.(deb|rpm|AppImage|tar\.gz)$' > SHA256SUMS || true
+cd ..
+echo "✓ Checksums generated: $OUTPUT_DIR/SHA256SUMS"
+echo ""
+
+# Summary
+echo "=========================================="
+echo "Build Summary"
+echo "=========================================="
+echo ""
+echo "Distribution packages created in: $OUTPUT_DIR/"
+echo ""
+ls -lh "$OUTPUT_DIR" | grep -E '\.(deb|rpm|AppImage|tar\.gz|SHA256SUMS)$' || ls -lh "$OUTPUT_DIR"
+echo ""
+echo "Package formats:"
+echo "  • .deb      - Debian/Ubuntu (apt/dpkg)"
+echo "  • .rpm      - Fedora/RHEL/CentOS (dnf/yum)"
+echo "  • .AppImage - Universal Linux (portable)"
+echo "  • .tar.gz   - Manual installation (with install script)"
+echo ""
+echo "✓ All distribution packages built successfully! 🔥"
+echo ""

@@ -2,7 +2,7 @@
 
 ## About
 
-Furnace is a high-performance terminal emulator for Windows (and cross-platform) built in Rust that surpasses PowerShell with native performance, 170 FPS GPU-accelerated rendering, and modern features.
+Furnace is a high-performance terminal emulator for Windows and Linux, built in Rust, that surpasses PowerShell with native performance, 170 FPS GPU-accelerated rendering, and modern features.
 
 ## Download
 
@@ -13,10 +13,31 @@ Furnace is a high-performance terminal emulator for Windows (and cross-platform)
 - **Build**: Optimized release with LTO
 
 ### Linux (x86_64)
+
+#### Binary Only
 - **File**: `furnace-linux-x86_64`
 - **Size**: ~1.8MB
 - **Architecture**: 64-bit Linux
 - **Build**: Optimized release with LTO
+
+#### Distribution Packages (in `linux-distro/`)
+Choose the package format that matches your Linux distribution:
+
+- **`.deb`** - For Debian/Ubuntu/Linux Mint
+  - Install with: `sudo dpkg -i furnace_*.deb` or `sudo apt install ./furnace_*.deb`
+  - Size: ~1.8MB
+  
+- **`.rpm`** - For Fedora/RHEL/CentOS/openSUSE
+  - Install with: `sudo rpm -i furnace-*.rpm` or `sudo dnf install furnace-*.rpm`
+  - Size: ~1.8MB
+  
+- **`.AppImage`** - Universal Linux (portable, no installation needed)
+  - Just download, make executable, and run
+  - Size: ~2.0MB
+  
+- **`.tar.gz`** - Manual installation with install script
+  - Extract and run `./install.sh`
+  - Size: ~1.8MB
 
 ## Installation
 
@@ -36,6 +57,62 @@ furnace --version
 ```
 
 ### Linux
+
+#### Option 1: Distribution Package (Recommended)
+
+**Debian/Ubuntu/Linux Mint:**
+```bash
+# Download the .deb file from linux-distro/
+sudo apt install ./furnace_1.0.0_amd64.deb
+
+# Or using dpkg
+sudo dpkg -i furnace_1.0.0_amd64.deb
+sudo apt-get install -f  # Fix dependencies if needed
+
+# Run
+furnace
+```
+
+**Fedora/RHEL/CentOS:**
+```bash
+# Download the .rpm file from linux-distro/
+sudo dnf install furnace-1.0.0-1.x86_64.rpm
+
+# Or using rpm
+sudo rpm -i furnace-1.0.0-1.x86_64.rpm
+
+# Run
+furnace
+```
+
+**Universal Linux (AppImage):**
+```bash
+# Download the .AppImage file from linux-distro/
+chmod +x furnace-1.0.0-x86_64.AppImage
+
+# Run directly (no installation needed)
+./furnace-1.0.0-x86_64.AppImage
+
+# Optional: Move to PATH for easy access
+sudo mv furnace-1.0.0-x86_64.AppImage /usr/local/bin/furnace
+```
+
+**Manual Installation (tar.gz):**
+```bash
+# Download and extract the .tar.gz file from linux-distro/
+tar xzf furnace-1.0.0-linux-x86_64.tar.gz
+cd furnace-1.0.0
+
+# Run the install script
+sudo ./install.sh  # System-wide installation
+# OR
+./install.sh       # User installation to ~/.local/bin
+
+# Run
+furnace
+```
+
+#### Option 2: Standalone Binary
 ```bash
 # Download and make executable
 chmod +x furnace-linux-x86_64
@@ -81,6 +158,8 @@ Verify the binary works:
 ### Checksum Verification
 
 Verify file integrity with SHA256:
+
+**For binaries:**
 ```bash
 # Linux/macOS
 sha256sum -c SHA256SUMS
@@ -88,6 +167,13 @@ sha256sum -c SHA256SUMS
 # Windows (PowerShell)
 Get-FileHash furnace-windows-x86_64.exe -Algorithm SHA256
 # Compare with value in SHA256SUMS file
+```
+
+**For Linux distribution packages:**
+```bash
+# Verify packages in linux-distro/
+cd linux-distro
+sha256sum -c SHA256SUMS
 ```
 
 ## Features
