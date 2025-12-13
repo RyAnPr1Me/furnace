@@ -3,11 +3,12 @@ name = "furnace"
 version = "1.0.0"
 edition = "2021"
 authors = ["RyAnPr1Me"]
-description = "An extremely advanced, high-performance terminal emulator for Windows"
+description = "An extremely advanced, high-performance terminal emulator for Windows and Linux"
 license = "MIT"
 repository = "https://github.com/RyAnPr1Me/furnace"
 keywords = ["terminal", "emulator", "windows", "performance"]
 categories = ["command-line-utilities"]
+homepage = "https://github.com/RyAnPr1Me/furnace"
 
 [[bin]]
 name = "furnace"
@@ -137,3 +138,31 @@ incremental = true               # Enable incremental compilation for faster reb
 [[bench]]
 name = "terminal_bench"
 harness = false
+
+# Debian package metadata
+[package.metadata.deb]
+maintainer = "RyAnPr1Me"
+copyright = "2025, RyAnPr1Me <https://github.com/RyAnPr1Me>"
+license-file = ["LICENSE", "4"]
+extended-description = """\
+Furnace is a high-performance, cross-platform terminal emulator built in Rust.
+Features include GPU-accelerated rendering, Lua configuration, 24-bit true color,
+tabs, split panes, session management, and advanced autocomplete."""
+depends = "$auto"
+section = "utils"
+priority = "optional"
+assets = [
+    ["target/release/furnace", "usr/bin/", "755"],
+    ["README.md", "usr/share/doc/furnace/", "644"],
+    ["LICENSE", "usr/share/doc/furnace/", "644"],
+    ["config.example.lua", "usr/share/doc/furnace/examples/", "644"],
+]
+
+# RPM package metadata
+[package.metadata.generate-rpm]
+assets = [
+    { source = "target/release/furnace", dest = "/usr/bin/furnace", mode = "755" },
+    { source = "README.md", dest = "/usr/share/doc/furnace/README.md", mode = "644" },
+    { source = "LICENSE", dest = "/usr/share/doc/furnace/LICENSE", mode = "644" },
+    { source = "config.example.lua", dest = "/usr/share/doc/furnace/examples/config.example.lua", mode = "644" },
+]

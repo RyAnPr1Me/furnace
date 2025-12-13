@@ -524,10 +524,14 @@ impl GpuRenderer {
     pub fn update_cells(&mut self, cells: &[GpuCell], cols: u32, rows: u32) {
         // Safety check: prevent division by zero
         if cols == 0 || rows == 0 {
-            tracing::warn!("Attempted to set terminal size to zero dimensions: {}x{}", cols, rows);
+            tracing::warn!(
+                "Attempted to set terminal size to zero dimensions: {}x{}",
+                cols,
+                rows
+            );
             return;
         }
-        
+
         self.terminal_size = (cols, rows);
         let new_size = (cols * rows) as usize;
 
@@ -539,7 +543,10 @@ impl GpuRenderer {
 
         // Mark changed cells as dirty
         // Iterate only up to the minimum of all relevant arrays to prevent out-of-bounds access
-        let max_index = cells.len().min(self.prev_cells.len()).min(self.dirty_cells.len());
+        let max_index = cells
+            .len()
+            .min(self.prev_cells.len())
+            .min(self.dirty_cells.len());
         for (i, new_cell) in cells.iter().enumerate().take(max_index) {
             // Check if cell changed
             let prev = &self.prev_cells[i];
@@ -673,8 +680,11 @@ impl GpuRenderer {
     pub fn render(&mut self) -> Result<(), GpuError> {
         // Safety check: prevent division by zero in rendering calculations
         if self.terminal_size.0 == 0 || self.terminal_size.1 == 0 {
-            tracing::warn!("Attempted to render with zero terminal dimensions: {}x{}", 
-                self.terminal_size.0, self.terminal_size.1);
+            tracing::warn!(
+                "Attempted to render with zero terminal dimensions: {}x{}",
+                self.terminal_size.0,
+                self.terminal_size.1
+            );
             return Ok(()); // Return early without rendering
         }
 
