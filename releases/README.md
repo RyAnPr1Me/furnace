@@ -63,10 +63,10 @@ furnace --version
 **Debian/Ubuntu/Linux Mint:**
 ```bash
 # Download the .deb file from linux-distro/
-sudo apt install ./furnace_1.0.0_amd64.deb
+sudo apt install ./furnace_X.Y.Z_amd64.deb
 
 # Or using dpkg
-sudo dpkg -i furnace_1.0.0_amd64.deb
+sudo dpkg -i furnace_X.Y.Z_amd64.deb
 sudo apt-get install -f  # Fix dependencies if needed
 
 # Run
@@ -76,10 +76,10 @@ furnace
 **Fedora/RHEL/CentOS:**
 ```bash
 # Download the .rpm file from linux-distro/
-sudo dnf install furnace-1.0.0-1.x86_64.rpm
+sudo dnf install furnace-X.Y.Z-1.x86_64.rpm
 
 # Or using rpm
-sudo rpm -i furnace-1.0.0-1.x86_64.rpm
+sudo rpm -i furnace-X.Y.Z-1.x86_64.rpm
 
 # Run
 furnace
@@ -88,20 +88,20 @@ furnace
 **Universal Linux (AppImage):**
 ```bash
 # Download the .AppImage file from linux-distro/
-chmod +x furnace-1.0.0-x86_64.AppImage
+chmod +x furnace-X.Y.Z-x86_64.AppImage
 
 # Run directly (no installation needed)
-./furnace-1.0.0-x86_64.AppImage
+./furnace-X.Y.Z-x86_64.AppImage
 
 # Optional: Move to PATH for easy access
-sudo mv furnace-1.0.0-x86_64.AppImage /usr/local/bin/furnace
+sudo mv furnace-X.Y.Z-x86_64.AppImage /usr/local/bin/furnace
 ```
 
 **Manual Installation (tar.gz):**
 ```bash
 # Download and extract the .tar.gz file from linux-distro/
-tar xzf furnace-1.0.0-linux-x86_64.tar.gz
-cd furnace-1.0.0
+tar xzf furnace-X.Y.Z-linux-x86_64.tar.gz
+cd furnace-X.Y.Z
 
 # Run the install script
 sudo ./install.sh  # System-wide installation

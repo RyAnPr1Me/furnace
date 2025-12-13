@@ -49,7 +49,13 @@ if ! command_exists cargo-generate-rpm; then
 fi
 
 # Strip debug symbols for smaller package size
-strip target/release/furnace
+if [ -f target/release/furnace ]; then
+    strip target/release/furnace || echo "Warning: Failed to strip binary"
+else
+    echo "Error: Binary not found at target/release/furnace"
+    exit 1
+fi
+
 cargo generate-rpm --output "$OUTPUT_DIR/furnace-${VERSION}-1.x86_64.rpm"
 echo "✓ .rpm package created: $OUTPUT_DIR/furnace-${VERSION}-1.x86_64.rpm"
 echo ""
@@ -107,14 +113,21 @@ chmod +x "$APPIMAGE_DIR/AppRun"
 # Download appimagetool if not present
 if [ ! -f "appimagetool-x86_64.AppImage" ]; then
     echo "Downloading appimagetool..."
-    wget -q "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage" || {
+    if wget -q "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage"; then
+        chmod +x appimagetool-x86_64.AppImage
+        
+        # Verify the download (basic sanity check - file should be executable and reasonable size)
+        if [ ! -x "appimagetool-x86_64.AppImage" ] || [ ! -s "appimagetool-x86_64.AppImage" ]; then
+            echo "Warning: Downloaded appimagetool appears invalid. Skipping AppImage creation."
+            rm -f appimagetool-x86_64.AppImage
+        fi
+    else
         echo "Warning: Could not download appimagetool. Skipping AppImage creation."
         echo "You can manually download it from https://github.com/AppImage/AppImageKit/releases"
-    }
-    chmod +x appimagetool-x86_64.AppImage 2>/dev/null || true
+    fi
 fi
 
-if [ -f "appimagetool-x86_64.AppImage" ]; then
+if [ -f "appimagetool-x86_64.AppImage" ] && [ -x "appimagetool-x86_64.AppImage" ]; then
     ARCH=x86_64 ./appimagetool-x86_64.AppImage "$APPIMAGE_DIR" "$OUTPUT_DIR/furnace-${VERSION}-x86_64.AppImage"
     echo "✓ AppImage created: $OUTPUT_DIR/furnace-${VERSION}-x86_64.AppImage"
 else

@@ -102,8 +102,18 @@ jobs:
     
     - name: Install packaging tools
       run: |
-        cargo install cargo-deb || echo "cargo-deb already installed"
-        cargo install cargo-generate-rpm || echo "cargo-generate-rpm already installed"
+        # Only install if not already present
+        if ! command -v cargo-deb &> /dev/null; then
+          cargo install cargo-deb
+        else
+          echo "cargo-deb already installed"
+        fi
+        
+        if ! command -v cargo-generate-rpm &> /dev/null; then
+          cargo install cargo-generate-rpm
+        else
+          echo "cargo-generate-rpm already installed"
+        fi
     
     - name: Build distribution packages
       run: |
