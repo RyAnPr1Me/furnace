@@ -373,11 +373,14 @@ impl BackgroundConfig {
         Ok(Self {
             image_path: table.get::<_, Option<String>>("image_path")?,
             color: table.get::<_, Option<String>>("color")?,
-            opacity: table.get::<_, Option<f32>>("opacity")?.unwrap_or(1.0),
+            opacity: table
+                .get::<_, Option<f32>>("opacity")?
+                .unwrap_or(1.0)
+                .clamp(0.0, 1.0),
             mode: table
                 .get::<_, Option<String>>("mode")?
                 .unwrap_or_else(|| "fill".to_string()),
-            blur: table.get::<_, Option<f32>>("blur")?.unwrap_or(0.0),
+            blur: table.get::<_, Option<f32>>("blur")?.unwrap_or(0.0).max(0.0),
         })
     }
 }

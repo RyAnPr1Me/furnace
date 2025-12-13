@@ -55,4 +55,5 @@ pub mod ui;
 ///
 /// Enabled with the `gpu` feature flag. Provides hardware-accelerated
 /// text rendering using wgpu for 170+ FPS performance.
+#[cfg(feature = "gpu")]
 pub mod gpu;

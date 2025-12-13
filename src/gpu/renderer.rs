@@ -522,6 +522,12 @@ impl GpuRenderer {
     ///
     /// BUG FIX #24: Track which cells changed to optimize GPU uploads
     pub fn update_cells(&mut self, cells: &[GpuCell], cols: u32, rows: u32) {
+        // Safety check: prevent division by zero
+        if cols == 0 || rows == 0 {
+            tracing::warn!("Attempted to set terminal size to zero dimensions: {}x{}", cols, rows);
+            return;
+        }
+        
         self.terminal_size = (cols, rows);
         let new_size = (cols * rows) as usize;
 
@@ -532,26 +538,32 @@ impl GpuRenderer {
         }
 
         // Mark changed cells as dirty
-        for (i, new_cell) in cells.iter().enumerate() {
-            if i < self.prev_cells.len() {
-                // Check if cell changed
-                let prev = &self.prev_cells[i];
-                if prev.char_code != new_cell.char_code
-                    || prev.fg_color != new_cell.fg_color
-                    || prev.bg_color != new_cell.bg_color
-                    || prev.style != new_cell.style
-                {
-                    self.dirty_cells[i] = true;
-                }
-            } else {
+        // Iterate only up to the minimum of all relevant arrays to prevent out-of-bounds access
+        let max_index = cells.len().min(self.prev_cells.len()).min(self.dirty_cells.len());
+        for (i, new_cell) in cells.iter().enumerate().take(max_index) {
+            // Check if cell changed
+            let prev = &self.prev_cells[i];
+            if prev.char_code != new_cell.char_code
+                || prev.fg_color != new_cell.fg_color
+                || prev.bg_color != new_cell.bg_color
+                || prev.style != new_cell.style
+            {
                 self.dirty_cells[i] = true;
             }
         }
 
+        // Mark any additional cells as dirty if input is larger
+        if cells.len() > max_index {
+            for i in max_index..cells.len().min(self.dirty_cells.len()) {
+                self.dirty_cells[i] = true;
+            }
+        }
+
+        // Update current cells
         self.cells.clear();
         self.cells.extend_from_slice(cells);
 
-        // Update previous frame cells
+        // Update previous frame cells for next comparison
         self.prev_cells.clear();
         self.prev_cells.extend_from_slice(cells);
     }
@@ -659,6 +671,13 @@ impl GpuRenderer {
     ///
     /// BUG FIX #24: Only upload changed cells to GPU for better performance
     pub fn render(&mut self) -> Result<(), GpuError> {
+        // Safety check: prevent division by zero in rendering calculations
+        if self.terminal_size.0 == 0 || self.terminal_size.1 == 0 {
+            tracing::warn!("Attempted to render with zero terminal dimensions: {}x{}", 
+                self.terminal_size.0, self.terminal_size.1);
+            return Ok(()); // Return early without rendering
+        }
+
         let start_time = std::time::Instant::now();
 
         // Count dirty cells for stats
