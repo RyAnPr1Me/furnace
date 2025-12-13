@@ -101,8 +101,8 @@ EOF
 
 # Copy icon (required by AppImage spec)
 if [ -f "furnace.png" ]; then
-    cp furnace.png "$APPIMAGE_DIR/usr/share/icons/hicolor/256x256/apps/"
-    cp furnace.png "$APPIMAGE_DIR/"
+    cp furnace.png "$APPIMAGE_DIR/usr/share/icons/hicolor/256x256/apps/furnace.png"
+    cp furnace.png "$APPIMAGE_DIR/furnace.png"
 else
     echo "Warning: furnace.png not found. AppImage may not have an icon."
 fi

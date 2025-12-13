@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
   <!-- Simple flame icon for Furnace terminal -->
-  <rect width="256" height="256" fill="none"/>
   <ellipse cx="128" cy="160" rx="88" ry="80" fill="#8B0000"/>
   <ellipse cx="128" cy="140" rx="68" ry="80" fill="#FF4500"/>
   <ellipse cx="128" cy="120" rx="48" ry="80" fill="#FF8C00"/>
