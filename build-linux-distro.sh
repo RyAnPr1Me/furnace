@@ -99,6 +99,14 @@ Terminal=true
 Categories=System;TerminalEmulator;
 EOF
 
+# Copy icon (required by AppImage spec)
+if [ -f "furnace.png" ]; then
+    cp furnace.png "$APPIMAGE_DIR/usr/share/icons/hicolor/256x256/apps/furnace.png"
+    cp furnace.png "$APPIMAGE_DIR/furnace.png"
+else
+    echo "Warning: furnace.png not found. AppImage may not have an icon."
+fi
+
 # Copy documentation
 cp README.md LICENSE "$APPIMAGE_DIR/usr/share/doc/furnace/" 2>/dev/null || true
 cp config.example.lua "$APPIMAGE_DIR/usr/share/doc/furnace/" 2>/dev/null || true
@@ -141,7 +149,8 @@ if [ ! -f "appimagetool-x86_64.AppImage" ]; then
 fi
 
 if [ -f "appimagetool-x86_64.AppImage" ] && [ -x "appimagetool-x86_64.AppImage" ]; then
-    ARCH=x86_64 ./appimagetool-x86_64.AppImage "$APPIMAGE_DIR" "$OUTPUT_DIR/furnace-${VERSION}-x86_64.AppImage"
+    # Use APPIMAGE_EXTRACT_AND_RUN to work in environments without FUSE
+    ARCH=x86_64 APPIMAGE_EXTRACT_AND_RUN=1 ./appimagetool-x86_64.AppImage "$APPIMAGE_DIR" "$OUTPUT_DIR/furnace-${VERSION}-x86_64.AppImage"
     echo "✓ AppImage created: $OUTPUT_DIR/furnace-${VERSION}-x86_64.AppImage"
 else
     echo "⚠ AppImage creation skipped (appimagetool not available)"
