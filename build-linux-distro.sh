@@ -48,7 +48,7 @@ if ! command_exists cargo-generate-rpm; then
     cargo install cargo-generate-rpm
 fi
 
-cargo build --release
+# Strip debug symbols for smaller package size
 strip target/release/furnace
 cargo generate-rpm --output "$OUTPUT_DIR/furnace-${VERSION}-1.x86_64.rpm"
 echo "✓ .rpm package created: $OUTPUT_DIR/furnace-${VERSION}-1.x86_64.rpm"
@@ -65,7 +65,7 @@ mkdir -p "$APPIMAGE_DIR/usr/share/doc/furnace"
 # Copy binary
 cp target/release/furnace "$APPIMAGE_DIR/usr/bin/"
 
-# Create desktop entry
+# Create desktop entry for system installation
 cat > "$APPIMAGE_DIR/usr/share/applications/furnace.desktop" << 'EOF'
 [Desktop Entry]
 Type=Application
@@ -78,8 +78,7 @@ Categories=System;TerminalEmulator;
 Keywords=terminal;emulator;shell;
 EOF
 
-# Create a simple icon (using a placeholder)
-# In a real scenario, you'd want to include an actual icon file
+# Create root desktop entry (required by AppImage spec)
 cat > "$APPIMAGE_DIR/furnace.desktop" << 'EOF'
 [Desktop Entry]
 Type=Application
@@ -198,9 +197,15 @@ echo ""
 # Step 6: Generate checksums
 echo "==> Step 6: Generating checksums..."
 cd "$OUTPUT_DIR"
-sha256sum furnace*.{deb,rpm,AppImage,tar.gz} 2>/dev/null > SHA256SUMS || \
-sha256sum furnace*.deb furnace*.rpm furnace*.tar.gz 2>/dev/null > SHA256SUMS || \
-sha256sum * 2>/dev/null | grep -E '\.(deb|rpm|AppImage|tar\.gz)$' > SHA256SUMS || true
+
+# Generate checksums for all package files
+> SHA256SUMS  # Create empty file
+for file in furnace*.deb furnace*.rpm furnace*.AppImage furnace*.tar.gz; do
+    if [ -f "$file" ]; then
+        sha256sum "$file" >> SHA256SUMS
+    fi
+done
+
 cd ..
 echo "✓ Checksums generated: $OUTPUT_DIR/SHA256SUMS"
 echo ""
