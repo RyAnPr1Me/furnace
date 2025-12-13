@@ -539,29 +539,26 @@ impl GpuRenderer {
 
         // Mark changed cells as dirty
         for (i, new_cell) in cells.iter().enumerate() {
-            if i < self.dirty_cells.len() {
-                if i < self.prev_cells.len() {
-                    // Check if cell changed
-                    let prev = &self.prev_cells[i];
-                    if prev.char_code != new_cell.char_code
-                        || prev.fg_color != new_cell.fg_color
-                        || prev.bg_color != new_cell.bg_color
-                        || prev.style != new_cell.style
-                    {
-                        self.dirty_cells[i] = true;
-                    }
-                } else {
+            // Both vectors are resized together, so we only need to check once
+            if i < self.prev_cells.len() {
+                // Check if cell changed
+                let prev = &self.prev_cells[i];
+                if prev.char_code != new_cell.char_code
+                    || prev.fg_color != new_cell.fg_color
+                    || prev.bg_color != new_cell.bg_color
+                    || prev.style != new_cell.style
+                {
                     self.dirty_cells[i] = true;
                 }
             }
         }
 
+        // Update previous frame cells for next comparison (before updating current cells)
+        self.prev_cells.clear();
+        self.prev_cells.extend_from_slice(&self.cells);
+
         self.cells.clear();
         self.cells.extend_from_slice(cells);
-
-        // Update previous frame cells
-        self.prev_cells.clear();
-        self.prev_cells.extend_from_slice(cells);
     }
 
     /// Mark all cells as dirty (force full redraw)
