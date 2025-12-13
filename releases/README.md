@@ -2,7 +2,7 @@
 
 ## About
 
-Furnace is a high-performance terminal emulator for Windows and Linux, built in Rust, that surpasses PowerShell with native performance, 170 FPS GPU-accelerated rendering, and modern features.
+Furnace is a high-performance, cross-platform terminal emulator built in Rust, supporting Windows, Linux, and macOS with native performance, 170 FPS GPU-accelerated rendering, and modern features.
 
 ## Download
 

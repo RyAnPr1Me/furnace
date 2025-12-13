@@ -48,15 +48,18 @@ if ! command_exists cargo-generate-rpm; then
     cargo install cargo-generate-rpm
 fi
 
-# Strip debug symbols for smaller package size
-if [ -f target/release/furnace ]; then
-    strip target/release/furnace || echo "Warning: Failed to strip binary"
-else
+# Check binary exists before packaging
+if [ ! -f target/release/furnace ]; then
     echo "Error: Binary not found at target/release/furnace"
     exit 1
 fi
 
+# Generate RPM (stripping happens after to avoid modifying the binary before packaging tools process it)
 cargo generate-rpm --output "$OUTPUT_DIR/furnace-${VERSION}-1.x86_64.rpm"
+
+# Strip debug symbols for smaller subsequent packages (doesn't affect the already-created RPM)
+strip target/release/furnace || echo "Warning: Failed to strip binary"
+
 echo "✓ .rpm package created: $OUTPUT_DIR/furnace-${VERSION}-1.x86_64.rpm"
 echo ""
 
@@ -113,13 +116,23 @@ chmod +x "$APPIMAGE_DIR/AppRun"
 # Download appimagetool if not present
 if [ ! -f "appimagetool-x86_64.AppImage" ]; then
     echo "Downloading appimagetool..."
+    echo "Note: Downloading from continuous release. For production, consider pinning a specific version."
+    
     if wget -q "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage"; then
         chmod +x appimagetool-x86_64.AppImage
         
-        # Verify the download (basic sanity check - file should be executable and reasonable size)
+        # Verify the download (basic sanity checks)
+        # Note: continuous releases don't have stable checksums, but we can validate basic properties
         if [ ! -x "appimagetool-x86_64.AppImage" ] || [ ! -s "appimagetool-x86_64.AppImage" ]; then
             echo "Warning: Downloaded appimagetool appears invalid. Skipping AppImage creation."
             rm -f appimagetool-x86_64.AppImage
+        else
+            # Check file size is reasonable (appimagetool is typically ~5MB)
+            file_size=$(stat -c%s "appimagetool-x86_64.AppImage" 2>/dev/null || stat -f%z "appimagetool-x86_64.AppImage" 2>/dev/null)
+            if [ "$file_size" -lt 1000000 ]; then
+                echo "Warning: Downloaded file is suspiciously small. Skipping AppImage creation."
+                rm -f appimagetool-x86_64.AppImage
+            fi
         fi
     else
         echo "Warning: Could not download appimagetool. Skipping AppImage creation."
