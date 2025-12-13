@@ -538,18 +538,24 @@ impl GpuRenderer {
         }
 
         // Mark changed cells as dirty
-        for (i, new_cell) in cells.iter().enumerate() {
-            // Both vectors are resized together, so we only need to check once
-            if i < self.prev_cells.len() {
-                // Check if cell changed
-                let prev = &self.prev_cells[i];
-                if prev.char_code != new_cell.char_code
-                    || prev.fg_color != new_cell.fg_color
-                    || prev.bg_color != new_cell.bg_color
-                    || prev.style != new_cell.style
-                {
-                    self.dirty_cells[i] = true;
-                }
+        // Iterate only up to the minimum of cells length and our tracking arrays
+        let max_index = cells.len().min(self.prev_cells.len());
+        for (i, new_cell) in cells.iter().enumerate().take(max_index) {
+            // Check if cell changed
+            let prev = &self.prev_cells[i];
+            if prev.char_code != new_cell.char_code
+                || prev.fg_color != new_cell.fg_color
+                || prev.bg_color != new_cell.bg_color
+                || prev.style != new_cell.style
+            {
+                self.dirty_cells[i] = true;
+            }
+        }
+
+        // Mark any additional cells as dirty if input is larger
+        if cells.len() > max_index {
+            for i in max_index..cells.len().min(self.dirty_cells.len()) {
+                self.dirty_cells[i] = true;
             }
         }
 
