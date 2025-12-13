@@ -33,6 +33,9 @@ dist/
 build/
 bin/
 
+# Packaging tools
+appimagetool-*.AppImage
+
 # Config files (user-specific)
 config.yaml
 .furnace/
