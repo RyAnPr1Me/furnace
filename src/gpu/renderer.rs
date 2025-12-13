@@ -522,6 +522,12 @@ impl GpuRenderer {
     ///
     /// BUG FIX #24: Track which cells changed to optimize GPU uploads
     pub fn update_cells(&mut self, cells: &[GpuCell], cols: u32, rows: u32) {
+        // Safety check: prevent division by zero
+        if cols == 0 || rows == 0 {
+            tracing::warn!("Attempted to set terminal size to zero dimensions: {}x{}", cols, rows);
+            return;
+        }
+        
         self.terminal_size = (cols, rows);
         let new_size = (cols * rows) as usize;
 
