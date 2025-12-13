@@ -538,8 +538,8 @@ impl GpuRenderer {
         }
 
         // Mark changed cells as dirty
-        // Iterate only up to the minimum of cells length and our tracking arrays
-        let max_index = cells.len().min(self.prev_cells.len());
+        // Iterate only up to the minimum of all relevant arrays to prevent out-of-bounds access
+        let max_index = cells.len().min(self.prev_cells.len()).min(self.dirty_cells.len());
         for (i, new_cell) in cells.iter().enumerate().take(max_index) {
             // Check if cell changed
             let prev = &self.prev_cells[i];
@@ -559,12 +559,13 @@ impl GpuRenderer {
             }
         }
 
-        // Update previous frame cells for next comparison (before updating current cells)
-        self.prev_cells.clear();
-        self.prev_cells.extend_from_slice(&self.cells);
-
+        // Update current cells
         self.cells.clear();
         self.cells.extend_from_slice(cells);
+
+        // Update previous frame cells for next comparison
+        self.prev_cells.clear();
+        self.prev_cells.extend_from_slice(cells);
     }
 
     /// Mark all cells as dirty (force full redraw)
