@@ -671,6 +671,13 @@ impl GpuRenderer {
     ///
     /// BUG FIX #24: Only upload changed cells to GPU for better performance
     pub fn render(&mut self) -> Result<(), GpuError> {
+        // Safety check: prevent division by zero in rendering calculations
+        if self.terminal_size.0 == 0 || self.terminal_size.1 == 0 {
+            tracing::warn!("Attempted to render with zero terminal dimensions: {}x{}", 
+                self.terminal_size.0, self.terminal_size.1);
+            return Ok(()); // Return early without rendering
+        }
+
         let start_time = std::time::Instant::now();
 
         // Count dirty cells for stats
