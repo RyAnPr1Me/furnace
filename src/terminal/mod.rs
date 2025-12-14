@@ -656,6 +656,7 @@ impl Terminal {
         // Keep dirty=true to ensure continuous rendering until content arrives
         // This fixes the issue where the terminal doesn't render anything on screen
         // when no initial shell output is received
+        self.dirty = true;
         debug!("Initial render complete");
 
         // Demonstration: Use all implemented functionality
