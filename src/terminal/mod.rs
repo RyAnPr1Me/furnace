@@ -650,6 +650,10 @@ impl Terminal {
             warn!("No initial shell output received - shell may be slow to start or not configured correctly");
         }
 
+        // Clear terminal screen to ensure clean render state
+        // This is critical for proper rendering - without it, the screen may appear blank
+        terminal.clear()?;
+
         // Always render the initial screen, even if empty
         // This ensures the user sees SOMETHING instead of a blank screen
         terminal.draw(|f| self.render(f))?;
