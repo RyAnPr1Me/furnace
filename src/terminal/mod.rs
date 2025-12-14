@@ -1023,9 +1023,49 @@ impl Terminal {
         // Store renderer in the terminal
         self.gpu_renderer = Some(gpu_renderer);
 
+        // Create channels for async I/O communication
+        // Channel for sending input data to shell (from UI thread to I/O task)
+        let (input_tx, mut input_rx) = tokio::sync::mpsc::unbounded_channel::<Vec<u8>>();
+        // Channel for receiving output data from shell (from I/O task to UI thread)
+        let (output_tx, mut output_rx) = tokio::sync::mpsc::unbounded_channel::<Vec<u8>>();
+
+        // Spawn background task for async shell I/O
+        let session_idx = self.active_session;
+        if let Some(session) = self.sessions.get(session_idx) {
+            let session_clone = session.clone();
+            tokio::spawn(async move {
+                let mut read_buf = vec![0u8; 8192];
+                loop {
+                    // Handle write requests from UI thread
+                    while let Ok(data) = input_rx.try_recv() {
+                        if let Err(e) = session_clone.write_input(&data).await {
+                            warn!("Failed to write to shell: {}", e);
+                            break;
+                        }
+                    }
+
+                    // Read shell output and send to UI thread
+                    match session_clone.read_output(&mut read_buf).await {
+                        Ok(n) if n > 0 => {
+                            let _ = output_tx.send(read_buf[..n].to_vec());
+                        }
+                        Ok(_) => {
+                            // No data, short sleep to avoid busy loop
+                            tokio::time::sleep(Duration::from_millis(10)).await;
+                        }
+                        Err(e) => {
+                            warn!("Failed to read from shell: {}", e);
+                            break;
+                        }
+                    }
+                }
+            });
+        }
+
         // Main event loop
         let frame_duration = Duration::from_micros(1_000_000 / TARGET_FPS);
         let mut last_render = tokio::time::Instant::now();
+        let mut modifiers_state = winit::keyboard::ModifiersState::empty();
 
         event_loop
             .run(move |event, target| {
@@ -1040,6 +1080,13 @@ impl Terminal {
                     }
 
                     Event::WindowEvent {
+                        event: WindowEvent::ModifiersChanged(new_state),
+                        ..
+                    } => {
+                        modifiers_state = new_state.state();
+                    }
+
+                    Event::WindowEvent {
                         event:
                             WindowEvent::KeyboardInput {
                                 event: key_event, ..
@@ -1047,23 +1094,33 @@ impl Terminal {
                         ..
                     } => {
                         if key_event.state == ElementState::Pressed {
+                            // Check for Ctrl+Q to quit (more standard than Escape)
+                            let is_ctrl_q = matches!(
+                                key_event.physical_key,
+                                PhysicalKey::Code(WinitKeyCode::KeyQ)
+                            ) && (modifiers_state.control_key()
+                                || (cfg!(target_os = "macos") && modifiers_state.super_key()));
+
+                            if is_ctrl_q {
+                                info!("Ctrl+Q pressed, exiting");
+                                self.should_quit = true;
+                                target.exit();
+                                return;
+                            }
+
                             // Handle keyboard input - convert winit events to crossterm-style events
                             if let Some(text) = &key_event.text {
                                 for ch in text.chars() {
-                                    // Send character to shell
-                                    if let Some(session) = self.sessions.get(self.active_session) {
-                                        let mut buf = [0u8; 4];
-                                        let s = ch.encode_utf8(&mut buf);
-                                        let _ = tokio::runtime::Handle::current().block_on(async {
-                                            session.write_input(s.as_bytes()).await
-                                        });
+                                    let mut buf = [0u8; 4];
+                                    let s = ch.encode_utf8(&mut buf);
+                                    // Send to background I/O task via channel (non-blocking)
+                                    let _ = input_tx.send(s.as_bytes().to_vec());
 
-                                        // Track in command buffer
-                                        if let Some(cmd_buf) =
-                                            self.command_buffers.get_mut(self.active_session)
-                                        {
-                                            cmd_buf.extend_from_slice(s.as_bytes());
-                                        }
+                                    // Track in command buffer
+                                    if let Some(cmd_buf) =
+                                        self.command_buffers.get_mut(self.active_session)
+                                    {
+                                        cmd_buf.extend_from_slice(s.as_bytes());
                                     }
                                 }
                             }
@@ -1072,14 +1129,8 @@ impl Terminal {
                             if let PhysicalKey::Code(code) = key_event.physical_key {
                                 match code {
                                     WinitKeyCode::Enter => {
-                                        if let Some(session) =
-                                            self.sessions.get(self.active_session)
-                                        {
-                                            let _ =
-                                                tokio::runtime::Handle::current().block_on(async {
-                                                    session.write_input(b"\r").await
-                                                });
-                                        }
+                                        // Send carriage return to background I/O task via channel
+                                        let _ = input_tx.send(b"\r".to_vec());
                                         if let Some(cmd_buf) =
                                             self.command_buffers.get_mut(self.active_session)
                                         {
@@ -1087,23 +1138,13 @@ impl Terminal {
                                         }
                                     }
                                     WinitKeyCode::Backspace => {
-                                        if let Some(session) =
-                                            self.sessions.get(self.active_session)
-                                        {
-                                            let _ =
-                                                tokio::runtime::Handle::current().block_on(async {
-                                                    session.write_input(&[127]).await
-                                                });
-                                        }
+                                        // Send backspace (DEL) to background I/O task via channel
+                                        let _ = input_tx.send(vec![127]);
                                         if let Some(cmd_buf) =
                                             self.command_buffers.get_mut(self.active_session)
                                         {
                                             cmd_buf.pop();
                                         }
-                                    }
-                                    WinitKeyCode::Escape => {
-                                        self.should_quit = true;
-                                        target.exit();
                                     }
                                     _ => {}
                                 }
@@ -1124,16 +1165,11 @@ impl Terminal {
                     }
 
                     Event::AboutToWait => {
-                        // Read shell output
-                        if let Some(session) = self.sessions.get(self.active_session) {
-                            if let Ok(n) = tokio::runtime::Handle::current().block_on(async {
-                                session.read_output(&mut self.read_buffer).await
-                            }) {
-                                if n > 0 && self.active_session < self.output_buffers.len() {
-                                    self.output_buffers[self.active_session]
-                                        .extend_from_slice(&self.read_buffer[..n]);
-                                    self.dirty = true;
-                                }
+                        // Drain all available shell output from background I/O task (non-blocking)
+                        while let Ok(output) = output_rx.try_recv() {
+                            if self.active_session < self.output_buffers.len() {
+                                self.output_buffers[self.active_session].extend_from_slice(&output);
+                                self.dirty = true;
                             }
                         }
 
