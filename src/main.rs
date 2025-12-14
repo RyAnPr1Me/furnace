@@ -70,11 +70,19 @@ async fn main() -> Result<()> {
         config.shell.default_shell = shell;
     }
 
-    // Check if stdout is a TTY
-    if !std::io::stdout().is_terminal() {
-        eprintln!("Error: Furnace must be run in an interactive terminal.");
+    // Check if hardware acceleration is enabled
+    #[cfg(feature = "gpu")]
+    let using_gpu = config.terminal.hardware_acceleration;
+    #[cfg(not(feature = "gpu"))]
+    let using_gpu = false;
+
+    // Only check for TTY if using CPU rendering (ratatui)
+    // GPU rendering uses a windowed application and doesn't need TTY
+    if !using_gpu && !std::io::stdout().is_terminal() {
+        eprintln!("Error: Furnace CPU rendering mode must be run in an interactive terminal.");
         eprintln!("It cannot be run with redirected output or in non-TTY environments.");
         eprintln!("\nUsage: Run 'furnace' directly in a terminal emulator.");
+        eprintln!("Tip: Enable GPU rendering with 'terminal.hardware_acceleration = true' to run in windowed mode.");
         std::process::exit(1);
     }
 
