@@ -1146,6 +1146,32 @@ impl Terminal {
                                             cmd_buf.pop();
                                         }
                                     }
+                                    WinitKeyCode::ArrowUp => {
+                                        // Send ANSI escape code for Up arrow (history navigation)
+                                        let _ = input_tx.send(b"\x1b[A".to_vec());
+                                        if let Some(cmd_buf) =
+                                            self.command_buffers.get_mut(self.active_session)
+                                        {
+                                            cmd_buf.clear();
+                                        }
+                                    }
+                                    WinitKeyCode::ArrowDown => {
+                                        // Send ANSI escape code for Down arrow (history navigation)
+                                        let _ = input_tx.send(b"\x1b[B".to_vec());
+                                        if let Some(cmd_buf) =
+                                            self.command_buffers.get_mut(self.active_session)
+                                        {
+                                            cmd_buf.clear();
+                                        }
+                                    }
+                                    WinitKeyCode::ArrowRight => {
+                                        // Send ANSI escape code for Right arrow (cursor movement)
+                                        let _ = input_tx.send(b"\x1b[C".to_vec());
+                                    }
+                                    WinitKeyCode::ArrowLeft => {
+                                        // Send ANSI escape code for Left arrow (cursor movement)
+                                        let _ = input_tx.send(b"\x1b[D".to_vec());
+                                    }
                                     _ => {}
                                 }
                             }
@@ -1162,6 +1188,8 @@ impl Terminal {
                             renderer.resize(new_size.width, new_size.height);
                             self.dirty = true;
                         }
+                        // TODO: Update PTY dimensions when we calculate terminal size from window/font metrics
+                        // Currently terminal dimensions are hardcoded to 80x24, so no PTY resize needed yet
                     }
 
                     Event::AboutToWait => {
@@ -1215,34 +1243,121 @@ impl Terminal {
         Ok(())
     }
 
-    /// Convert terminal output buffer to GPU cells
+    /// Convert terminal output buffer to GPU cells with ANSI color support
     #[cfg(feature = "gpu")]
     fn buffer_to_gpu_cells(&self) -> Vec<crate::gpu::GpuCell> {
+        use ratatui::style::Color;
+
         let total_cells = (self.terminal_cols as usize) * (self.terminal_rows as usize);
         let mut cells = vec![crate::gpu::GpuCell::default(); total_cells];
 
         if let Some(buffer) = self.output_buffers.get(self.active_session) {
             let output = String::from_utf8_lossy(buffer);
-            let lines: Vec<&str> = output.lines().collect();
+            // Parse ANSI escape codes to get styled lines (same as CPU mode)
+            let styled_lines = AnsiParser::parse_with_palette(&output, &self.color_palette);
 
-            for (row, line) in lines.iter().enumerate().take(self.terminal_rows as usize) {
-                for (col, ch) in line.chars().enumerate().take(self.terminal_cols as usize) {
-                    let idx = row * (self.terminal_cols as usize) + col;
-                    if idx < cells.len() {
-                        cells[idx].char_code = ch as u32;
-                        // Use theme colors
-                        cells[idx].fg_color = [
-                            COLOR_REDDISH_GRAY.0 as f32 / 255.0,
-                            COLOR_REDDISH_GRAY.1 as f32 / 255.0,
-                            COLOR_REDDISH_GRAY.2 as f32 / 255.0,
-                            1.0,
-                        ];
-                        cells[idx].bg_color = [
-                            COLOR_PURE_BLACK.0 as f32 / 255.0,
-                            COLOR_PURE_BLACK.1 as f32 / 255.0,
-                            COLOR_PURE_BLACK.2 as f32 / 255.0,
-                            1.0,
-                        ];
+            // Skip lines to fit terminal height (same logic as CPU mode)
+            let skip_count = styled_lines
+                .len()
+                .saturating_sub(self.terminal_rows as usize);
+            let visible_lines: Vec<_> = styled_lines.into_iter().skip(skip_count).collect();
+
+            // Convert styled lines to GPU cells
+            for (row, line) in visible_lines
+                .iter()
+                .enumerate()
+                .take(self.terminal_rows as usize)
+            {
+                let mut col = 0;
+                for span in &line.spans {
+                    for ch in span.content.chars() {
+                        if col >= self.terminal_cols as usize {
+                            break;
+                        }
+                        let idx = row * (self.terminal_cols as usize) + col;
+                        if idx < cells.len() {
+                            cells[idx].char_code = ch as u32;
+
+                            // Extract foreground color from span style
+                            cells[idx].fg_color = match span.style.fg {
+                                Some(Color::Rgb(r, g, b)) => {
+                                    [r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0, 1.0]
+                                }
+                                Some(Color::Reset) | None => [
+                                    COLOR_REDDISH_GRAY.0 as f32 / 255.0,
+                                    COLOR_REDDISH_GRAY.1 as f32 / 255.0,
+                                    COLOR_REDDISH_GRAY.2 as f32 / 255.0,
+                                    1.0,
+                                ],
+                                // Map other ratatui colors to RGB
+                                Some(color) => {
+                                    let (r, g, b) = match color {
+                                        Color::Black => (0, 0, 0),
+                                        Color::Red => (205, 49, 49),
+                                        Color::Green => (13, 188, 121),
+                                        Color::Yellow => (229, 229, 16),
+                                        Color::Blue => (36, 114, 200),
+                                        Color::Magenta => (188, 63, 188),
+                                        Color::Cyan => (17, 168, 205),
+                                        Color::Gray => (229, 229, 229),
+                                        Color::DarkGray => (102, 102, 102),
+                                        Color::LightRed => (241, 76, 76),
+                                        Color::LightGreen => (35, 209, 139),
+                                        Color::LightYellow => (245, 245, 67),
+                                        Color::LightBlue => (59, 142, 234),
+                                        Color::LightMagenta => (214, 112, 214),
+                                        Color::LightCyan => (41, 184, 219),
+                                        Color::White => (255, 255, 255),
+                                        _ => (
+                                            COLOR_REDDISH_GRAY.0,
+                                            COLOR_REDDISH_GRAY.1,
+                                            COLOR_REDDISH_GRAY.2,
+                                        ),
+                                    };
+                                    [r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0, 1.0]
+                                }
+                            };
+
+                            // Extract background color from span style
+                            cells[idx].bg_color = match span.style.bg {
+                                Some(Color::Rgb(r, g, b)) => {
+                                    [r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0, 1.0]
+                                }
+                                Some(Color::Reset) | None => [
+                                    COLOR_PURE_BLACK.0 as f32 / 255.0,
+                                    COLOR_PURE_BLACK.1 as f32 / 255.0,
+                                    COLOR_PURE_BLACK.2 as f32 / 255.0,
+                                    1.0,
+                                ],
+                                Some(color) => {
+                                    let (r, g, b) = match color {
+                                        Color::Black => (0, 0, 0),
+                                        Color::Red => (205, 49, 49),
+                                        Color::Green => (13, 188, 121),
+                                        Color::Yellow => (229, 229, 16),
+                                        Color::Blue => (36, 114, 200),
+                                        Color::Magenta => (188, 63, 188),
+                                        Color::Cyan => (17, 168, 205),
+                                        Color::Gray => (229, 229, 229),
+                                        Color::DarkGray => (102, 102, 102),
+                                        Color::LightRed => (241, 76, 76),
+                                        Color::LightGreen => (35, 209, 139),
+                                        Color::LightYellow => (245, 245, 67),
+                                        Color::LightBlue => (59, 142, 234),
+                                        Color::LightMagenta => (214, 112, 214),
+                                        Color::LightCyan => (41, 184, 219),
+                                        Color::White => (255, 255, 255),
+                                        _ => (
+                                            COLOR_PURE_BLACK.0,
+                                            COLOR_PURE_BLACK.1,
+                                            COLOR_PURE_BLACK.2,
+                                        ),
+                                    };
+                                    [r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0, 1.0]
+                                }
+                            };
+                        }
+                        col += 1;
                     }
                 }
             }
