@@ -186,6 +186,9 @@ pub struct Terminal {
     background_image_height: u16,
     // Cursor trail state
     cursor_trail_positions: Vec<(u16, u16, std::time::Instant)>, // (col, row, timestamp)
+    // GPU renderer for hardware-accelerated rendering
+    #[cfg(feature = "gpu")]
+    gpu_renderer: Option<crate::gpu::GpuRenderer>,
 }
 
 /// Split pane orientation
@@ -428,6 +431,9 @@ impl Terminal {
             background_image_height: 0,
             // Initialize cursor trail state
             cursor_trail_positions: Vec::with_capacity(20), // Pre-allocate for trail
+            // GPU renderer will be initialized in run() if hardware acceleration is enabled
+            #[cfg(feature = "gpu")]
+            gpu_renderer: None,
         };
 
         if enable_command_palette {
@@ -522,6 +528,23 @@ impl Terminal {
     /// Returns an error if terminal setup, shell session creation, or event handling fails
     #[allow(clippy::too_many_lines)]
     pub async fn run(&mut self) -> Result<()> {
+        // Check if GPU rendering is enabled - if so, use windowed GPU path
+        #[cfg(feature = "gpu")]
+        if self.hardware_acceleration {
+            info!("Using GPU-accelerated rendering with windowed application");
+            return self.run_gpu().await;
+        }
+
+        #[cfg(not(feature = "gpu"))]
+        if self.hardware_acceleration {
+            warn!(
+                "Hardware acceleration requested but GPU feature not compiled - using CPU fallback"
+            );
+        }
+
+        // CPU rendering path using ratatui
+        info!("Using CPU rendering with ratatui");
+
         // Set up terminal with automatic cleanup on error
         enable_raw_mode().context(
             "Failed to enable raw mode. Ensure you're running in a proper terminal emulator.",
@@ -650,12 +673,17 @@ impl Terminal {
             warn!("No initial shell output received - shell may be slow to start or not configured correctly");
         }
 
+        // Clear terminal screen to ensure clean render state
+        // This is critical for proper rendering - without it, the screen may appear blank
+        terminal.clear()?;
+
         // Always render the initial screen, even if empty
         // This ensures the user sees SOMETHING instead of a blank screen
         terminal.draw(|f| self.render(f))?;
         // Keep dirty=true to ensure continuous rendering until content arrives
         // This fixes the issue where the terminal doesn't render anything on screen
         // when no initial shell output is received
+        self.dirty = true;
         debug!("Initial render complete");
 
         // Demonstration: Use all implemented functionality
@@ -881,6 +909,573 @@ impl Terminal {
 
         info!("Terminal shutdown complete");
         Ok(())
+    }
+
+    /// GPU-accelerated windowed event loop
+    ///
+    /// This method creates a windowed application using winit and renders using wgpu.
+    /// It replaces the ratatui terminal-based rendering with full GPU acceleration.
+    ///
+    /// # Errors
+    /// Returns an error if window or GPU initialization fails
+    #[cfg(feature = "gpu")]
+    #[allow(clippy::too_many_lines)]
+    async fn run_gpu(&mut self) -> Result<()> {
+        use winit::{
+            event::{ElementState, Event, WindowEvent},
+            event_loop::{ControlFlow, EventLoop},
+            keyboard::{KeyCode as WinitKeyCode, PhysicalKey},
+            window::WindowBuilder,
+        };
+
+        info!("Initializing GPU-accelerated windowed terminal");
+
+        // Create winit event loop
+        let event_loop = EventLoop::new().context("Failed to create event loop")?;
+        event_loop.set_control_flow(ControlFlow::Poll);
+
+        // Create window
+        let window = WindowBuilder::new()
+            .with_title("Furnace Terminal")
+            .with_inner_size(winit::dpi::PhysicalSize::new(1280, 720))
+            .build(&event_loop)
+            .context("Failed to create window")?;
+
+        let window = std::sync::Arc::new(window);
+
+        // Initialize GPU renderer
+        let gpu_config = crate::gpu::GpuConfig {
+            enabled: true,
+            backend: crate::gpu::GpuBackend::Auto,
+            vsync: true,
+            font_size: self.font_size as f32,
+            font_family: "JetBrains Mono".to_string(),
+            subpixel_rendering: true,
+            background_opacity: 1.0,
+            background_blur: false,
+            cell_padding: 2,
+            initial_width: Some(1280.0),
+            initial_height: Some(720.0),
+        };
+
+        let mut gpu_renderer = crate::gpu::GpuRenderer::new(gpu_config)
+            .await
+            .context("Failed to create GPU renderer")?;
+
+        // Create surface from window
+        let surface = gpu_renderer
+            .instance()
+            .create_surface(window.clone())
+            .context("Failed to create surface")?;
+
+        let size = window.inner_size();
+        gpu_renderer.set_surface(surface, size.width, size.height);
+
+        info!("GPU renderer initialized successfully");
+
+        // Calculate terminal size from window dimensions and font metrics
+        // Using monospace font metrics: typical character width ~0.6 * font_size, height ~font_size * line_height
+        let size = window.inner_size();
+        let font_size = self.font_size as f32;
+        let char_width = font_size * 0.6; // Approximate monospace character width
+        let char_height = font_size * 1.2; // Line height (font size + spacing)
+
+        self.terminal_cols = ((size.width as f32) / char_width).floor() as u16;
+        self.terminal_rows = ((size.height as f32) / char_height).floor() as u16;
+
+        // Ensure minimum dimensions
+        self.terminal_cols = self.terminal_cols.max(80);
+        self.terminal_rows = self.terminal_rows.max(24);
+
+        info!(
+            "Calculated terminal size: {}x{} ({}x{} pixels)",
+            self.terminal_cols, self.terminal_rows, size.width, size.height
+        );
+
+        // Create initial shell session
+        let env_vars: Vec<(&str, &str)> = self
+            .config
+            .shell
+            .env
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_str()))
+            .collect();
+
+        let session = if env_vars.is_empty() {
+            ShellSession::new(
+                &self.config.shell.default_shell,
+                self.config.shell.working_dir.as_deref(),
+                self.terminal_rows,
+                self.terminal_cols,
+            )?
+        } else {
+            ShellSession::new_with_env(
+                &self.config.shell.default_shell,
+                self.config.shell.working_dir.as_deref(),
+                self.terminal_rows,
+                self.terminal_cols,
+                &env_vars,
+            )?
+        };
+
+        self.sessions.push(session);
+        self.output_buffers.push(Vec::with_capacity(1024 * 1024));
+        self.command_buffers.push(Vec::new());
+        self.cached_styled_lines.push(Vec::new());
+        self.cached_buffer_lens.push(0);
+
+        info!("Shell session created");
+
+        // Wait for initial shell output
+        debug!("Waiting for initial shell output...");
+        tokio::time::sleep(Duration::from_millis(INITIAL_OUTPUT_TIMEOUT_MS)).await;
+        let _ = self
+            .read_and_store_output(EXTRA_READ_ATTEMPTS, EXTRA_READ_DELAY_MS)
+            .await;
+
+        self.dirty = true;
+
+        // Store renderer in the terminal
+        self.gpu_renderer = Some(gpu_renderer);
+
+        // Create channels for async I/O communication
+        // Channel for sending input data to shell (from UI thread to I/O task)
+        let (input_tx, mut input_rx) = tokio::sync::mpsc::unbounded_channel::<Vec<u8>>();
+        // Channel for receiving output data from shell (from I/O task to UI thread)
+        let (output_tx, mut output_rx) = tokio::sync::mpsc::unbounded_channel::<Vec<u8>>();
+        // Channel for PTY resize commands
+        let (resize_tx, mut resize_rx) = tokio::sync::mpsc::unbounded_channel::<(u16, u16)>();
+
+        // Spawn background task for async shell I/O
+        let session_idx = self.active_session;
+        if let Some(session) = self.sessions.get(session_idx) {
+            let session_clone = session.clone();
+            tokio::spawn(async move {
+                let mut read_buf = vec![0u8; 8192];
+                loop {
+                    // Handle PTY resize requests
+                    while let Ok((rows, cols)) = resize_rx.try_recv() {
+                        if let Err(e) = session_clone.resize(rows, cols).await {
+                            warn!("Failed to resize PTY: {}", e);
+                        } else {
+                            debug!("PTY resized to {}x{}", cols, rows);
+                        }
+                    }
+
+                    // Handle write requests from UI thread
+                    while let Ok(data) = input_rx.try_recv() {
+                        if let Err(e) = session_clone.write_input(&data).await {
+                            warn!("Failed to write to shell: {}", e);
+                            break;
+                        }
+                    }
+
+                    // Read shell output and send to UI thread
+                    match session_clone.read_output(&mut read_buf).await {
+                        Ok(n) if n > 0 => {
+                            let _ = output_tx.send(read_buf[..n].to_vec());
+                        }
+                        Ok(_) => {
+                            // No data, short sleep to avoid busy loop
+                            tokio::time::sleep(Duration::from_millis(10)).await;
+                        }
+                        Err(e) => {
+                            warn!("Failed to read from shell: {}", e);
+                            break;
+                        }
+                    }
+                }
+            });
+        }
+
+        // Main event loop
+        let frame_duration = Duration::from_micros(1_000_000 / TARGET_FPS);
+        let mut last_render = tokio::time::Instant::now();
+        let mut modifiers_state = winit::keyboard::ModifiersState::empty();
+
+        event_loop
+            .run(move |event, target| {
+                match event {
+                    Event::WindowEvent {
+                        event: WindowEvent::CloseRequested,
+                        ..
+                    } => {
+                        info!("Window close requested");
+                        self.should_quit = true;
+                        target.exit();
+                    }
+
+                    Event::WindowEvent {
+                        event: WindowEvent::ModifiersChanged(new_state),
+                        ..
+                    } => {
+                        modifiers_state = new_state.state();
+                    }
+
+                    Event::WindowEvent {
+                        event:
+                            WindowEvent::KeyboardInput {
+                                event: key_event, ..
+                            },
+                        ..
+                    } => {
+                        if key_event.state == ElementState::Pressed {
+                            // Check for Ctrl+Q to quit (more standard than Escape)
+                            let is_ctrl_q = matches!(
+                                key_event.physical_key,
+                                PhysicalKey::Code(WinitKeyCode::KeyQ)
+                            ) && (modifiers_state.control_key()
+                                || (cfg!(target_os = "macos") && modifiers_state.super_key()));
+
+                            if is_ctrl_q {
+                                info!("Ctrl+Q pressed, exiting");
+                                self.should_quit = true;
+                                target.exit();
+                                return;
+                            }
+
+                            // Handle keyboard input - convert winit events to crossterm-style events
+                            if let Some(text) = &key_event.text {
+                                for ch in text.chars() {
+                                    let mut buf = [0u8; 4];
+                                    let s = ch.encode_utf8(&mut buf);
+                                    // Send to background I/O task via channel (non-blocking)
+                                    let _ = input_tx.send(s.as_bytes().to_vec());
+
+                                    // Track in command buffer
+                                    if let Some(cmd_buf) =
+                                        self.command_buffers.get_mut(self.active_session)
+                                    {
+                                        cmd_buf.extend_from_slice(s.as_bytes());
+                                    }
+                                }
+                            }
+
+                            // Handle special keys
+                            if let PhysicalKey::Code(code) = key_event.physical_key {
+                                // Check for Ctrl key combinations
+                                let ctrl_pressed = modifiers_state.control_key();
+
+                                match code {
+                                    WinitKeyCode::Enter => {
+                                        // Send carriage return to background I/O task via channel
+                                        let _ = input_tx.send(b"\r".to_vec());
+                                        if let Some(cmd_buf) =
+                                            self.command_buffers.get_mut(self.active_session)
+                                        {
+                                            cmd_buf.clear();
+                                        }
+                                    }
+                                    WinitKeyCode::Backspace => {
+                                        // Send backspace (DEL) to background I/O task via channel
+                                        let _ = input_tx.send(vec![127]);
+                                        if let Some(cmd_buf) =
+                                            self.command_buffers.get_mut(self.active_session)
+                                        {
+                                            cmd_buf.pop();
+                                        }
+                                    }
+                                    WinitKeyCode::Tab => {
+                                        // Send tab character for autocompletion
+                                        let _ = input_tx.send(b"\t".to_vec());
+                                    }
+                                    WinitKeyCode::ArrowUp => {
+                                        // Send ANSI escape code for Up arrow (history navigation)
+                                        let _ = input_tx.send(b"\x1b[A".to_vec());
+                                        if let Some(cmd_buf) =
+                                            self.command_buffers.get_mut(self.active_session)
+                                        {
+                                            cmd_buf.clear();
+                                        }
+                                    }
+                                    WinitKeyCode::ArrowDown => {
+                                        // Send ANSI escape code for Down arrow (history navigation)
+                                        let _ = input_tx.send(b"\x1b[B".to_vec());
+                                        if let Some(cmd_buf) =
+                                            self.command_buffers.get_mut(self.active_session)
+                                        {
+                                            cmd_buf.clear();
+                                        }
+                                    }
+                                    WinitKeyCode::ArrowRight => {
+                                        // Send ANSI escape code for Right arrow (cursor movement)
+                                        let _ = input_tx.send(b"\x1b[C".to_vec());
+                                    }
+                                    WinitKeyCode::ArrowLeft => {
+                                        // Send ANSI escape code for Left arrow (cursor movement)
+                                        let _ = input_tx.send(b"\x1b[D".to_vec());
+                                    }
+                                    WinitKeyCode::Home => {
+                                        // Send ANSI escape code for Home key
+                                        let _ = input_tx.send(b"\x1b[H".to_vec());
+                                    }
+                                    WinitKeyCode::End => {
+                                        // Send ANSI escape code for End key
+                                        let _ = input_tx.send(b"\x1b[F".to_vec());
+                                    }
+                                    WinitKeyCode::Delete => {
+                                        // Send ANSI escape code for Delete key
+                                        let _ = input_tx.send(b"\x1b[3~".to_vec());
+                                    }
+                                    WinitKeyCode::PageUp => {
+                                        // Send ANSI escape code for Page Up
+                                        let _ = input_tx.send(b"\x1b[5~".to_vec());
+                                    }
+                                    WinitKeyCode::PageDown => {
+                                        // Send ANSI escape code for Page Down
+                                        let _ = input_tx.send(b"\x1b[6~".to_vec());
+                                    }
+                                    // Ctrl key combinations
+                                    WinitKeyCode::KeyC if ctrl_pressed => {
+                                        // Ctrl+C sends SIGINT (ETX character)
+                                        let _ = input_tx.send(vec![0x03]);
+                                    }
+                                    WinitKeyCode::KeyD if ctrl_pressed => {
+                                        // Ctrl+D sends EOT (End of Transmission)
+                                        let _ = input_tx.send(vec![0x04]);
+                                    }
+                                    WinitKeyCode::KeyL if ctrl_pressed => {
+                                        // Ctrl+L clears screen
+                                        let _ = input_tx.send(vec![0x0C]);
+                                    }
+                                    WinitKeyCode::KeyZ if ctrl_pressed => {
+                                        // Ctrl+Z sends SIGTSTP (suspend)
+                                        let _ = input_tx.send(vec![0x1A]);
+                                    }
+                                    WinitKeyCode::KeyA if ctrl_pressed => {
+                                        // Ctrl+A moves to beginning of line
+                                        let _ = input_tx.send(vec![0x01]);
+                                    }
+                                    WinitKeyCode::KeyE if ctrl_pressed => {
+                                        // Ctrl+E moves to end of line
+                                        let _ = input_tx.send(vec![0x05]);
+                                    }
+                                    WinitKeyCode::KeyU if ctrl_pressed => {
+                                        // Ctrl+U clears line before cursor
+                                        let _ = input_tx.send(vec![0x15]);
+                                    }
+                                    WinitKeyCode::KeyK if ctrl_pressed => {
+                                        // Ctrl+K clears line after cursor
+                                        let _ = input_tx.send(vec![0x0B]);
+                                    }
+                                    WinitKeyCode::KeyW if ctrl_pressed => {
+                                        // Ctrl+W deletes word before cursor
+                                        let _ = input_tx.send(vec![0x17]);
+                                    }
+                                    _ => {}
+                                }
+                            }
+
+                            self.dirty = true;
+                        }
+                    }
+
+                    Event::WindowEvent {
+                        event: WindowEvent::Resized(new_size),
+                        ..
+                    } => {
+                        if let Some(ref mut renderer) = self.gpu_renderer {
+                            renderer.resize(new_size.width, new_size.height);
+
+                            // Recalculate terminal dimensions from new window size
+                            let font_size = self.font_size as f32;
+                            let char_width = font_size * 0.6;
+                            let char_height = font_size * 1.2;
+
+                            let new_cols = ((new_size.width as f32) / char_width).floor() as u16;
+                            let new_rows = ((new_size.height as f32) / char_height).floor() as u16;
+
+                            // Ensure minimum dimensions
+                            let new_cols = new_cols.max(80);
+                            let new_rows = new_rows.max(24);
+
+                            // Only resize if dimensions actually changed
+                            if new_cols != self.terminal_cols || new_rows != self.terminal_rows {
+                                self.terminal_cols = new_cols;
+                                self.terminal_rows = new_rows;
+
+                                // Send resize command to background I/O task
+                                let _ = resize_tx.send((new_rows, new_cols));
+
+                                info!("Terminal resized to {}x{}", new_cols, new_rows);
+                            }
+
+                            self.dirty = true;
+                        }
+                    }
+
+                    Event::AboutToWait => {
+                        // Drain all available shell output from background I/O task (non-blocking)
+                        while let Ok(output) = output_rx.try_recv() {
+                            if self.active_session < self.output_buffers.len() {
+                                self.output_buffers[self.active_session].extend_from_slice(&output);
+                                self.dirty = true;
+                            }
+                        }
+
+                        // Render at target FPS
+                        let now = tokio::time::Instant::now();
+                        if now.duration_since(last_render) >= frame_duration {
+                            if self.dirty {
+                                // Convert terminal buffer to GPU cells BEFORE borrowing renderer
+                                let cells = self.buffer_to_gpu_cells();
+                                let cols = self.terminal_cols as u32;
+                                let rows = self.terminal_rows as u32;
+
+                                if let Some(ref mut renderer) = self.gpu_renderer {
+                                    renderer.update_cells(&cells, cols, rows);
+
+                                    // Render
+                                    if let Err(e) = renderer.render() {
+                                        warn!("GPU render error: {:?}", e);
+                                    }
+
+                                    self.dirty = false;
+                                    self.frame_count += 1;
+
+                                    if self.frame_count.is_multiple_of(1000) {
+                                        debug!("Rendered {} GPU frames", self.frame_count);
+                                    }
+                                }
+                            }
+                            last_render = now;
+                        }
+
+                        if self.should_quit {
+                            target.exit();
+                        }
+                    }
+
+                    _ => {}
+                }
+            })
+            .context("Event loop error")?;
+
+        info!("GPU terminal shutdown complete");
+        Ok(())
+    }
+
+    /// Convert terminal output buffer to GPU cells with ANSI color support
+    #[cfg(feature = "gpu")]
+    fn buffer_to_gpu_cells(&self) -> Vec<crate::gpu::GpuCell> {
+        use ratatui::style::Color;
+
+        let total_cells = (self.terminal_cols as usize) * (self.terminal_rows as usize);
+        let mut cells = vec![crate::gpu::GpuCell::default(); total_cells];
+
+        if let Some(buffer) = self.output_buffers.get(self.active_session) {
+            let output = String::from_utf8_lossy(buffer);
+            // Parse ANSI escape codes to get styled lines (same as CPU mode)
+            let styled_lines = AnsiParser::parse_with_palette(&output, &self.color_palette);
+
+            // Skip lines to fit terminal height (same logic as CPU mode)
+            let skip_count = styled_lines
+                .len()
+                .saturating_sub(self.terminal_rows as usize);
+            let visible_lines: Vec<_> = styled_lines.into_iter().skip(skip_count).collect();
+
+            // Convert styled lines to GPU cells
+            for (row, line) in visible_lines
+                .iter()
+                .enumerate()
+                .take(self.terminal_rows as usize)
+            {
+                let mut col = 0;
+                for span in &line.spans {
+                    for ch in span.content.chars() {
+                        if col >= self.terminal_cols as usize {
+                            break;
+                        }
+                        let idx = row * (self.terminal_cols as usize) + col;
+                        if idx < cells.len() {
+                            cells[idx].char_code = ch as u32;
+
+                            // Extract foreground color from span style
+                            cells[idx].fg_color = match span.style.fg {
+                                Some(Color::Rgb(r, g, b)) => {
+                                    [r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0, 1.0]
+                                }
+                                Some(Color::Reset) | None => [
+                                    COLOR_REDDISH_GRAY.0 as f32 / 255.0,
+                                    COLOR_REDDISH_GRAY.1 as f32 / 255.0,
+                                    COLOR_REDDISH_GRAY.2 as f32 / 255.0,
+                                    1.0,
+                                ],
+                                // Map other ratatui colors to RGB
+                                Some(color) => {
+                                    let (r, g, b) = match color {
+                                        Color::Black => (0, 0, 0),
+                                        Color::Red => (205, 49, 49),
+                                        Color::Green => (13, 188, 121),
+                                        Color::Yellow => (229, 229, 16),
+                                        Color::Blue => (36, 114, 200),
+                                        Color::Magenta => (188, 63, 188),
+                                        Color::Cyan => (17, 168, 205),
+                                        Color::Gray => (229, 229, 229),
+                                        Color::DarkGray => (102, 102, 102),
+                                        Color::LightRed => (241, 76, 76),
+                                        Color::LightGreen => (35, 209, 139),
+                                        Color::LightYellow => (245, 245, 67),
+                                        Color::LightBlue => (59, 142, 234),
+                                        Color::LightMagenta => (214, 112, 214),
+                                        Color::LightCyan => (41, 184, 219),
+                                        Color::White => (255, 255, 255),
+                                        _ => (
+                                            COLOR_REDDISH_GRAY.0,
+                                            COLOR_REDDISH_GRAY.1,
+                                            COLOR_REDDISH_GRAY.2,
+                                        ),
+                                    };
+                                    [r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0, 1.0]
+                                }
+                            };
+
+                            // Extract background color from span style
+                            cells[idx].bg_color = match span.style.bg {
+                                Some(Color::Rgb(r, g, b)) => {
+                                    [r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0, 1.0]
+                                }
+                                Some(Color::Reset) | None => [
+                                    COLOR_PURE_BLACK.0 as f32 / 255.0,
+                                    COLOR_PURE_BLACK.1 as f32 / 255.0,
+                                    COLOR_PURE_BLACK.2 as f32 / 255.0,
+                                    1.0,
+                                ],
+                                Some(color) => {
+                                    let (r, g, b) = match color {
+                                        Color::Black => (0, 0, 0),
+                                        Color::Red => (205, 49, 49),
+                                        Color::Green => (13, 188, 121),
+                                        Color::Yellow => (229, 229, 16),
+                                        Color::Blue => (36, 114, 200),
+                                        Color::Magenta => (188, 63, 188),
+                                        Color::Cyan => (17, 168, 205),
+                                        Color::Gray => (229, 229, 229),
+                                        Color::DarkGray => (102, 102, 102),
+                                        Color::LightRed => (241, 76, 76),
+                                        Color::LightGreen => (35, 209, 139),
+                                        Color::LightYellow => (245, 245, 67),
+                                        Color::LightBlue => (59, 142, 234),
+                                        Color::LightMagenta => (214, 112, 214),
+                                        Color::LightCyan => (41, 184, 219),
+                                        Color::White => (255, 255, 255),
+                                        _ => (
+                                            COLOR_PURE_BLACK.0,
+                                            COLOR_PURE_BLACK.1,
+                                            COLOR_PURE_BLACK.2,
+                                        ),
+                                    };
+                                    [r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0, 1.0]
+                                }
+                            };
+                        }
+                        col += 1;
+                    }
+                }
+            }
+        }
+
+        cells
     }
 
     /// Bug #9: Detect shell prompts from various shells

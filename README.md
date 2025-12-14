@@ -57,6 +57,8 @@ furnace --shell /bin/bash   # Override the detected shell
 
 - Build with GPU support: `cargo build --release --features gpu`
 - Runtime toggle: `terminal.hardware_acceleration = true` (default)
+- **GPU Mode**: Creates a native windowed application (1280x720) using winit + wgpu for hardware-accelerated rendering at 170 FPS
+- **CPU Mode**: Runs in terminal using ratatui (fallback when GPU is disabled or unavailable)
 - Fallback: If the binary is built without `--features gpu` or no compatible GPU is detected, Furnace automatically uses CPU rendering and logs a warning when hardware acceleration is requested.
 
 ## Configuration
