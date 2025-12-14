@@ -653,7 +653,9 @@ impl Terminal {
         // Always render the initial screen, even if empty
         // This ensures the user sees SOMETHING instead of a blank screen
         terminal.draw(|f| self.render(f))?;
-        self.dirty = false;
+        // Keep dirty=true to ensure continuous rendering until content arrives
+        // This fixes the issue where the terminal doesn't render anything on screen
+        // when no initial shell output is received
         debug!("Initial render complete");
 
         // Demonstration: Use all implemented functionality
