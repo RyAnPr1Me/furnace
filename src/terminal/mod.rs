@@ -537,12 +537,14 @@ impl Terminal {
 
         #[cfg(not(feature = "gpu"))]
         if self.hardware_acceleration {
-            warn!("Hardware acceleration requested but GPU feature not compiled - using CPU fallback");
+            warn!(
+                "Hardware acceleration requested but GPU feature not compiled - using CPU fallback"
+            );
         }
 
         // CPU rendering path using ratatui
         info!("Using CPU rendering with ratatui");
-        
+
         // Set up terminal with automatic cleanup on error
         enable_raw_mode().context(
             "Failed to enable raw mode. Ensure you're running in a proper terminal emulator.",
@@ -920,10 +922,10 @@ impl Terminal {
     #[allow(clippy::too_many_lines)]
     async fn run_gpu(&mut self) -> Result<()> {
         use winit::{
-            event::{Event, WindowEvent, ElementState},
-            event_loop::{EventLoop, ControlFlow},
-            window::WindowBuilder,
+            event::{ElementState, Event, WindowEvent},
+            event_loop::{ControlFlow, EventLoop},
             keyboard::{KeyCode as WinitKeyCode, PhysicalKey},
+            window::WindowBuilder,
         };
 
         info!("Initializing GPU-accelerated windowed terminal");
@@ -961,9 +963,11 @@ impl Terminal {
             .context("Failed to create GPU renderer")?;
 
         // Create surface from window
-        let surface = gpu_renderer.instance().create_surface(window.clone())
+        let surface = gpu_renderer
+            .instance()
+            .create_surface(window.clone())
             .context("Failed to create surface")?;
-        
+
         let size = window.inner_size();
         gpu_renderer.set_surface(surface, size.width, size.height);
 
@@ -1010,7 +1014,9 @@ impl Terminal {
         // Wait for initial shell output
         debug!("Waiting for initial shell output...");
         tokio::time::sleep(Duration::from_millis(INITIAL_OUTPUT_TIMEOUT_MS)).await;
-        let _ = self.read_and_store_output(EXTRA_READ_ATTEMPTS, EXTRA_READ_DELAY_MS).await;
+        let _ = self
+            .read_and_store_output(EXTRA_READ_ATTEMPTS, EXTRA_READ_DELAY_MS)
+            .await;
 
         self.dirty = true;
 
@@ -1021,136 +1027,153 @@ impl Terminal {
         let frame_duration = Duration::from_micros(1_000_000 / TARGET_FPS);
         let mut last_render = tokio::time::Instant::now();
 
-        event_loop.run(move |event, target| {
-            match event {
-                Event::WindowEvent {
-                    event: WindowEvent::CloseRequested,
-                    ..
-                } => {
-                    info!("Window close requested");
-                    self.should_quit = true;
-                    target.exit();
-                }
-                
-                Event::WindowEvent {
-                    event: WindowEvent::KeyboardInput { event: key_event, .. },
-                    ..
-                } => {
-                    if key_event.state == ElementState::Pressed {
-                        // Handle keyboard input - convert winit events to crossterm-style events
-                        if let Some(text) = &key_event.text {
-                            for ch in text.chars() {
-                                // Send character to shell
-                                if let Some(session) = self.sessions.get(self.active_session) {
-                                    let mut buf = [0u8; 4];
-                                    let s = ch.encode_utf8(&mut buf);
-                                    let _ = tokio::runtime::Handle::current().block_on(async {
-                                        session.write_input(s.as_bytes()).await
-                                    });
-
-                                    // Track in command buffer
-                                    if let Some(cmd_buf) = self.command_buffers.get_mut(self.active_session) {
-                                        cmd_buf.extend_from_slice(s.as_bytes());
-                                    }
-                                }
-                            }
-                        }
-                        
-                        // Handle special keys
-                        if let PhysicalKey::Code(code) = key_event.physical_key {
-                            match code {
-                                WinitKeyCode::Enter => {
-                                    if let Some(session) = self.sessions.get(self.active_session) {
-                                        let _ = tokio::runtime::Handle::current().block_on(async {
-                                            session.write_input(b"\r").await
-                                        });
-                                    }
-                                    if let Some(cmd_buf) = self.command_buffers.get_mut(self.active_session) {
-                                        cmd_buf.clear();
-                                    }
-                                }
-                                WinitKeyCode::Backspace => {
-                                    if let Some(session) = self.sessions.get(self.active_session) {
-                                        let _ = tokio::runtime::Handle::current().block_on(async {
-                                            session.write_input(&[127]).await
-                                        });
-                                    }
-                                    if let Some(cmd_buf) = self.command_buffers.get_mut(self.active_session) {
-                                        cmd_buf.pop();
-                                    }
-                                }
-                                WinitKeyCode::Escape => {
-                                    self.should_quit = true;
-                                    target.exit();
-                                }
-                                _ => {}
-                            }
-                        }
-
-                        self.dirty = true;
-                    }
-                }
-
-                Event::WindowEvent {
-                    event: WindowEvent::Resized(new_size),
-                    ..
-                } => {
-                    if let Some(ref mut renderer) = self.gpu_renderer {
-                        renderer.resize(new_size.width, new_size.height);
-                        self.dirty = true;
-                    }
-                }
-
-                Event::AboutToWait => {
-                    // Read shell output
-                    if let Some(session) = self.sessions.get(self.active_session) {
-                        if let Ok(n) = tokio::runtime::Handle::current().block_on(async {
-                            session.read_output(&mut self.read_buffer).await
-                        }) {
-                            if n > 0 && self.active_session < self.output_buffers.len() {
-                                self.output_buffers[self.active_session]
-                                    .extend_from_slice(&self.read_buffer[..n]);
-                                self.dirty = true;
-                            }
-                        }
-                    }
-
-                    // Render at target FPS
-                    let now = tokio::time::Instant::now();
-                    if now.duration_since(last_render) >= frame_duration {
-                        if self.dirty {
-                            // Convert terminal buffer to GPU cells BEFORE borrowing renderer
-                            let cells = self.buffer_to_gpu_cells();
-                            let cols = self.terminal_cols as u32;
-                            let rows = self.terminal_rows as u32;
-                            
-                            if let Some(ref mut renderer) = self.gpu_renderer {
-                                renderer.update_cells(&cells, cols, rows);
-                                
-                                // Render
-                                if let Err(e) = renderer.render() {
-                                    warn!("GPU render error: {:?}", e);
-                                }
-
-                                self.dirty = false;
-                                self.frame_count += 1;
-
-                                if self.frame_count.is_multiple_of(1000) {
-                                    debug!("Rendered {} GPU frames", self.frame_count);
-                                }
-                            }
-                        }
-                        last_render = now;
-                    }
-
-                    if self.should_quit {
+        event_loop
+            .run(move |event, target| {
+                match event {
+                    Event::WindowEvent {
+                        event: WindowEvent::CloseRequested,
+                        ..
+                    } => {
+                        info!("Window close requested");
+                        self.should_quit = true;
                         target.exit();
                     }
-                }
 
-                _ => {}
-            }
-        }).context("Event loop error")?;
+                    Event::WindowEvent {
+                        event:
+                            WindowEvent::KeyboardInput {
+                                event: key_event, ..
+                            },
+                        ..
+                    } => {
+                        if key_event.state == ElementState::Pressed {
+                            // Handle keyboard input - convert winit events to crossterm-style events
+                            if let Some(text) = &key_event.text {
+                                for ch in text.chars() {
+                                    // Send character to shell
+                                    if let Some(session) = self.sessions.get(self.active_session) {
+                                        let mut buf = [0u8; 4];
+                                        let s = ch.encode_utf8(&mut buf);
+                                        let _ = tokio::runtime::Handle::current().block_on(async {
+                                            session.write_input(s.as_bytes()).await
+                                        });
+
+                                        // Track in command buffer
+                                        if let Some(cmd_buf) =
+                                            self.command_buffers.get_mut(self.active_session)
+                                        {
+                                            cmd_buf.extend_from_slice(s.as_bytes());
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Handle special keys
+                            if let PhysicalKey::Code(code) = key_event.physical_key {
+                                match code {
+                                    WinitKeyCode::Enter => {
+                                        if let Some(session) =
+                                            self.sessions.get(self.active_session)
+                                        {
+                                            let _ =
+                                                tokio::runtime::Handle::current().block_on(async {
+                                                    session.write_input(b"\r").await
+                                                });
+                                        }
+                                        if let Some(cmd_buf) =
+                                            self.command_buffers.get_mut(self.active_session)
+                                        {
+                                            cmd_buf.clear();
+                                        }
+                                    }
+                                    WinitKeyCode::Backspace => {
+                                        if let Some(session) =
+                                            self.sessions.get(self.active_session)
+                                        {
+                                            let _ =
+                                                tokio::runtime::Handle::current().block_on(async {
+                                                    session.write_input(&[127]).await
+                                                });
+                                        }
+                                        if let Some(cmd_buf) =
+                                            self.command_buffers.get_mut(self.active_session)
+                                        {
+                                            cmd_buf.pop();
+                                        }
+                                    }
+                                    WinitKeyCode::Escape => {
+                                        self.should_quit = true;
+                                        target.exit();
+                                    }
+                                    _ => {}
+                                }
+                            }
+
+                            self.dirty = true;
+                        }
+                    }
+
+                    Event::WindowEvent {
+                        event: WindowEvent::Resized(new_size),
+                        ..
+                    } => {
+                        if let Some(ref mut renderer) = self.gpu_renderer {
+                            renderer.resize(new_size.width, new_size.height);
+                            self.dirty = true;
+                        }
+                    }
+
+                    Event::AboutToWait => {
+                        // Read shell output
+                        if let Some(session) = self.sessions.get(self.active_session) {
+                            if let Ok(n) = tokio::runtime::Handle::current().block_on(async {
+                                session.read_output(&mut self.read_buffer).await
+                            }) {
+                                if n > 0 && self.active_session < self.output_buffers.len() {
+                                    self.output_buffers[self.active_session]
+                                        .extend_from_slice(&self.read_buffer[..n]);
+                                    self.dirty = true;
+                                }
+                            }
+                        }
+
+                        // Render at target FPS
+                        let now = tokio::time::Instant::now();
+                        if now.duration_since(last_render) >= frame_duration {
+                            if self.dirty {
+                                // Convert terminal buffer to GPU cells BEFORE borrowing renderer
+                                let cells = self.buffer_to_gpu_cells();
+                                let cols = self.terminal_cols as u32;
+                                let rows = self.terminal_rows as u32;
+
+                                if let Some(ref mut renderer) = self.gpu_renderer {
+                                    renderer.update_cells(&cells, cols, rows);
+
+                                    // Render
+                                    if let Err(e) = renderer.render() {
+                                        warn!("GPU render error: {:?}", e);
+                                    }
+
+                                    self.dirty = false;
+                                    self.frame_count += 1;
+
+                                    if self.frame_count.is_multiple_of(1000) {
+                                        debug!("Rendered {} GPU frames", self.frame_count);
+                                    }
+                                }
+                            }
+                            last_render = now;
+                        }
+
+                        if self.should_quit {
+                            target.exit();
+                        }
+                    }
+
+                    _ => {}
+                }
+            })
+            .context("Event loop error")?;
 
         info!("GPU terminal shutdown complete");
         Ok(())
