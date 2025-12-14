@@ -973,9 +973,24 @@ impl Terminal {
 
         info!("GPU renderer initialized successfully");
 
-        // Set terminal size based on window
-        self.terminal_cols = 80; // TODO: Calculate from window size and font metrics
-        self.terminal_rows = 24;
+        // Calculate terminal size from window dimensions and font metrics
+        // Using monospace font metrics: typical character width ~0.6 * font_size, height ~font_size * line_height
+        let size = window.inner_size();
+        let font_size = self.font_size as f32;
+        let char_width = font_size * 0.6; // Approximate monospace character width
+        let char_height = font_size * 1.2; // Line height (font size + spacing)
+
+        self.terminal_cols = ((size.width as f32) / char_width).floor() as u16;
+        self.terminal_rows = ((size.height as f32) / char_height).floor() as u16;
+
+        // Ensure minimum dimensions
+        self.terminal_cols = self.terminal_cols.max(80);
+        self.terminal_rows = self.terminal_rows.max(24);
+
+        info!(
+            "Calculated terminal size: {}x{} ({}x{} pixels)",
+            self.terminal_cols, self.terminal_rows, size.width, size.height
+        );
 
         // Create initial shell session
         let env_vars: Vec<(&str, &str)> = self
@@ -1028,6 +1043,8 @@ impl Terminal {
         let (input_tx, mut input_rx) = tokio::sync::mpsc::unbounded_channel::<Vec<u8>>();
         // Channel for receiving output data from shell (from I/O task to UI thread)
         let (output_tx, mut output_rx) = tokio::sync::mpsc::unbounded_channel::<Vec<u8>>();
+        // Channel for PTY resize commands
+        let (resize_tx, mut resize_rx) = tokio::sync::mpsc::unbounded_channel::<(u16, u16)>();
 
         // Spawn background task for async shell I/O
         let session_idx = self.active_session;
@@ -1036,6 +1053,15 @@ impl Terminal {
             tokio::spawn(async move {
                 let mut read_buf = vec![0u8; 8192];
                 loop {
+                    // Handle PTY resize requests
+                    while let Ok((rows, cols)) = resize_rx.try_recv() {
+                        if let Err(e) = session_clone.resize(rows, cols).await {
+                            warn!("Failed to resize PTY: {}", e);
+                        } else {
+                            debug!("PTY resized to {}x{}", cols, rows);
+                        }
+                    }
+
                     // Handle write requests from UI thread
                     while let Ok(data) = input_rx.try_recv() {
                         if let Err(e) = session_clone.write_input(&data).await {
@@ -1127,6 +1153,9 @@ impl Terminal {
 
                             // Handle special keys
                             if let PhysicalKey::Code(code) = key_event.physical_key {
+                                // Check for Ctrl key combinations
+                                let ctrl_pressed = modifiers_state.control_key();
+
                                 match code {
                                     WinitKeyCode::Enter => {
                                         // Send carriage return to background I/O task via channel
@@ -1145,6 +1174,10 @@ impl Terminal {
                                         {
                                             cmd_buf.pop();
                                         }
+                                    }
+                                    WinitKeyCode::Tab => {
+                                        // Send tab character for autocompletion
+                                        let _ = input_tx.send(b"\t".to_vec());
                                     }
                                     WinitKeyCode::ArrowUp => {
                                         // Send ANSI escape code for Up arrow (history navigation)
@@ -1172,6 +1205,63 @@ impl Terminal {
                                         // Send ANSI escape code for Left arrow (cursor movement)
                                         let _ = input_tx.send(b"\x1b[D".to_vec());
                                     }
+                                    WinitKeyCode::Home => {
+                                        // Send ANSI escape code for Home key
+                                        let _ = input_tx.send(b"\x1b[H".to_vec());
+                                    }
+                                    WinitKeyCode::End => {
+                                        // Send ANSI escape code for End key
+                                        let _ = input_tx.send(b"\x1b[F".to_vec());
+                                    }
+                                    WinitKeyCode::Delete => {
+                                        // Send ANSI escape code for Delete key
+                                        let _ = input_tx.send(b"\x1b[3~".to_vec());
+                                    }
+                                    WinitKeyCode::PageUp => {
+                                        // Send ANSI escape code for Page Up
+                                        let _ = input_tx.send(b"\x1b[5~".to_vec());
+                                    }
+                                    WinitKeyCode::PageDown => {
+                                        // Send ANSI escape code for Page Down
+                                        let _ = input_tx.send(b"\x1b[6~".to_vec());
+                                    }
+                                    // Ctrl key combinations
+                                    WinitKeyCode::KeyC if ctrl_pressed => {
+                                        // Ctrl+C sends SIGINT (ETX character)
+                                        let _ = input_tx.send(vec![0x03]);
+                                    }
+                                    WinitKeyCode::KeyD if ctrl_pressed => {
+                                        // Ctrl+D sends EOT (End of Transmission)
+                                        let _ = input_tx.send(vec![0x04]);
+                                    }
+                                    WinitKeyCode::KeyL if ctrl_pressed => {
+                                        // Ctrl+L clears screen
+                                        let _ = input_tx.send(vec![0x0C]);
+                                    }
+                                    WinitKeyCode::KeyZ if ctrl_pressed => {
+                                        // Ctrl+Z sends SIGTSTP (suspend)
+                                        let _ = input_tx.send(vec![0x1A]);
+                                    }
+                                    WinitKeyCode::KeyA if ctrl_pressed => {
+                                        // Ctrl+A moves to beginning of line
+                                        let _ = input_tx.send(vec![0x01]);
+                                    }
+                                    WinitKeyCode::KeyE if ctrl_pressed => {
+                                        // Ctrl+E moves to end of line
+                                        let _ = input_tx.send(vec![0x05]);
+                                    }
+                                    WinitKeyCode::KeyU if ctrl_pressed => {
+                                        // Ctrl+U clears line before cursor
+                                        let _ = input_tx.send(vec![0x15]);
+                                    }
+                                    WinitKeyCode::KeyK if ctrl_pressed => {
+                                        // Ctrl+K clears line after cursor
+                                        let _ = input_tx.send(vec![0x0B]);
+                                    }
+                                    WinitKeyCode::KeyW if ctrl_pressed => {
+                                        // Ctrl+W deletes word before cursor
+                                        let _ = input_tx.send(vec![0x17]);
+                                    }
                                     _ => {}
                                 }
                             }
@@ -1186,10 +1276,32 @@ impl Terminal {
                     } => {
                         if let Some(ref mut renderer) = self.gpu_renderer {
                             renderer.resize(new_size.width, new_size.height);
+
+                            // Recalculate terminal dimensions from new window size
+                            let font_size = self.font_size as f32;
+                            let char_width = font_size * 0.6;
+                            let char_height = font_size * 1.2;
+
+                            let new_cols = ((new_size.width as f32) / char_width).floor() as u16;
+                            let new_rows = ((new_size.height as f32) / char_height).floor() as u16;
+
+                            // Ensure minimum dimensions
+                            let new_cols = new_cols.max(80);
+                            let new_rows = new_rows.max(24);
+
+                            // Only resize if dimensions actually changed
+                            if new_cols != self.terminal_cols || new_rows != self.terminal_rows {
+                                self.terminal_cols = new_cols;
+                                self.terminal_rows = new_rows;
+
+                                // Send resize command to background I/O task
+                                let _ = resize_tx.send((new_rows, new_cols));
+
+                                info!("Terminal resized to {}x{}", new_cols, new_rows);
+                            }
+
                             self.dirty = true;
                         }
-                        // TODO: Update PTY dimensions when we calculate terminal size from window/font metrics
-                        // Currently terminal dimensions are hardcoded to 80x24, so no PTY resize needed yet
                     }
 
                     Event::AboutToWait => {
