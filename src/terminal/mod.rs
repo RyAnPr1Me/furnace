@@ -1090,7 +1090,7 @@ impl Terminal {
 
         // Main event loop
         let frame_duration = Duration::from_micros(1_000_000 / TARGET_FPS);
-        let mut last_render = tokio::time::Instant::now();
+        let mut last_render = std::time::Instant::now();
         let mut modifiers_state = winit::keyboard::ModifiersState::empty();
 
         event_loop
@@ -1314,7 +1314,7 @@ impl Terminal {
                         }
 
                         // Render at target FPS
-                        let now = tokio::time::Instant::now();
+                        let now = std::time::Instant::now();
                         if now.duration_since(last_render) >= frame_duration {
                             if self.dirty {
                                 // Convert terminal buffer to GPU cells BEFORE borrowing renderer
