@@ -1,8 +1,8 @@
 Furnace Terminal Emulator - Build Information
 =============================================
 
-Build Date: 2025-12-15 03:52:11 UTC
-Git Commit: ccffcdf4645cbb8e308111d51299682d95b8be13
+Build Date: 2025-12-15 16:28:48 UTC
+Git Commit: b00c6f41df6382994cdb80550b09917b22804502
 Git Branch: main
 
 Binaries:
@@ -13,6 +13,7 @@ Binaries:
 Linux Distribution Packages (in linux-distro/):
 - .deb packages (Debian/Ubuntu)
 - .rpm packages (Fedora/RHEL/CentOS)
+- .pkg.tar.zst packages (Arch Linux)
 - .AppImage (Universal Linux)
 - .tar.gz (Manual installation with script)
 
