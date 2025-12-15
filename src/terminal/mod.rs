@@ -794,72 +794,11 @@ impl Terminal {
                 () = async {
                     if let Some(session) = self.sessions.get(self.active_session) {
                         if let Ok(n) = session.read_output(&mut self.read_buffer).await {
-                            if n > 0 && self.active_session < self.output_buffers.len() {
-                                // Convert output to String
-                                let mut output_str = String::from_utf8_lossy(&self.read_buffer[..n]).into_owned();
-
-                                // Apply output filters if configured
-                                if !self.config.hooks.output_filters.is_empty() {
-                                    if let Some(ref executor) = self.hooks_executor {
-                                        output_str = executor.apply_output_filters(&output_str, &self.config.hooks.output_filters)
-                                            .unwrap_or_else(|e| {
-                                                warn!("Output filter pipeline failed: {}", e);
-                                                output_str  // Use unfiltered output on error
-                                            });
-                                    }
-                                }
-
-                                // Store the (potentially filtered) output in buffer
-                                self.output_buffers[self.active_session].extend_from_slice(output_str.as_bytes());
-                                self.dirty = true;
-
-                                // Update shell integration state and trigger related hooks
-                                // This handles OSC sequences for title changes, command tracking, etc.
-                                self.update_shell_integration_state(&output_str);
-
-                                // Call on_output hook if configured
-                                if let Some(ref executor) = self.hooks_executor {
-                                    if let Some(ref script) = self.config.hooks.on_output {
-                                        if let Err(e) = executor.on_output(script, &output_str) {
-                                            warn!("on_output hook failed: {}", e);
-                                        }
-                                    }
-                                }
-
-                                // Check for bell character (0x07) and call on_bell hook
-                                if self.read_buffer[..n].contains(&0x07) {
-                                    if let Some(ref executor) = self.hooks_executor {
-                                        if let Some(ref script) = self.config.hooks.on_bell {
-                                            if let Err(e) = executor.on_bell(script) {
-                                                warn!("on_bell hook failed: {}", e);
-                                            }
-                                        }
-                                    }
-                                }
-
-                                // Bug #9: Improved prompt detection for various shells
-                                let should_stop_progress = if let Some(ref pb) = self.progress_bar {
-                                    if pb.visible {
-                                        Self::detect_prompt(&output_str)
-                                    } else {
-                                        false
-                                    }
-                                } else {
-                                    false
-                                };
-
-                                if should_stop_progress {
-                                    if let Some(ref mut pb) = self.progress_bar {
-                                        pb.stop();
-                                    }
-                                }
-
-                                // Bug #8: Enforce scrollback limit and clear URL cache
-                                let max_buffer = self.config.terminal.scrollback_lines * 256;
-                                if self.output_buffers[self.active_session].len() > max_buffer {
-                                    let excess = self.output_buffers[self.active_session].len() - max_buffer;
-                                    self.output_buffers[self.active_session].drain(..excess);
-                                }
+                            if n > 0 {
+                                // Copy data to avoid borrow checker issues
+                                let data = self.read_buffer[..n].to_vec();
+                                // Process output with shared helper for consistency
+                                self.process_shell_output_chunk(&data);
                             }
                         }
                     }
@@ -1135,18 +1074,22 @@ impl Terminal {
                             }
 
                             // Handle keyboard input - convert winit events to crossterm-style events
+                            // Skip text path when Ctrl is held to prevent double-sending control characters
+                            // (winit 0.30 includes control characters in key_event.text)
                             if let Some(text) = &key_event.text {
-                                for ch in text.chars() {
-                                    let mut buf = [0u8; 4];
-                                    let s = ch.encode_utf8(&mut buf);
-                                    // Send to background I/O task via channel (non-blocking)
-                                    let _ = input_tx.send(s.as_bytes().to_vec());
+                                if !modifiers_state.control_key() {
+                                    for ch in text.chars() {
+                                        let mut buf = [0u8; 4];
+                                        let s = ch.encode_utf8(&mut buf);
+                                        // Send to background I/O task via channel (non-blocking)
+                                        let _ = input_tx.send(s.as_bytes().to_vec());
 
-                                    // Track in command buffer
-                                    if let Some(cmd_buf) =
-                                        self.command_buffers.get_mut(self.active_session)
-                                    {
-                                        cmd_buf.extend_from_slice(s.as_bytes());
+                                        // Track in command buffer
+                                        if let Some(cmd_buf) =
+                                            self.command_buffers.get_mut(self.active_session)
+                                        {
+                                            cmd_buf.extend_from_slice(s.as_bytes());
+                                        }
                                     }
                                 }
                             }
@@ -1307,10 +1250,8 @@ impl Terminal {
                     Event::AboutToWait => {
                         // Drain all available shell output from background I/O task (non-blocking)
                         while let Ok(output) = output_rx.try_recv() {
-                            if self.active_session < self.output_buffers.len() {
-                                self.output_buffers[self.active_session].extend_from_slice(&output);
-                                self.dirty = true;
-                            }
+                            // Process output with filters, hooks, and scrollback management
+                            self.process_shell_output_chunk(&output);
                         }
 
                         // Render at target FPS
@@ -1355,6 +1296,80 @@ impl Terminal {
         Ok(())
     }
 
+    /// Process shell output chunk with filters, hooks, and scrollback management
+    /// This is shared between CPU and GPU rendering paths for consistency
+    fn process_shell_output_chunk(&mut self, raw_bytes: &[u8]) {
+        if raw_bytes.is_empty() || self.active_session >= self.output_buffers.len() {
+            return;
+        }
+
+        // Convert output to String
+        let mut output_str = String::from_utf8_lossy(raw_bytes).into_owned();
+
+        // Apply output filters if configured
+        if !self.config.hooks.output_filters.is_empty() {
+            if let Some(ref executor) = self.hooks_executor {
+                output_str = executor
+                    .apply_output_filters(&output_str, &self.config.hooks.output_filters)
+                    .unwrap_or_else(|e| {
+                        warn!("Output filter pipeline failed: {}", e);
+                        output_str // Use unfiltered output on error
+                    });
+            }
+        }
+
+        // Store the (potentially filtered) output in buffer
+        self.output_buffers[self.active_session].extend_from_slice(output_str.as_bytes());
+        self.dirty = true;
+
+        // Update shell integration state and trigger related hooks
+        self.update_shell_integration_state(&output_str);
+
+        // Call on_output hook if configured
+        if let Some(ref executor) = self.hooks_executor {
+            if let Some(ref script) = self.config.hooks.on_output {
+                if let Err(e) = executor.on_output(script, &output_str) {
+                    warn!("on_output hook failed: {}", e);
+                }
+            }
+        }
+
+        // Check for bell character (0x07) and call on_bell hook
+        if raw_bytes.contains(&0x07) {
+            if let Some(ref executor) = self.hooks_executor {
+                if let Some(ref script) = self.config.hooks.on_bell {
+                    if let Err(e) = executor.on_bell(script) {
+                        warn!("on_bell hook failed: {}", e);
+                    }
+                }
+            }
+        }
+
+        // Improved prompt detection for progress bar
+        let should_stop_progress = if let Some(ref pb) = self.progress_bar {
+            if pb.visible {
+                Self::detect_prompt(&output_str)
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+
+        if should_stop_progress {
+            if let Some(ref mut pb) = self.progress_bar {
+                pb.stop();
+            }
+        }
+
+        // Enforce scrollback limit and clear URL cache
+        let max_buffer = self.config.terminal.scrollback_lines * 256;
+        if self.output_buffers[self.active_session].len() > max_buffer {
+            let excess = self.output_buffers[self.active_session].len() - max_buffer;
+            self.output_buffers[self.active_session].drain(..excess);
+        }
+    }
+
     /// Convert terminal output buffer to GPU cells with ANSI color support
     #[cfg(feature = "gpu")]
     fn buffer_to_gpu_cells(&self) -> Vec<crate::gpu::GpuCell> {
@@ -1374,7 +1389,7 @@ impl Terminal {
                 .saturating_sub(self.terminal_rows as usize);
             let visible_lines: Vec<_> = styled_lines.into_iter().skip(skip_count).collect();
 
-            // Convert styled lines to GPU cells
+            // Convert styled lines to GPU cells with wide glyph support
             for (row, line) in visible_lines
                 .iter()
                 .enumerate()
@@ -1382,10 +1397,21 @@ impl Terminal {
             {
                 let mut col = 0;
                 for span in &line.spans {
+                    use unicode_width::UnicodeWidthChar;
+
                     for ch in span.content.chars() {
                         if col >= self.terminal_cols as usize {
                             break;
                         }
+
+                        // Get display width of character (handles CJK, emoji, etc.)
+                        let char_width = ch.width().unwrap_or(1);
+
+                        // Skip zero-width characters (combining marks, etc.)
+                        if char_width == 0 {
+                            continue;
+                        }
+
                         let idx = row * (self.terminal_cols as usize) + col;
                         if idx < cells.len() {
                             cells[idx].char_code = ch as u32;
@@ -1469,7 +1495,20 @@ impl Terminal {
                                 }
                             };
                         }
-                        col += 1;
+
+                        // Increment column by character width
+                        col += char_width;
+
+                        // For double-width characters, fill the second cell with a spacer
+                        if char_width == 2 && col < self.terminal_cols as usize {
+                            let spacer_idx = row * (self.terminal_cols as usize) + (col - 1);
+                            if spacer_idx < cells.len() {
+                                // Mark as continuation of wide character (use space as placeholder)
+                                cells[spacer_idx].char_code = ' ' as u32;
+                                cells[spacer_idx].fg_color = cells[idx].fg_color;
+                                cells[spacer_idx].bg_color = cells[idx].bg_color;
+                            }
+                        }
                     }
                 }
             }
