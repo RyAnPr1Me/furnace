@@ -1257,6 +1257,22 @@ impl Terminal {
                         // Render at target FPS
                         let now = std::time::Instant::now();
                         if now.duration_since(last_render) >= frame_duration {
+                            // Update progress bar spinner (only if visible)
+                            if let Some(ref mut pb) = self.progress_bar {
+                                if pb.visible {
+                                    pb.tick();
+                                    self.dirty = true;
+                                }
+                            }
+
+                            // Only decrement notification counter when actually rendering
+                            if self.dirty && self.notification_frames > 0 {
+                                self.notification_frames -= 1;
+                                if self.notification_frames == 0 {
+                                    self.notification_message = None;
+                                }
+                            }
+
                             if self.dirty {
                                 // Convert terminal buffer to GPU cells BEFORE borrowing renderer
                                 let cells = self.buffer_to_gpu_cells();
