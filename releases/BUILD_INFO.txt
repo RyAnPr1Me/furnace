@@ -1,12 +1,13 @@
 Furnace Terminal Emulator - Build Information
 =============================================
 
-Build Date: 2025-12-15 03:18:35 UTC
-Git Commit: aefebb6d6b60c59d4c8193f99a16a04c078c578a
+Build Date: 2025-12-15 03:52:11 UTC
+Git Commit: ccffcdf4645cbb8e308111d51299682d95b8be13
 Git Branch: main
 
 Binaries:
 - furnace-linux-x86_64 (Linux x86_64 binary)
+- furnace-macos-x86_64 (macOS x86_64 binary)
 - furnace-windows-x86_64.exe (Windows x86_64)
 
 Linux Distribution Packages (in linux-distro/):
