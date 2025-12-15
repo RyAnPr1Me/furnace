@@ -80,6 +80,8 @@ if command_exists makepkg; then
     sed -i "s/^pkgver=.*/pkgver=${VERSION}/" "$ARCH_BUILD_DIR/PKGBUILD"
     
     # Build package
+    # Note: --skipinteg is used because the PKGBUILD has no source array (building from local source)
+    # and makepkg would fail trying to verify checksums for non-existent remote sources
     cd "$ARCH_BUILD_DIR"
     if PKGDEST="$PWD" makepkg -f --skipinteg 2>&1 | tee makepkg.log; then
         # Return to original directory

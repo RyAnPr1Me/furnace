@@ -12,11 +12,13 @@ source=()
 sha256sums=()
 
 build() {
+    # Navigate to project root (PKGBUILD is copied to a subdirectory by build script)
     cd "$srcdir/../.."
     cargo build --release --features gpu --locked
 }
 
 package() {
+    # Navigate to project root (PKGBUILD is copied to a subdirectory by build script)
     cd "$srcdir/../.."
     
     # Install binary
