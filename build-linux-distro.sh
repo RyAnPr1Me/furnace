@@ -63,8 +63,43 @@ strip target/release/furnace || echo "Warning: Failed to strip binary"
 echo "✓ .rpm package created: $OUTPUT_DIR/furnace-${VERSION}-1.x86_64.rpm"
 echo ""
 
-# Step 4: Build AppImage (Universal Linux)
-echo "==> Step 4: Building AppImage..."
+# Step 4: Build .pkg.tar.zst package (Arch Linux)
+echo "==> Step 4: Building .pkg.tar.zst package..."
+if command_exists makepkg; then
+    # Create temporary directory for Arch package build
+    ARCH_BUILD_DIR="$OUTPUT_DIR/arch-build"
+    mkdir -p "$ARCH_BUILD_DIR"
+    
+    # Copy PKGBUILD to build directory
+    cp PKGBUILD "$ARCH_BUILD_DIR/"
+    
+    # Update version in PKGBUILD
+    sed -i "s/^pkgver=.*/pkgver=${VERSION}/" "$ARCH_BUILD_DIR/PKGBUILD"
+    
+    # Build package
+    cd "$ARCH_BUILD_DIR"
+    PKGDEST="$PWD" makepkg -f --skipinteg 2>&1 | tee makepkg.log || {
+        echo "⚠ Arch package build failed (this is optional)"
+        echo "Note: makepkg may fail outside of Arch Linux environment"
+        cd ../..
+    }
+    cd ../..
+    
+    # Move package to output directory if it was created
+    if ls "$ARCH_BUILD_DIR"/*.pkg.tar.zst 1> /dev/null 2>&1; then
+        mv "$ARCH_BUILD_DIR"/*.pkg.tar.zst "$OUTPUT_DIR/" 2>/dev/null || true
+        echo "✓ .pkg.tar.zst package created: $OUTPUT_DIR/furnace-${VERSION}-1-x86_64.pkg.tar.zst"
+    else
+        echo "⚠ .pkg.tar.zst package creation skipped (makepkg not available or failed)"
+    fi
+else
+    echo "⚠ makepkg not found - skipping Arch Linux package"
+    echo "   Install makepkg (Arch Linux) to build .pkg.tar.zst packages"
+fi
+echo ""
+
+# Step 5: Build AppImage (Universal Linux)
+echo "==> Step 5: Building AppImage..."
 APPIMAGE_DIR="$OUTPUT_DIR/AppDir"
 mkdir -p "$APPIMAGE_DIR/usr/bin"
 mkdir -p "$APPIMAGE_DIR/usr/share/applications"
@@ -157,8 +192,8 @@ else
 fi
 echo ""
 
-# Step 5: Create tar.gz archive with install script
-echo "==> Step 5: Building tar.gz archive..."
+# Step 6: Create tar.gz archive with install script
+echo "==> Step 6: Building tar.gz archive..."
 TARBALL_DIR="$OUTPUT_DIR/furnace-${VERSION}"
 mkdir -p "$TARBALL_DIR"
 
@@ -229,13 +264,13 @@ cd ..
 echo "✓ Tar.gz archive created: $OUTPUT_DIR/furnace-${VERSION}-linux-x86_64.tar.gz"
 echo ""
 
-# Step 6: Generate checksums
-echo "==> Step 6: Generating checksums..."
+# Step 7: Generate checksums
+echo "==> Step 7: Generating checksums..."
 cd "$OUTPUT_DIR"
 
 # Generate checksums for all package files
 > SHA256SUMS  # Create empty file
-for file in furnace*.deb furnace*.rpm furnace*.AppImage furnace*.tar.gz; do
+for file in furnace*.deb furnace*.rpm furnace*.pkg.tar.zst furnace*.AppImage furnace*.tar.gz; do
     if [ -f "$file" ]; then
         sha256sum "$file" >> SHA256SUMS
     fi
@@ -252,13 +287,14 @@ echo "=========================================="
 echo ""
 echo "Distribution packages created in: $OUTPUT_DIR/"
 echo ""
-ls -lh "$OUTPUT_DIR" | grep -E '\.(deb|rpm|AppImage|tar\.gz|SHA256SUMS)$' || ls -lh "$OUTPUT_DIR"
+ls -lh "$OUTPUT_DIR" | grep -E '\.(deb|rpm|pkg\.tar\.zst|AppImage|tar\.gz|SHA256SUMS)$' || ls -lh "$OUTPUT_DIR"
 echo ""
 echo "Package formats:"
-echo "  • .deb      - Debian/Ubuntu (apt/dpkg)"
-echo "  • .rpm      - Fedora/RHEL/CentOS (dnf/yum)"
-echo "  • .AppImage - Universal Linux (portable)"
-echo "  • .tar.gz   - Manual installation (with install script)"
+echo "  • .deb          - Debian/Ubuntu (apt/dpkg)"
+echo "  • .rpm          - Fedora/RHEL/CentOS (dnf/yum)"
+echo "  • .pkg.tar.zst  - Arch Linux (pacman)"
+echo "  • .AppImage     - Universal Linux (portable)"
+echo "  • .tar.gz       - Manual installation (with install script)"
 echo ""
 echo "✓ All distribution packages built successfully! 🔥"
 echo ""

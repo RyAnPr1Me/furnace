@@ -122,6 +122,7 @@ jobs:
         path: |
           dist/*.deb
           dist/*.rpm
+          dist/*.pkg.tar.zst
           dist/*.tar.gz
           dist/*.AppImage
           dist/SHA256SUMS
@@ -240,6 +241,11 @@ jobs:
             updated=true
           fi
           
+          if [ -n "$(ls -A artifacts/linux-distro-packages/*.pkg.tar.zst 2>/dev/null)" ]; then
+            cp artifacts/linux-distro-packages/*.pkg.tar.zst releases/linux-distro/ 2>/dev/null || true
+            updated=true
+          fi
+          
           if [ -n "$(ls -A artifacts/linux-distro-packages/*.tar.gz 2>/dev/null)" ]; then
             cp artifacts/linux-distro-packages/*.tar.gz releases/linux-distro/ 2>/dev/null || true
             updated=true
@@ -297,6 +303,7 @@ jobs:
         Linux Distribution Packages (in linux-distro/):
         - .deb packages (Debian/Ubuntu)
         - .rpm packages (Fedora/RHEL/CentOS)
+        - .pkg.tar.zst packages (Arch Linux)
         - .AppImage (Universal Linux)
         - .tar.gz (Manual installation with script)
         

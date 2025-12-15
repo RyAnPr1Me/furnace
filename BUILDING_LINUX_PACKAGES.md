@@ -72,7 +72,28 @@ sudo rpm -e furnace
 - Clean installation/removal
 - Installs to `/usr/bin/furnace`
 
-### 3. .AppImage (Universal Linux)
+### 3. .pkg.tar.zst (Arch Linux)
+
+**Installation:**
+```bash
+sudo pacman -U furnace-1.0.0-1-x86_64.pkg.tar.zst
+```
+
+**Removal:**
+```bash
+sudo pacman -R furnace
+```
+
+**Features:**
+- System package manager integration
+- Automatic dependency resolution
+- Clean installation/removal
+- Installs to `/usr/bin/furnace`
+- Native Arch Linux package format
+
+**Note:** The package is built using `makepkg` and the included `PKGBUILD` file. On non-Arch systems, this step may be skipped during the build process.
+
+### 4. .AppImage (Universal Linux)
 
 **Usage:**
 ```bash
@@ -98,7 +119,7 @@ chmod +x ~/.local/bin/furnace
 echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
 ```
 
-### 4. .tar.gz (Manual Installation)
+### 5. .tar.gz (Manual Installation)
 
 **Installation:**
 ```bash
@@ -135,6 +156,13 @@ cargo build --release --all-features
 cargo install cargo-generate-rpm
 strip target/release/furnace
 cargo generate-rpm --output dist/furnace.rpm
+```
+
+### Build .pkg.tar.zst only (Arch Linux):
+```bash
+cargo build --release --all-features
+# Requires Arch Linux or a system with makepkg installed
+makepkg -f
 ```
 
 ### Build AppImage only:
@@ -196,6 +224,14 @@ cargo install cargo-deb
 cargo install cargo-generate-rpm
 ```
 
+### makepkg not found (Arch Linux package)
+The Arch Linux package build requires `makepkg`, which is only available on Arch Linux systems. On non-Arch systems, the script will skip Arch package creation. This is expected behavior.
+
+If you're on Arch Linux and don't have `makepkg`:
+```bash
+sudo pacman -S base-devel
+```
+
 ### AppImage build fails
 The script will skip AppImage creation if `appimagetool` download fails. You can manually download it from:
 https://github.com/AppImage/AppImageKit/releases
@@ -215,6 +251,9 @@ sudo apt install build-essential pkg-config
 
 # Fedora/RHEL
 sudo dnf install gcc make
+
+# Arch Linux
+sudo pacman -S base-devel
 ```
 
 ## Distribution-Specific Notes
@@ -228,8 +267,12 @@ sudo dnf install gcc make
 - Uses `rpm`, `dnf`, or `yum` package managers
 
 ### Arch Linux
-- Use the standalone binary or AppImage
-- Community may create AUR packages
+- Native .pkg.tar.zst packages can be built using the included PKGBUILD file
+- Requires `makepkg` (part of the `pacman` package on Arch Linux)
+- Install with: `sudo pacman -U furnace-1.0.0-1-x86_64.pkg.tar.zst`
+- The build script will automatically build Arch packages when run on Arch Linux
+- On non-Arch systems, the Arch package build may be skipped
+- Community AUR packages may also be available
 
 ### Other Distributions
 - AppImage and tar.gz work on most Linux distributions
