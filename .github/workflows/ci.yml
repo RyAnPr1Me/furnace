@@ -5,6 +5,12 @@ on:
     branches: [ main, develop ]
   pull_request:
     branches: [ main, develop ]
+  workflow_dispatch:
+
+# Cancel in-progress runs for the same workflow + branch/PR
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
@@ -12,12 +18,17 @@ env:
 
 jobs:
   test:
-    name: Test Suite
+    name: Test Suite (${{ matrix.os }}, ${{ matrix.rust }})
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        rust: [stable, beta]
+        rust: [stable]
+        include:
+          # Only test beta on Linux to save CI time
+          - os: ubuntu-latest
+            rust: beta
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
