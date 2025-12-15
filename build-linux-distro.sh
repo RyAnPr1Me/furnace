@@ -24,10 +24,10 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
-# Step 1: Build the release binary
-echo "==> Step 1: Building release binary..."
-cargo build --release --all-features
-echo "✓ Binary built successfully"
+# Step 1: Build the release binary with GPU acceleration
+echo "==> Step 1: Building release binary with GPU acceleration..."
+cargo build --release --features gpu
+echo "✓ GPU-accelerated binary built successfully"
 echo ""
 
 # Step 2: Build .deb package (Debian/Ubuntu)

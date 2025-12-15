@@ -6,6 +6,7 @@ use tokio::sync::Mutex;
 use tracing::{debug, info};
 
 /// High-performance shell session with zero-copy I/O where possible
+#[derive(Clone)]
 pub struct ShellSession {
     pty: Arc<Mutex<Box<dyn portable_pty::MasterPty + Send>>>,
     reader: Arc<Mutex<Box<dyn Read + Send>>>,

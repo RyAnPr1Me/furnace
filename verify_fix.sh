@@ -19,8 +19,8 @@ else
 fi
 
 echo ""
-echo "Building Furnace in release mode..."
-cargo build --release
+echo "Building Furnace in release mode with GPU acceleration..."
+cargo build --release --features gpu
 
 if [ $? -ne 0 ]; then
     echo "❌ Build failed!"
@@ -77,8 +77,8 @@ echo "=========================================="
 echo "Code Quality Checks:"
 echo "=========================================="
 echo ""
-echo "Running clippy..."
-cargo clippy -- -D warnings
+echo "Running clippy with GPU features..."
+cargo clippy --features gpu -- -D warnings
 
 if [ $? -eq 0 ]; then
     echo "✅ Clippy passed!"
