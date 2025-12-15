@@ -66,6 +66,9 @@ echo ""
 # Step 4: Build .pkg.tar.zst package (Arch Linux)
 echo "==> Step 4: Building .pkg.tar.zst package..."
 if command_exists makepkg; then
+    # Save current directory
+    ORIGINAL_DIR="$PWD"
+    
     # Create temporary directory for Arch package build
     ARCH_BUILD_DIR="$OUTPUT_DIR/arch-build"
     mkdir -p "$ARCH_BUILD_DIR"
@@ -78,19 +81,22 @@ if command_exists makepkg; then
     
     # Build package
     cd "$ARCH_BUILD_DIR"
-    PKGDEST="$PWD" makepkg -f --skipinteg 2>&1 | tee makepkg.log || {
+    if PKGDEST="$PWD" makepkg -f --skipinteg 2>&1 | tee makepkg.log; then
+        # Return to original directory
+        cd "$ORIGINAL_DIR"
+        
+        # Move package to output directory if it was created
+        if ls "$ARCH_BUILD_DIR"/*.pkg.tar.zst 1> /dev/null 2>&1; then
+            mv "$ARCH_BUILD_DIR"/*.pkg.tar.zst "$OUTPUT_DIR/"
+            echo "✓ .pkg.tar.zst package created: $OUTPUT_DIR/furnace-${VERSION}-1-x86_64.pkg.tar.zst"
+        else
+            echo "⚠ .pkg.tar.zst package not found after build"
+        fi
+    else
         echo "⚠ Arch package build failed (this is optional)"
         echo "Note: makepkg may fail outside of Arch Linux environment"
-        cd ../..
-    }
-    cd ../..
-    
-    # Move package to output directory if it was created
-    if ls "$ARCH_BUILD_DIR"/*.pkg.tar.zst 1> /dev/null 2>&1; then
-        mv "$ARCH_BUILD_DIR"/*.pkg.tar.zst "$OUTPUT_DIR/" 2>/dev/null || true
-        echo "✓ .pkg.tar.zst package created: $OUTPUT_DIR/furnace-${VERSION}-1-x86_64.pkg.tar.zst"
-    else
-        echo "⚠ .pkg.tar.zst package creation skipped (makepkg not available or failed)"
+        # Return to original directory even on failure
+        cd "$ORIGINAL_DIR"
     fi
 else
     echo "⚠ makepkg not found - skipping Arch Linux package"
