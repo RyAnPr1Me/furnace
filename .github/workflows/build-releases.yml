@@ -259,7 +259,20 @@ jobs:
         if [ "$updated" = true ]; then
           echo "Generating checksums..."
           cd releases
-          sha256sum furnace-linux-x86_64 furnace-macos-x86_64 furnace-windows-x86_64.exe > SHA256SUMS 2>/dev/null || true
+          
+          # Generate checksums for existing binaries
+          checksum_files=""
+          [ -f furnace-linux-x86_64 ] && checksum_files="$checksum_files furnace-linux-x86_64"
+          [ -f furnace-macos-x86_64 ] && checksum_files="$checksum_files furnace-macos-x86_64"
+          [ -f furnace-windows-x86_64.exe ] && checksum_files="$checksum_files furnace-windows-x86_64.exe"
+          
+          if [ -n "$checksum_files" ]; then
+            sha256sum $checksum_files > SHA256SUMS
+            echo "✅ Checksums generated for: $checksum_files"
+          else
+            echo "⚠️ No binaries found to checksum"
+          fi
+          
           cd ..
           
           # Update BUILD_INFO.txt
