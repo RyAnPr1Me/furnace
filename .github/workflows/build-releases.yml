@@ -7,6 +7,11 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+# Cancel in-progress runs for the same workflow
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
@@ -15,6 +20,8 @@ jobs:
   build-releases:
     name: Build ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -27,6 +34,10 @@ jobs:
             target: x86_64-pc-windows-msvc
             binary_name: furnace.exe
             output_name: furnace-windows-x86_64.exe
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            binary_name: furnace
+            output_name: furnace-macos-x86_64
     
     steps:
     - name: Checkout code
@@ -37,23 +48,16 @@ jobs:
       with:
         targets: ${{ matrix.target }}
     
-    - name: Cache cargo registry
-      uses: actions/cache@v3
+    - name: Setup Rust cache
+      uses: actions/cache@v4
       with:
-        path: ~/.cargo/registry
-        key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-        
-    - name: Cache cargo index
-      uses: actions/cache@v3
-      with:
-        path: ~/.cargo/git
-        key: ${{ runner.os }}-cargo-git-${{ hashFiles('**/Cargo.lock') }}
-        
-    - name: Cache cargo build
-      uses: actions/cache@v3
-      with:
-        path: target
-        key: ${{ runner.os }}-cargo-build-release-${{ hashFiles('**/Cargo.lock') }}
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-release-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-release-
     
     - name: Build release binary
       run: cargo build --release --all-features --target ${{ matrix.target }}
@@ -80,6 +84,8 @@ jobs:
     name: Build Linux Distribution Packages
     needs: build-releases
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     
     steps:
     - name: Checkout code
@@ -88,32 +94,21 @@ jobs:
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@stable
       
-    - name: Cache cargo registry
-      uses: actions/cache@v3
+    - name: Setup Rust cache
+      uses: actions/cache@v4
       with:
-        path: ~/.cargo/registry
-        key: ${{ runner.os }}-cargo-registry-distro-${{ hashFiles('**/Cargo.lock') }}
-        
-    - name: Cache cargo build
-      uses: actions/cache@v3
-      with:
-        path: target
-        key: ${{ runner.os }}-cargo-build-distro-${{ hashFiles('**/Cargo.lock') }}
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ubuntu-cargo-distro-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ubuntu-cargo-distro-
     
     - name: Install packaging tools
       run: |
-        # Only install if not already present
-        if ! command -v cargo-deb &> /dev/null; then
-          cargo install cargo-deb
-        else
-          echo "cargo-deb already installed"
-        fi
-        
-        if ! command -v cargo-generate-rpm &> /dev/null; then
-          cargo install cargo-generate-rpm
-        else
-          echo "cargo-generate-rpm already installed"
-        fi
+        echo "📦 Installing packaging tools..."
+        cargo install cargo-deb cargo-generate-rpm
     
     - name: Build distribution packages
       run: |
@@ -203,6 +198,18 @@ jobs:
           fi
         fi
         
+        # Process macOS binary
+        if [ -f "artifacts/furnace-macos-x86_64/furnace-macos-x86_64" ]; then
+          if is_different "artifacts/furnace-macos-x86_64/furnace-macos-x86_64" "releases/furnace-macos-x86_64"; then
+            echo "Updating macOS binary..."
+            cp artifacts/furnace-macos-x86_64/furnace-macos-x86_64 releases/furnace-macos-x86_64
+            chmod +x releases/furnace-macos-x86_64
+            updated=true
+          else
+            echo "macOS binary unchanged, skipping..."
+          fi
+        fi
+        
         # Process Windows binary
         if [ -f "artifacts/furnace-windows-x86_64.exe/furnace-windows-x86_64.exe" ]; then
           if is_different "artifacts/furnace-windows-x86_64.exe/furnace-windows-x86_64.exe" "releases/furnace-windows-x86_64.exe"; then
@@ -256,7 +263,20 @@ jobs:
         if [ "$updated" = true ]; then
           echo "Generating checksums..."
           cd releases
-          sha256sum furnace-linux-x86_64 furnace-windows-x86_64.exe > SHA256SUMS
+          
+          # Generate checksums for existing binaries
+          checksum_files=""
+          [ -f furnace-linux-x86_64 ] && checksum_files="$checksum_files furnace-linux-x86_64"
+          [ -f furnace-macos-x86_64 ] && checksum_files="$checksum_files furnace-macos-x86_64"
+          [ -f furnace-windows-x86_64.exe ] && checksum_files="$checksum_files furnace-windows-x86_64.exe"
+          
+          if [ -n "$checksum_files" ]; then
+            sha256sum $checksum_files > SHA256SUMS
+            echo "✅ Checksums generated for: $checksum_files"
+          else
+            echo "⚠️ No binaries found to checksum"
+          fi
+          
           cd ..
           
           # Update BUILD_INFO.txt
@@ -271,6 +291,7 @@ jobs:
         
         Binaries:
         - furnace-linux-x86_64 (Linux x86_64 binary)
+        - furnace-macos-x86_64 (macOS x86_64 binary)
         - furnace-windows-x86_64.exe (Windows x86_64)
         
         Linux Distribution Packages (in linux-distro/):
