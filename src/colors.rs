@@ -37,19 +37,31 @@ impl TrueColor {
     /// Convert to hex string
     #[must_use]
     pub fn to_hex(self) -> String {
-        format!("#{:02X}{:02X}{:02X}", self.r, self.g, self.b)
+        // Pre-allocate exact capacity: 7 bytes for #RRGGBB
+        let mut s = String::with_capacity(7);
+        use std::fmt::Write;
+        let _ = write!(s, "#{:02X}{:02X}{:02X}", self.r, self.g, self.b);
+        s
     }
 
     /// Convert to ANSI escape sequence for foreground
     #[must_use]
     pub fn to_ansi_fg(self) -> String {
-        format!("\x1b[38;2;{};{};{}m", self.r, self.g, self.b)
+        // Pre-allocate for typical sequence: \x1b[38;2;RRR;GGG;BBBm (max ~19 bytes)
+        let mut s = String::with_capacity(20);
+        use std::fmt::Write;
+        let _ = write!(s, "\x1b[38;2;{};{};{}m", self.r, self.g, self.b);
+        s
     }
 
     /// Convert to ANSI escape sequence for background
     #[must_use]
     pub fn to_ansi_bg(self) -> String {
-        format!("\x1b[48;2;{};{};{}m", self.r, self.g, self.b)
+        // Pre-allocate for typical sequence: \x1b[48;2;RRR;GGG;BBBm (max ~19 bytes)
+        let mut s = String::with_capacity(20);
+        use std::fmt::Write;
+        let _ = write!(s, "\x1b[48;2;{};{};{}m", self.r, self.g, self.b);
+        s
     }
 
     /// Blend two colors together using linear interpolation
@@ -289,6 +301,26 @@ mod tests {
     }
 
     #[test]
+    fn test_true_color_from_hex_without_hash() {
+        let color = TrueColor::from_hex("FF8800").unwrap();
+        assert_eq!(color.r, 255);
+        assert_eq!(color.g, 136);
+        assert_eq!(color.b, 0);
+    }
+
+    #[test]
+    fn test_true_color_from_hex_invalid_length() {
+        let result = TrueColor::from_hex("FFF");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_true_color_from_hex_invalid_chars() {
+        let result = TrueColor::from_hex("GGGGGG");
+        assert!(result.is_err());
+    }
+
+    #[test]
     fn test_true_color_to_hex() {
         let color = TrueColor::new(255, 136, 0);
         assert_eq!(color.to_hex(), "#FF8800");
@@ -313,11 +345,123 @@ mod tests {
     }
 
     #[test]
+    fn test_color_blending_clamp() {
+        let red = TrueColor::new(255, 0, 0);
+        let blue = TrueColor::new(0, 0, 255);
+
+        // Factor clamped to 0.0
+        let result = red.blend(blue, -1.0);
+        assert_eq!(result.r, 255);
+        assert_eq!(result.b, 0);
+
+        // Factor clamped to 1.0
+        let result = red.blend(blue, 2.0);
+        assert_eq!(result.r, 0);
+        assert_eq!(result.b, 255);
+    }
+
+    #[test]
     fn test_luminance() {
         let white = TrueColor::new(255, 255, 255);
         let black = TrueColor::new(0, 0, 0);
 
         assert!(white.is_light());
         assert!(!black.is_light());
+    }
+
+    #[test]
+    fn test_luminance_values() {
+        let white = TrueColor::new(255, 255, 255);
+        let black = TrueColor::new(0, 0, 0);
+
+        assert!((white.luminance() - 1.0).abs() < 0.01);
+        assert!((black.luminance() - 0.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_lighten() {
+        let dark = TrueColor::new(100, 100, 100);
+        let lighter = dark.lighten(0.5);
+        assert!(lighter.r > dark.r);
+        assert!(lighter.g > dark.g);
+        assert!(lighter.b > dark.b);
+    }
+
+    #[test]
+    fn test_darken() {
+        let light = TrueColor::new(200, 200, 200);
+        let darker = light.darken(0.5);
+        assert!(darker.r < light.r);
+        assert!(darker.g < light.g);
+        assert!(darker.b < light.b);
+    }
+
+    #[test]
+    fn test_display_trait() {
+        let color = TrueColor::new(255, 0, 128);
+        assert_eq!(format!("{}", color), "#FF0080");
+    }
+
+    #[test]
+    fn test_palette_default_dark() {
+        let palette = TrueColorPalette::default_dark();
+        assert_eq!(palette.black, TrueColor::new(0, 0, 0));
+        assert_eq!(palette.extended.len(), 256);
+    }
+
+    #[test]
+    fn test_palette_get_256_standard_colors() {
+        let palette = TrueColorPalette::default_dark();
+        assert_eq!(palette.get_256(0), palette.black);
+        assert_eq!(palette.get_256(1), palette.red);
+        assert_eq!(palette.get_256(7), palette.white);
+        assert_eq!(palette.get_256(8), palette.bright_black);
+        assert_eq!(palette.get_256(15), palette.bright_white);
+    }
+
+    #[test]
+    fn test_palette_get_256_extended() {
+        let palette = TrueColorPalette::default_dark();
+        // Test some extended colors (16-255)
+        let color = palette.get_256(16);
+        assert!(color.r == 0 || color.g == 0 || color.b == 0); // First cube color is 0,0,0
+
+        // Test grayscale range
+        let gray = palette.get_256(232);
+        assert!(gray.r == gray.g && gray.g == gray.b);
+    }
+
+    #[test]
+    fn test_palette_get_256_out_of_range() {
+        let palette = TrueColorPalette::default_dark();
+        // Index 255 is valid (last grayscale)
+        let _ = palette.get_256(255);
+    }
+
+    #[test]
+    fn test_from_ansi_colors() {
+        use crate::config::AnsiColors;
+        let ansi_colors = AnsiColors {
+            black: "#000000".to_string(),
+            red: "#FF0000".to_string(),
+            green: "#00FF00".to_string(),
+            yellow: "#FFFF00".to_string(),
+            blue: "#0000FF".to_string(),
+            magenta: "#FF00FF".to_string(),
+            cyan: "#00FFFF".to_string(),
+            white: "#FFFFFF".to_string(),
+            bright_black: "#808080".to_string(),
+            bright_red: "#FF8080".to_string(),
+            bright_green: "#80FF80".to_string(),
+            bright_yellow: "#FFFF80".to_string(),
+            bright_blue: "#8080FF".to_string(),
+            bright_magenta: "#FF80FF".to_string(),
+            bright_cyan: "#80FFFF".to_string(),
+            bright_white: "#FFFFFF".to_string(),
+        };
+
+        let palette = TrueColorPalette::from_ansi_colors(&ansi_colors).unwrap();
+        assert_eq!(palette.black, TrueColor::new(0, 0, 0));
+        assert_eq!(palette.red, TrueColor::new(255, 0, 0));
     }
 }

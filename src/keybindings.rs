@@ -354,4 +354,158 @@ mod tests {
             Some("/home/user".to_string())
         );
     }
+
+    #[test]
+    fn test_add_binding_from_string() {
+        let mut manager = KeybindingManager::new();
+        manager
+            .add_binding_from_string("Ctrl+Shift+X", Action::Clear)
+            .unwrap();
+
+        let action = manager.get_action(
+            KeyCode::Char('x'),
+            KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+        );
+        assert!(matches!(action, Some(Action::Clear)));
+    }
+
+    #[test]
+    fn test_add_binding_with_alt() {
+        let mut manager = KeybindingManager::new();
+        manager
+            .add_binding_from_string("Alt+Tab", Action::ToggleAutocomplete)
+            .unwrap();
+
+        let action = manager.get_action(KeyCode::Tab, KeyModifiers::ALT);
+        assert!(matches!(action, Some(Action::ToggleAutocomplete)));
+    }
+
+    #[test]
+    fn test_get_action_special_keys() {
+        let _manager = KeybindingManager::new();
+
+        // Test that special keys can be bound
+        let mut test_manager = KeybindingManager::new();
+        test_manager
+            .add_binding_from_string("Ctrl+Enter", Action::Clear)
+            .unwrap();
+
+        let action = test_manager.get_action(KeyCode::Enter, KeyModifiers::CONTROL);
+        assert!(matches!(action, Some(Action::Clear)));
+    }
+
+    #[test]
+    fn test_get_action_arrow_keys() {
+        let mut manager = KeybindingManager::new();
+        manager
+            .add_binding_from_string("Ctrl+Up", Action::PrevTheme)
+            .unwrap();
+        manager
+            .add_binding_from_string("Ctrl+Down", Action::NextTheme)
+            .unwrap();
+
+        assert!(matches!(
+            manager.get_action(KeyCode::Up, KeyModifiers::CONTROL),
+            Some(Action::PrevTheme)
+        ));
+        assert!(matches!(
+            manager.get_action(KeyCode::Down, KeyModifiers::CONTROL),
+            Some(Action::NextTheme)
+        ));
+    }
+
+    #[test]
+    fn test_update_last_command() {
+        let mut manager = KeybindingManager::new();
+        manager.update_last_command("ls -la".to_string());
+
+        assert_eq!(
+            manager.shell_integration().last_command,
+            Some("ls -la".to_string())
+        );
+    }
+
+    #[test]
+    fn test_enable_shell_integration() {
+        let mut manager = KeybindingManager::new();
+
+        manager.enable_shell_integration(ShellIntegrationFeature::OscSequences, false);
+        assert!(!manager.shell_integration().osc_sequences);
+
+        manager.enable_shell_integration(ShellIntegrationFeature::PromptDetection, false);
+        assert!(!manager.shell_integration().prompt_detection);
+
+        manager.enable_shell_integration(ShellIntegrationFeature::DirectoryTracking, false);
+        assert!(!manager.shell_integration().directory_tracking);
+
+        manager.enable_shell_integration(ShellIntegrationFeature::CommandTracking, false);
+        assert!(!manager.shell_integration().command_tracking);
+    }
+
+    #[test]
+    fn test_default_keybindings() {
+        let manager = KeybindingManager::new();
+
+        // Test all default keybindings
+        assert!(matches!(
+            manager.get_action(KeyCode::Char('w'), KeyModifiers::CONTROL),
+            Some(Action::CloseTab)
+        ));
+        assert!(matches!(
+            manager.get_action(KeyCode::Tab, KeyModifiers::CONTROL),
+            Some(Action::NextTab)
+        ));
+        assert!(matches!(
+            manager.get_action(KeyCode::Char('r'), KeyModifiers::CONTROL),
+            Some(Action::ToggleResourceMonitor)
+        ));
+        assert!(matches!(
+            manager.get_action(KeyCode::Char('f'), KeyModifiers::CONTROL),
+            Some(Action::Search)
+        ));
+    }
+
+    #[test]
+    fn test_case_insensitive_matching() {
+        let manager = KeybindingManager::new();
+
+        // Ctrl+T should work regardless of case
+        let action_lower = manager.get_action(KeyCode::Char('t'), KeyModifiers::CONTROL);
+        assert!(matches!(action_lower, Some(Action::NewTab)));
+    }
+
+    #[test]
+    fn test_unknown_key_returns_none() {
+        let manager = KeybindingManager::new();
+
+        // Keys without bindings should return None
+        let action = manager.get_action(KeyCode::F(1), KeyModifiers::NONE);
+        assert!(action.is_none());
+    }
+
+    #[test]
+    fn test_execute_lua_action() {
+        let mut manager = KeybindingManager::new();
+        let lua_code = "print('hello')".to_string();
+        manager
+            .add_binding_from_string("Ctrl+Shift+P", Action::ExecuteLua(lua_code.clone()))
+            .unwrap();
+
+        let action = manager.get_action(
+            KeyCode::Char('p'),
+            KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+        );
+        assert!(matches!(action, Some(Action::ExecuteLua(_))));
+    }
+
+    #[test]
+    fn test_shell_integration_default() {
+        let integration = ShellIntegration::default();
+        assert!(integration.osc_sequences);
+        assert!(integration.prompt_detection);
+        assert!(integration.directory_tracking);
+        assert!(integration.command_tracking);
+        assert!(integration.current_dir.is_none());
+        assert!(integration.last_command.is_none());
+    }
 }

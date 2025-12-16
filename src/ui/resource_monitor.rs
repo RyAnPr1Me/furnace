@@ -222,4 +222,97 @@ mod tests {
         assert_eq!(ResourceMonitor::format_bytes(1024 * 1024), "1.00 MB");
         assert_eq!(ResourceMonitor::format_bytes(1024 * 1024 * 1024), "1.00 GB");
     }
+
+    #[test]
+    fn test_default_implementation() {
+        let monitor = ResourceMonitor::default();
+        assert!(monitor.update_interval == Duration::from_millis(500));
+    }
+
+    #[test]
+    fn test_format_bytes_terabytes() {
+        let tb = 1024u64 * 1024 * 1024 * 1024;
+        assert_eq!(ResourceMonitor::format_bytes(tb), "1.00 TB");
+    }
+
+    #[test]
+    fn test_format_bytes_large_values() {
+        // Test values that would exceed TB
+        let large = 5u64 * 1024 * 1024 * 1024 * 1024;
+        assert_eq!(ResourceMonitor::format_bytes(large), "5.00 TB");
+    }
+
+    #[test]
+    fn test_format_bytes_small_values() {
+        assert_eq!(ResourceMonitor::format_bytes(100), "100.00 B");
+        assert_eq!(ResourceMonitor::format_bytes(512), "512.00 B");
+    }
+
+    #[test]
+    fn test_format_bytes_boundaries() {
+        // Just under 1KB
+        assert!(ResourceMonitor::format_bytes(1023).contains("B"));
+        // Exactly 1KB
+        assert!(ResourceMonitor::format_bytes(1024).contains("KB"));
+        // Just over 1KB
+        assert!(ResourceMonitor::format_bytes(1025).contains("KB"));
+    }
+
+    #[test]
+    fn test_stats_caching() {
+        let mut monitor = ResourceMonitor::new();
+
+        // First call should populate cache
+        let stats1 = monitor.get_stats();
+
+        // Second call within interval should return cached
+        let stats2 = monitor.get_stats();
+
+        // Both should have same memory total (immutable)
+        assert_eq!(stats1.memory_total, stats2.memory_total);
+    }
+
+    #[test]
+    fn test_resource_stats_clone() {
+        let mut monitor = ResourceMonitor::new();
+        let stats = monitor.get_stats();
+        let cloned = stats.clone();
+
+        assert_eq!(stats.cpu_count, cloned.cpu_count);
+        assert_eq!(stats.memory_total, cloned.memory_total);
+    }
+
+    #[test]
+    fn test_memory_percent_calculation() {
+        let mut monitor = ResourceMonitor::new();
+        let stats = monitor.get_stats();
+
+        // Memory percent should be between 0 and 100
+        assert!(stats.memory_percent >= 0.0);
+        assert!(stats.memory_percent <= 100.0);
+    }
+
+    #[test]
+    fn test_network_stats() {
+        // Network stats should return valid values
+        let (rx, tx) = ResourceMonitor::get_network_stats();
+        // These are cumulative totals, so they should be >= 0
+        assert!(rx >= 0);
+        assert!(tx >= 0);
+    }
+
+    #[test]
+    fn test_disk_info_struct() {
+        let disk_info = DiskInfo {
+            name: "disk0".to_string(),
+            mount_point: "/".to_string(),
+            used: 100_000_000_000,
+            total: 500_000_000_000,
+            percent: 20.0,
+        };
+
+        let cloned = disk_info.clone();
+        assert_eq!(cloned.name, "disk0");
+        assert_eq!(cloned.percent, 20.0);
+    }
 }

@@ -368,14 +368,15 @@ mod powershell_prompt_tests {
             !lines.is_empty(),
             "Should return lines buffer (may be empty after clear)"
         );
-        
+
         // After a proper clear screen, the prompt should be gone
         // This is correct terminal emulator behavior
-        let text: String = lines.iter()
+        let text: String = lines
+            .iter()
             .flat_map(|line| line.spans.iter())
             .map(|span| span.content.as_ref())
             .collect();
-        
+
         // The screen should be effectively empty after ESC[2J
         assert!(
             text.trim().is_empty() || !text.contains("PS C:\\Users\\test>"),

@@ -463,4 +463,107 @@ mod tests {
         assert!(names.contains(&"light".to_string()));
         assert!(names.contains(&"nord".to_string()));
     }
+
+    #[test]
+    fn test_default_implementation() {
+        let manager = ThemeManager::default();
+        assert_eq!(manager.current().name, "Dark");
+    }
+
+    #[test]
+    fn test_dark_theme() {
+        let theme = Themes::dark();
+        assert_eq!(theme.name, "Dark");
+        assert!(!theme.ui.foreground.is_empty());
+        assert!(!theme.ui.background.is_empty());
+        assert!(!theme.ui.cursor.is_empty());
+    }
+
+    #[test]
+    fn test_light_theme() {
+        let theme = Themes::light();
+        assert_eq!(theme.name, "Light");
+        assert!(!theme.ui.foreground.is_empty());
+        assert!(!theme.ui.background.is_empty());
+    }
+
+    #[test]
+    fn test_nord_theme() {
+        let theme = Themes::nord();
+        assert_eq!(theme.name, "Nord");
+        assert!(!theme.ui.foreground.is_empty());
+        assert!(!theme.colors.black.is_empty());
+    }
+
+    #[test]
+    fn test_theme_colors_are_valid_hex() {
+        let theme = Themes::dark();
+        // All color values should be valid hex
+        assert!(theme.ui.foreground.starts_with('#'));
+        assert!(theme.ui.background.starts_with('#'));
+        assert!(theme.colors.red.starts_with('#'));
+    }
+
+    #[test]
+    fn test_cycle_through_all_themes() {
+        let mut manager = ThemeManager::new();
+        let num_themes = manager.available_theme_names().len();
+
+        let initial_theme = manager.current().name.clone();
+
+        // Cycle through all themes
+        for _ in 0..num_themes {
+            manager.next_theme();
+        }
+
+        // Should be back to initial after full cycle
+        assert_eq!(manager.current().name, initial_theme);
+    }
+
+    #[test]
+    fn test_prev_theme_wraps() {
+        let mut manager = ThemeManager::new();
+
+        // Go to first theme
+        manager.switch_theme("dark");
+        let initial = manager.current().name.clone();
+
+        // Go prev should wrap to last
+        manager.prev_theme();
+        let after_prev = manager.current().name.clone();
+
+        // Should have wrapped to a different theme
+        assert_ne!(initial, after_prev);
+    }
+
+    #[test]
+    fn test_theme_syntax_colors() {
+        let theme = Themes::dark();
+        assert!(!theme.syntax.keyword.is_empty());
+        assert!(!theme.syntax.string.is_empty());
+        assert!(!theme.syntax.comment.is_empty());
+        assert!(!theme.syntax.function.is_empty());
+        assert!(!theme.syntax.variable.is_empty());
+        assert!(!theme.syntax.error.is_empty());
+        assert!(!theme.syntax.warning.is_empty());
+    }
+
+    #[test]
+    fn test_switch_theme_case_insensitive() {
+        let mut manager = ThemeManager::new();
+
+        // Theme names are lowercased
+        assert!(manager.switch_theme("Dark")); // Doesn't exist as "Dark"
+                                               // Note: switch_theme uses lowercase lookup
+    }
+
+    #[test]
+    fn test_default_themes_dir() {
+        let result = ThemeManager::default_themes_dir();
+        // Should succeed if home directory is available
+        if let Ok(path) = result {
+            assert!(path.to_string_lossy().contains("furnace"));
+            assert!(path.to_string_lossy().contains("themes"));
+        }
+    }
 }

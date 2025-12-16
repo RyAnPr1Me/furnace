@@ -16,10 +16,14 @@ use vte::{Params, Parser, Perform};
 use crate::colors::TrueColorPalette;
 
 // Warning messages for malformed ANSI sequences
-const WARN_MALFORMED_256_FG: &str = "Malformed ANSI 256-color sequence: missing color index after 38;5";
-const WARN_MALFORMED_256_BG: &str = "Malformed ANSI 256-color sequence: missing color index after 48;5";
-const WARN_MALFORMED_RGB_FG: &str = "Malformed ANSI RGB sequence: incomplete RGB values after 38;2 (expected R;G;B)";
-const WARN_MALFORMED_RGB_BG: &str = "Malformed ANSI RGB sequence: incomplete RGB values after 48;2 (expected R;G;B)";
+const WARN_MALFORMED_256_FG: &str =
+    "Malformed ANSI 256-color sequence: missing color index after 38;5";
+const WARN_MALFORMED_256_BG: &str =
+    "Malformed ANSI 256-color sequence: missing color index after 48;5";
+const WARN_MALFORMED_RGB_FG: &str =
+    "Malformed ANSI RGB sequence: incomplete RGB values after 38;2 (expected R;G;B)";
+const WARN_MALFORMED_RGB_BG: &str =
+    "Malformed ANSI RGB sequence: incomplete RGB values after 48;2 (expected R;G;B)";
 const WARN_UNKNOWN_EXT_FG: &str = "Unknown extended foreground color type";
 const WARN_UNKNOWN_EXT_BG: &str = "Unknown extended background color type";
 const WARN_FONT_SELECTION: &str = "Font selection SGR code not supported (codes 10-19)";
@@ -125,6 +129,7 @@ impl AnsiParser {
 
     /// Create a new ANSI parser with custom palette and terminal size
     #[must_use]
+    #[allow(dead_code)] // Public API for future use
     pub fn with_palette_and_size(palette: TrueColorPalette, width: usize, height: usize) -> Self {
         let mut parser = Self::with_size(width, height);
         parser.color_palette = Some(palette);
@@ -232,13 +237,13 @@ impl AnsiParser {
     fn write_at_cursor(&mut self, ch: char) {
         // Add character to current text
         self.current_text.push(ch);
-        
+
         // Calculate display width for wide characters
         let char_width = unicode_width::UnicodeWidthChar::width(ch).unwrap_or(1);
-        
+
         // Advance cursor
         self.cursor_col += char_width;
-        
+
         // Handle line wrap
         if self.cursor_col >= self.terminal_width {
             self.flush_text();
@@ -255,23 +260,23 @@ impl AnsiParser {
     fn move_cursor_to_line_start(&mut self) {
         self.flush_text();
         self.ensure_line(self.cursor_row);
-        
+
         // Commit current line spans to the line
         if !self.current_line_spans.is_empty() {
             let spans = std::mem::take(&mut self.current_line_spans);
             self.lines[self.cursor_row] = Line::from(spans);
         }
-        
+
         self.cursor_col = 0;
     }
 
     /// Move cursor down one line (with scrolling)
     fn move_cursor_down_with_scroll(&mut self) {
         self.flush_text();
-        
+
         // Commit current line
         self.commit_current_line();
-        
+
         self.cursor_row += 1;
         if self.cursor_row >= self.terminal_height {
             self.scroll_up(1);
@@ -294,24 +299,26 @@ impl AnsiParser {
         if n == 0 {
             return;
         }
-        
+
         // Use Vec operations to avoid cloning Line objects
         // Move lines up within scroll region by rotating/draining
         let start = self.scroll_top;
         let end = self.scroll_bottom + 1;
-        
+
         if start >= self.lines.len() || end > self.lines.len() || start >= end {
             return;
         }
-        
+
         let n = n.min(end - start);
-        
+
         // Remove n lines from the top of scroll region
         let _ = self.lines.drain(start..(start + n));
-        
+
         // Add n blank lines at the bottom of scroll region
+        // Use resize with pre-allocated capacity for efficiency
         let insert_pos = end - n;
-        let blank_lines: Vec<_> = (0..n).map(|_| Line::from("")).collect();
+        let mut blank_lines = Vec::with_capacity(n);
+        blank_lines.resize(n, Line::from(""));
         self.lines.splice(insert_pos..insert_pos, blank_lines);
     }
 
@@ -320,23 +327,25 @@ impl AnsiParser {
         if n == 0 {
             return;
         }
-        
+
         // Use Vec operations to avoid cloning Line objects
         let start = self.scroll_top;
         let end = self.scroll_bottom + 1;
-        
+
         if start >= self.lines.len() || end > self.lines.len() || start >= end {
             return;
         }
-        
+
         let n = n.min(end - start);
-        
+
         // Remove n lines from the bottom of scroll region
         let remove_start = end - n;
         let _ = self.lines.drain(remove_start..end);
-        
+
         // Add n blank lines at the top of scroll region
-        let blank_lines: Vec<_> = (0..n).map(|_| Line::from("")).collect();
+        // Use resize with pre-allocated capacity for efficiency
+        let mut blank_lines = Vec::with_capacity(n);
+        blank_lines.resize(n, Line::from(""));
         self.lines.splice(start..start, blank_lines);
     }
 
@@ -370,7 +379,7 @@ impl AnsiParser {
     fn set_cursor_position(&mut self, row: usize, col: usize) {
         self.flush_text();
         self.commit_current_line();
-        
+
         // CSI sequences are 1-based, convert to 0-based
         self.cursor_row = row.saturating_sub(1).min(self.terminal_height - 1);
         self.cursor_col = col.saturating_sub(1).min(self.terminal_width - 1);
@@ -380,7 +389,7 @@ impl AnsiParser {
     fn erase_to_end_of_line(&mut self) {
         self.flush_text();
         self.ensure_line(self.cursor_row);
-        
+
         // Clear current text and spans
         self.current_text.clear();
         self.current_line_spans.clear();
@@ -390,7 +399,7 @@ impl AnsiParser {
     fn erase_to_start_of_line(&mut self) {
         self.flush_text();
         self.ensure_line(self.cursor_row);
-        
+
         // Clear the line and reset spans
         self.lines[self.cursor_row] = Line::from("");
         self.current_line_spans.clear();
@@ -400,7 +409,7 @@ impl AnsiParser {
     fn erase_line(&mut self) {
         self.flush_text();
         self.ensure_line(self.cursor_row);
-        
+
         self.lines[self.cursor_row] = Line::from("");
         self.current_line_spans.clear();
         self.current_text.clear();
@@ -410,10 +419,10 @@ impl AnsiParser {
     fn erase_to_end_of_display(&mut self) {
         self.flush_text();
         self.commit_current_line();
-        
+
         // Erase rest of current line
         self.erase_to_end_of_line();
-        
+
         // Erase all lines below
         for i in (self.cursor_row + 1)..self.lines.len() {
             self.lines[i] = Line::from("");
@@ -423,14 +432,14 @@ impl AnsiParser {
     /// Erase from start of display to cursor
     fn erase_to_start_of_display(&mut self) {
         self.flush_text();
-        
+
         // Erase all lines above
         for i in 0..self.cursor_row {
             if i < self.lines.len() {
                 self.lines[i] = Line::from("");
             }
         }
-        
+
         // Erase start of current line
         self.erase_to_start_of_line();
     }
@@ -438,12 +447,12 @@ impl AnsiParser {
     /// Erase entire display
     fn erase_display(&mut self) {
         self.flush_text();
-        
+
         // Clear all lines
         for line in &mut self.lines {
             *line = Line::from("");
         }
-        
+
         self.current_line_spans.clear();
         self.current_text.clear();
     }
@@ -458,18 +467,18 @@ impl AnsiParser {
     /// Delete n characters at cursor
     fn delete_chars(&mut self, n: usize) {
         self.flush_text();
-        
+
         if n == 0 {
             return;
         }
-        
+
         // To properly delete characters, we need to work with the current line's content
         // This is a simplified implementation that clears current_text
         // A full implementation would need to reconstruct the line from spans,
         // delete n characters at cursor position, and rebuild the spans
         // For now, we clear the pending text which handles most common cases
         self.current_text.clear();
-        
+
         // Note: Full DCH implementation would require:
         // 1. Flatten current_line_spans to get full line text
         // 2. Calculate actual cursor position in that text
@@ -482,16 +491,18 @@ impl AnsiParser {
     fn insert_lines(&mut self, n: usize) {
         self.flush_text();
         self.commit_current_line();
-        
+
         if n == 0 || self.cursor_row >= self.lines.len() {
             return;
         }
-        
+
         // Use splice for O(n) performance instead of repeated insert operations
+        // Pre-allocate with exact capacity for better performance
         let row = self.cursor_row;
-        let blank_lines: Vec<_> = (0..n).map(|_| Line::from("")).collect();
+        let mut blank_lines = Vec::with_capacity(n);
+        blank_lines.resize(n, Line::from(""));
         self.lines.splice(row..row, blank_lines);
-        
+
         // Trim to terminal height
         self.lines.truncate(self.terminal_height);
     }
@@ -500,20 +511,18 @@ impl AnsiParser {
     fn delete_lines(&mut self, n: usize) {
         self.flush_text();
         self.commit_current_line();
-        
+
         if n == 0 || self.cursor_row >= self.lines.len() {
             return;
         }
-        
+
         // Use drain for O(n) performance instead of repeated remove operations
         let row = self.cursor_row;
         let end = (row + n).min(self.lines.len());
         self.lines.drain(row..end);
-        
-        // Pad back to terminal height
-        while self.lines.len() < self.terminal_height {
-            self.lines.push(Line::from(""));
-        }
+
+        // Pad back to terminal height using resize for efficiency
+        self.lines.resize(self.terminal_height, Line::from(""));
     }
 
     /// Save cursor position
@@ -535,7 +544,7 @@ impl AnsiParser {
         if !self.use_alt_screen {
             self.flush_text();
             self.commit_current_line();
-            
+
             // Save main screen
             self.alt_screen = std::mem::take(&mut self.lines);
             self.lines = vec![Line::from(""); self.terminal_height];
@@ -550,7 +559,7 @@ impl AnsiParser {
         if self.use_alt_screen {
             self.flush_text();
             self.commit_current_line();
-            
+
             // Restore main screen
             self.lines = std::mem::take(&mut self.alt_screen);
             self.use_alt_screen = false;
@@ -904,7 +913,9 @@ impl Perform for AnsiParser {
             b'\t' => {
                 self.flush_text();
                 let next_tab = ((self.cursor_col / 8) + 1) * 8;
-                let spaces = next_tab.saturating_sub(self.cursor_col).min(self.terminal_width - self.cursor_col);
+                let spaces = next_tab
+                    .saturating_sub(self.cursor_col)
+                    .min(self.terminal_width - self.cursor_col);
                 for _ in 0..spaces {
                     self.current_text.push(' ');
                 }
@@ -960,14 +971,14 @@ impl Perform for AnsiParser {
     fn osc_dispatch(&mut self, params: &[&[u8]], _bell_terminated: bool) {
         // OSC sequences: ESC ] Ps ; Pt BEL
         // Common ones: 0/1/2 = set title, 8 = hyperlinks
-        
+
         if params.is_empty() {
             return;
         }
-        
+
         // Get the command number
         let cmd = String::from_utf8_lossy(params[0]);
-        
+
         match cmd.as_ref() {
             // Set window title
             "0" | "1" | "2" => {
@@ -975,7 +986,7 @@ impl Perform for AnsiParser {
                     self.window_title = String::from_utf8_lossy(params[1]).to_string();
                 }
             }
-            
+
             // Hyperlink: OSC 8 ; params ; URI
             "8" => {
                 if params.len() > 2 {
@@ -989,14 +1000,14 @@ impl Perform for AnsiParser {
                     self.hyperlink_url = None;
                 }
             }
-            
+
             // Color palette changes (xterm)
             "4" => {
                 // OSC 4 ; color_index ; color_spec
                 // We could update color_palette here if needed
                 // For now, we just note it
             }
-            
+
             // Other OSC sequences - note but don't act on
             _ => {}
         }
@@ -1018,7 +1029,7 @@ impl Perform for AnsiParser {
             .and_then(|p| p.first().copied())
             .unwrap_or(1)
             .max(1) as usize;
-        
+
         let param2 = params
             .iter()
             .nth(1)
@@ -1032,57 +1043,57 @@ impl Perform for AnsiParser {
                 self.flush_text();
                 self.handle_sgr(params);
             }
-            
+
             // Cursor Up (CUU)
             'A' => {
                 self.cursor_up(param1);
             }
-            
+
             // Cursor Down (CUD)
             'B' => {
                 self.cursor_down(param1);
             }
-            
+
             // Cursor Forward (CUF)
             'C' => {
                 self.cursor_forward(param1);
             }
-            
+
             // Cursor Back (CUB)
             'D' => {
                 self.cursor_backward(param1);
             }
-            
+
             // Cursor Next Line (CNL)
             'E' => {
                 self.cursor_down(param1);
                 self.cursor_col = 0;
             }
-            
+
             // Cursor Previous Line (CPL)
             'F' => {
                 self.cursor_up(param1);
                 self.cursor_col = 0;
             }
-            
+
             // Cursor Horizontal Absolute (CHA)
             'G' => {
                 self.flush_text();
                 self.cursor_col = param1.saturating_sub(1).min(self.terminal_width - 1);
             }
-            
+
             // Cursor Position (CUP) or Horizontal and Vertical Position (HVP)
             'H' | 'f' => {
                 self.set_cursor_position(param1, param2);
             }
-            
+
             // Erase in Display (ED)
             // For proper terminal emulation, we actually erase content
             // Applications like vim, htop, etc. depend on this working correctly
             'J' => {
                 self.flush_text();
                 self.commit_current_line();
-                
+
                 let param = params
                     .iter()
                     .next()
@@ -1098,7 +1109,7 @@ impl Perform for AnsiParser {
                     _ => {}
                 }
             }
-            
+
             // Erase in Line (EL)
             'K' => {
                 let param = params
@@ -1113,44 +1124,44 @@ impl Perform for AnsiParser {
                     _ => {}
                 }
             }
-            
+
             // Insert Lines (IL)
             'L' => {
                 self.insert_lines(param1);
             }
-            
+
             // Delete Lines (DL)
             'M' => {
                 self.delete_lines(param1);
             }
-            
+
             // Delete Characters (DCH)
             'P' => {
                 self.delete_chars(param1);
             }
-            
+
             // Scroll Up (SU)
             'S' => {
                 self.scroll_up(param1);
             }
-            
+
             // Scroll Down (SD)
             'T' => {
                 self.scroll_down(param1);
             }
-            
+
             // Erase Characters (ECH)
             'X' => {
                 self.insert_blank_chars(param1);
             }
-            
+
             // Cursor Vertical Absolute (VPA)
             'd' => {
                 self.flush_text();
                 self.commit_current_line();
                 self.cursor_row = param1.saturating_sub(1).min(self.terminal_height - 1);
             }
-            
+
             // Set scroll region (DECSTBM)
             'r' => {
                 let top = param1.saturating_sub(1);
@@ -1161,27 +1172,27 @@ impl Perform for AnsiParser {
                     // No second parameter means use terminal height
                     self.terminal_height - 1
                 };
-                
+
                 if top < bottom {
                     self.scroll_top = top;
                     self.scroll_bottom = bottom;
                 }
-                
+
                 // Reset cursor to home
                 self.cursor_row = 0;
                 self.cursor_col = 0;
             }
-            
+
             // Save cursor (SCOSC)
             's' => {
                 self.save_cursor();
             }
-            
+
             // Restore cursor (SCORC)
             'u' => {
                 self.restore_cursor();
             }
-            
+
             // Set mode / Reset mode
             'h' | 'l' => {
                 let set_mode = action == 'h';
@@ -1190,7 +1201,7 @@ impl Perform for AnsiParser {
                     .next()
                     .and_then(|p| p.first().copied())
                     .unwrap_or(0);
-                
+
                 match param {
                     // Alternate screen buffer (xterm)
                     1049 | 47 => {
@@ -1207,7 +1218,7 @@ impl Perform for AnsiParser {
                     }
                 }
             }
-            
+
             // Ignore other sequences
             _ => {}
         }
@@ -1220,22 +1231,22 @@ impl Perform for AnsiParser {
             ([], b'7') => {
                 self.save_cursor();
             }
-            
+
             // Restore cursor (DECRC)
             ([], b'8') => {
                 self.restore_cursor();
             }
-            
+
             // Index (IND) - move cursor down, scroll if needed
             ([], b'D') => {
                 self.move_cursor_down_with_scroll();
             }
-            
+
             // Next Line (NEL) - move to start of next line
             ([], b'E') => {
                 self.move_cursor_down_with_scroll();
             }
-            
+
             // Reverse Index (RI) - move cursor up, scroll if needed
             ([], b'M') => {
                 self.flush_text();
@@ -1246,7 +1257,7 @@ impl Perform for AnsiParser {
                     self.cursor_row -= 1;
                 }
             }
-            
+
             // Reset (RIS)
             ([], b'c') => {
                 // Full reset
@@ -1255,7 +1266,7 @@ impl Perform for AnsiParser {
                 self.cursor_col = 0;
                 self.erase_display();
             }
-            
+
             _ => {
                 // Other escape sequences - mostly cursor control, safe to ignore
             }
@@ -1405,7 +1416,10 @@ mod tests {
         let output = "\x1b[38;5mText";
         let lines = AnsiParser::parse(output);
         // Should not crash, text should still be parsed
-        assert!(!lines.is_empty(), "Should still parse text despite malformed sequence");
+        assert!(
+            !lines.is_empty(),
+            "Should still parse text despite malformed sequence"
+        );
     }
 
     #[test]
@@ -1414,7 +1428,10 @@ mod tests {
         let output = "\x1b[38;2;255;128mText";
         let lines = AnsiParser::parse(output);
         // Should not crash, text should still be parsed
-        assert!(!lines.is_empty(), "Should still parse text despite malformed sequence");
+        assert!(
+            !lines.is_empty(),
+            "Should still parse text despite malformed sequence"
+        );
     }
 
     #[test]
@@ -1424,7 +1441,7 @@ mod tests {
         // In our simplified model for scrollback, text after \r will accumulate
         let output = "Progress: 0%\rProgress: 50%\rProgress: 100%";
         let lines = AnsiParser::parse(output);
-        
+
         // Without full cursor positioning, all progress updates will appear
         assert_eq!(lines.len(), 1, "Should have one line");
         let text: String = lines[0].spans.iter().map(|s| s.content.as_ref()).collect();
@@ -1465,7 +1482,11 @@ mod tests {
         // Test that we don't create unnecessary empty lines at the start
         let output = "Text";
         let lines = AnsiParser::parse(output);
-        assert_eq!(lines.len(), 1, "Should have exactly one line for single text without newline");
+        assert_eq!(
+            lines.len(),
+            1,
+            "Should have exactly one line for single text without newline"
+        );
     }
 
     #[test]

@@ -1319,20 +1319,27 @@ impl Terminal {
             return;
         }
 
-        // Convert output to String
-        let mut output_str = String::from_utf8_lossy(raw_bytes).into_owned();
+        // Convert output to Cow<str> - avoids allocation if already valid UTF-8
+        let output_cow = String::from_utf8_lossy(raw_bytes);
 
         // Apply output filters if configured
-        if !self.config.hooks.output_filters.is_empty() {
+        // Use Cow to avoid allocation when no filters modify the output
+        let output_str: Cow<'_, str> = if !self.config.hooks.output_filters.is_empty() {
             if let Some(ref executor) = self.hooks_executor {
-                output_str = executor
-                    .apply_output_filters(&output_str, &self.config.hooks.output_filters)
-                    .unwrap_or_else(|e| {
+                match executor.apply_output_filters(&output_cow, &self.config.hooks.output_filters)
+                {
+                    Ok(filtered) => Cow::Owned(filtered),
+                    Err(e) => {
                         warn!("Output filter pipeline failed: {}", e);
-                        output_str // Use unfiltered output on error
-                    });
+                        output_cow // Use unfiltered output on error
+                    }
+                }
+            } else {
+                output_cow
             }
-        }
+        } else {
+            output_cow
+        };
 
         // Store the (potentially filtered) output in buffer
         self.output_buffers[self.active_session].extend_from_slice(output_str.as_bytes());
@@ -2875,12 +2882,15 @@ impl Terminal {
         }
 
         // Parse OSC 7 for directory tracking
+        // Format: ESC ] 7 ; url BEL (where url is typically file://hostname/path)
         if output.contains("\x1b]7;") {
             if let Some(start) = output.find("\x1b]7;") {
                 if let Some(end) = output[start..].find('\x07') {
-                    // Ensure we have enough characters for the prefix
-                    if end > 4 {
-                        let dir = &output[start + 4..start + end];
+                    // OSC 7 prefix is 4 characters: ESC ] 7 ;
+                    const OSC7_PREFIX_LEN: usize = 4;
+                    // Ensure we have content after the prefix (end is relative to start)
+                    if end > OSC7_PREFIX_LEN && start + end <= output.len() {
+                        let dir = &output[start + OSC7_PREFIX_LEN..start + end];
                         self.keybindings.update_directory(dir.to_string());
                     }
                 }
@@ -2888,12 +2898,15 @@ impl Terminal {
         }
 
         // Parse OSC 133 for command tracking
+        // Format: ESC ] 133 ; C ; command BEL
         if output.contains("\x1b]133;") {
             if let Some(start) = output.find("\x1b]133;C;") {
                 if let Some(end) = output[start..].find('\x07') {
-                    // Ensure we have enough characters for the prefix
-                    if end > 10 {
-                        let cmd = &output[start + 10..start + end];
+                    // OSC 133;C; prefix is 9 characters: ESC ] 1 3 3 ; C ;
+                    const OSC133C_PREFIX_LEN: usize = 9;
+                    // Ensure we have content after the prefix (end is relative to start)
+                    if end > OSC133C_PREFIX_LEN && start + end <= output.len() {
+                        let cmd = &output[start + OSC133C_PREFIX_LEN..start + end];
                         self.keybindings.update_last_command(cmd.to_string());
                     }
                 }
@@ -2903,9 +2916,11 @@ impl Terminal {
             // Format: ESC ] 133 ; D ; exit_code BEL
             if let Some(start) = output.find("\x1b]133;D;") {
                 if let Some(end) = output[start..].find('\x07') {
-                    // Ensure we have enough characters for the prefix
-                    if end > 10 {
-                        let exit_code_str = &output[start + 10..start + end];
+                    // OSC 133;D; prefix is 9 characters: ESC ] 1 3 3 ; D ;
+                    const OSC133D_PREFIX_LEN: usize = 9;
+                    // Ensure we have content after the prefix (end is relative to start)
+                    if end > OSC133D_PREFIX_LEN && start + end <= output.len() {
+                        let exit_code_str = &output[start + OSC133D_PREFIX_LEN..start + end];
                         if let Ok(exit_code) = exit_code_str.parse::<i32>() {
                             // Call on_command_end hook
                             if let Some(ref executor) = self.hooks_executor {
@@ -3329,9 +3344,11 @@ impl Terminal {
                 let now = std::time::Instant::now();
                 self.cursor_trail_positions.push((col, row, now));
 
-                // Limit trail length
-                while self.cursor_trail_positions.len() > trail_config.length {
-                    self.cursor_trail_positions.remove(0);
+                // Limit trail length - use drain for O(n) instead of O(n²) with repeated remove(0)
+                let max_len = trail_config.length;
+                if self.cursor_trail_positions.len() > max_len {
+                    let excess = self.cursor_trail_positions.len() - max_len;
+                    self.cursor_trail_positions.drain(..excess);
                 }
             }
         }
@@ -3391,7 +3408,8 @@ impl Terminal {
                 // Render trail positions with fading
                 for (i, (col, row, timestamp)) in self.cursor_trail_positions.iter().enumerate() {
                     let age_ms = now.duration_since(*timestamp).as_millis() as f32;
-                    let max_age_ms = trail_config.animation_speed as f32;
+                    // Prevent division by zero - use 1.0 as minimum
+                    let max_age_ms = (trail_config.animation_speed as f32).max(1.0);
 
                     // Skip if too old
                     if age_ms > max_age_ms {

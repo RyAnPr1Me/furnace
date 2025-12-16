@@ -250,4 +250,93 @@ mod tests {
         // Verify it truncates at character boundary, not byte boundary
         assert!(text.contains("..."));
     }
+
+    #[test]
+    fn test_default_implementation() {
+        let pb = ProgressBar::default();
+        assert!(!pb.visible);
+        assert!(pb.command().is_empty());
+    }
+
+    #[test]
+    fn test_display_text_not_visible() {
+        let pb = ProgressBar::new();
+        let text = pb.display_text();
+        assert!(text.is_empty());
+    }
+
+    #[test]
+    fn test_display_text_visible() {
+        let mut pb = ProgressBar::new();
+        pb.start("test".to_string());
+        let text = pb.display_text();
+        assert!(text.contains("Running:"));
+        assert!(text.contains("test"));
+    }
+
+    #[test]
+    fn test_display_text_truncated_not_visible() {
+        let pb = ProgressBar::new();
+        let text = pb.display_text_truncated(10);
+        assert!(text.is_empty());
+    }
+
+    #[test]
+    fn test_display_text_truncated_short_command() {
+        let mut pb = ProgressBar::new();
+        pb.start("ls".to_string());
+        let text = pb.display_text_truncated(100);
+        // Should not be truncated
+        assert!(!text.contains("..."));
+        assert!(text.contains("ls"));
+    }
+
+    #[test]
+    fn test_elapsed_after_tick() {
+        let mut pb = ProgressBar::new();
+        pb.start("test".to_string());
+        pb.tick();
+        let elapsed = pb.elapsed();
+        // Should be 0s immediately after start
+        assert!(elapsed.contains('s'));
+    }
+
+    #[test]
+    fn test_spinner_cycles() {
+        let mut pb = ProgressBar::new();
+        pb.start("test".to_string());
+
+        // Cycle through all spinner characters
+        let mut seen = std::collections::HashSet::new();
+        for _ in 0..10 {
+            seen.insert(pb.spinner_char());
+            pb.tick();
+        }
+
+        // Should have seen all spinner chars
+        assert_eq!(seen.len(), SPINNER_CHARS.len());
+    }
+
+    #[test]
+    fn test_format_duration_secs_edge_cases() {
+        // Test 0 seconds
+        assert_eq!(format_duration_secs(0), "0s");
+
+        // Test exactly 60 seconds
+        assert_eq!(format_duration_secs(60), "1m 0s");
+
+        // Test exactly 1 hour
+        assert_eq!(format_duration_secs(3600), "1h 0m");
+
+        // Test large values
+        assert_eq!(format_duration_secs(7261), "2h 1m");
+    }
+
+    #[test]
+    fn test_tick_when_not_visible() {
+        let mut pb = ProgressBar::new();
+        // Tick should be a no-op when not visible
+        pb.tick();
+        assert_eq!(pb.spinner_frame, 0);
+    }
 }

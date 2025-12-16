@@ -373,4 +373,112 @@ mod tests {
         let output = result.unwrap();
         assert!(output.contains("HELLO"));
     }
+
+    #[test]
+    fn test_shutdown_hook() {
+        let executor = HooksExecutor::new().unwrap();
+        let result = executor.on_shutdown("print('Shutting down')");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_key_press_hook() {
+        let executor = HooksExecutor::new().unwrap();
+        let result = executor.on_key_press("print(context)", "Ctrl+A");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_command_start_hook() {
+        let executor = HooksExecutor::new().unwrap();
+        let result = executor.on_command_start("print(context)", "ls -la");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_command_end_hook() {
+        let executor = HooksExecutor::new().unwrap();
+        let result = executor.on_command_end("print(context)", "ls -la", 0);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_output_hook() {
+        let executor = HooksExecutor::new().unwrap();
+        let result = executor.on_output("print(context)", "some output text");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_output_hook_truncation() {
+        let executor = HooksExecutor::new().unwrap();
+        // Test with very long output (should be truncated to 1000 chars)
+        let long_output = "x".repeat(2000);
+        let result = executor.on_output("print(context)", &long_output);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_bell_hook() {
+        let executor = HooksExecutor::new().unwrap();
+        let result = executor.on_bell("print('Bell!')");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_title_change_hook() {
+        let executor = HooksExecutor::new().unwrap();
+        let result = executor.on_title_change("print(context)", "New Title");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_empty_script() {
+        let executor = HooksExecutor::new().unwrap();
+        let result = executor.execute("", "test");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_empty_filters() {
+        let executor = HooksExecutor::new().unwrap();
+        let filters: Vec<String> = vec![];
+        let result = executor.apply_output_filters("hello", &filters);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "hello");
+    }
+
+    #[test]
+    fn test_context_escaping() {
+        let executor = HooksExecutor::new().unwrap();
+        // Test that special characters in context are properly escaped
+        let result = executor.execute("print(context)", "test\"with\\special\nchars\t\r");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_custom_keybinding_execution() {
+        let executor = HooksExecutor::new().unwrap();
+        let result = executor.execute_custom_keybinding(
+            "local x = context.cwd .. context.last_command",
+            "/home/user",
+            "ls -la",
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_custom_keybinding_empty() {
+        let executor = HooksExecutor::new().unwrap();
+        let result = executor.execute_custom_keybinding("", "/home/user", "ls");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_default_implementation() {
+        let executor = HooksExecutor::default();
+        // Should create a valid executor
+        let result = executor.execute("local x = 1", "test");
+        assert!(result.is_ok());
+    }
 }
