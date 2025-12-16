@@ -11,6 +11,7 @@
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use tracing::warn;
+use unicode_width::UnicodeWidthChar;
 use vte::{Params, Parser, Perform};
 
 use crate::colors::TrueColorPalette;
