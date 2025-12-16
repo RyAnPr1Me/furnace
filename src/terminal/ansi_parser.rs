@@ -11,7 +11,6 @@
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use tracing::warn;
-use unicode_width::UnicodeWidthChar;
 use vte::{Params, Parser, Perform};
 
 use crate::colors::TrueColorPalette;
@@ -214,12 +213,10 @@ impl AnsiParser {
     fn flush_text(&mut self) {
         if !self.current_text.is_empty() {
             let text = std::mem::take(&mut self.current_text);
-            let span = if self.hyperlink_url.is_some() {
-                // Add hyperlink metadata (ratatui doesn't support this natively, but we preserve it)
-                Span::styled(text.clone(), self.current_style)
-            } else {
-                Span::styled(text, self.current_style)
-            };
+            // Note: Hyperlink URLs are tracked in self.hyperlink_url but ratatui doesn't
+            // support clickable hyperlinks natively. The URL is preserved for future use
+            // or custom rendering extensions. For now, we just create a normal styled span.
+            let span = Span::styled(text, self.current_style);
             self.current_line_spans.push(span);
         }
     }
@@ -298,19 +295,24 @@ impl AnsiParser {
             return;
         }
         
-        // Move lines up within scroll region
-        for i in self.scroll_top..(self.scroll_bottom.saturating_sub(n) + 1) {
-            if i + n <= self.scroll_bottom && i < self.lines.len() && i + n < self.lines.len() {
-                self.lines[i] = self.lines[i + n].clone();
-            }
+        // Use Vec operations to avoid cloning Line objects
+        // Move lines up within scroll region by rotating/draining
+        let start = self.scroll_top;
+        let end = self.scroll_bottom + 1;
+        
+        if start >= self.lines.len() || end > self.lines.len() || start >= end {
+            return;
         }
         
-        // Clear bottom lines
-        for i in (self.scroll_bottom + 1 - n)..=self.scroll_bottom {
-            if i < self.lines.len() {
-                self.lines[i] = Line::from("");
-            }
-        }
+        let n = n.min(end - start);
+        
+        // Remove n lines from the top of scroll region
+        let _ = self.lines.drain(start..(start + n));
+        
+        // Add n blank lines at the bottom of scroll region
+        let insert_pos = end - n;
+        let blank_lines: Vec<_> = (0..n).map(|_| Line::from("")).collect();
+        self.lines.splice(insert_pos..insert_pos, blank_lines);
     }
 
     /// Scroll screen down by n lines
@@ -319,19 +321,23 @@ impl AnsiParser {
             return;
         }
         
-        // Move lines down within scroll region
-        for i in (self.scroll_top..=(self.scroll_bottom.saturating_sub(n))).rev() {
-            if i + n <= self.scroll_bottom && i < self.lines.len() && i + n < self.lines.len() {
-                self.lines[i + n] = self.lines[i].clone();
-            }
+        // Use Vec operations to avoid cloning Line objects
+        let start = self.scroll_top;
+        let end = self.scroll_bottom + 1;
+        
+        if start >= self.lines.len() || end > self.lines.len() || start >= end {
+            return;
         }
         
-        // Clear top lines
-        for i in self.scroll_top..(self.scroll_top + n).min(self.scroll_bottom + 1) {
-            if i < self.lines.len() {
-                self.lines[i] = Line::from("");
-            }
-        }
+        let n = n.min(end - start);
+        
+        // Remove n lines from the bottom of scroll region
+        let remove_start = end - n;
+        let _ = self.lines.drain(remove_start..end);
+        
+        // Add n blank lines at the top of scroll region
+        let blank_lines: Vec<_> = (0..n).map(|_| Line::from("")).collect();
+        self.lines.splice(start..start, blank_lines);
     }
 
     /// Move cursor up n lines
@@ -450,11 +456,26 @@ impl AnsiParser {
     }
 
     /// Delete n characters at cursor
-    fn delete_chars(&mut self, _n: usize) {
+    fn delete_chars(&mut self, n: usize) {
         self.flush_text();
-        // Simplified: just clear current text
-        // Full implementation would require tracking character positions
+        
+        if n == 0 {
+            return;
+        }
+        
+        // To properly delete characters, we need to work with the current line's content
+        // This is a simplified implementation that clears current_text
+        // A full implementation would need to reconstruct the line from spans,
+        // delete n characters at cursor position, and rebuild the spans
+        // For now, we clear the pending text which handles most common cases
         self.current_text.clear();
+        
+        // Note: Full DCH implementation would require:
+        // 1. Flatten current_line_spans to get full line text
+        // 2. Calculate actual cursor position in that text
+        // 3. Delete n characters at that position
+        // 4. Rebuild spans with correct styling
+        // This complexity is deferred as DCH is rarely used in practice
     }
 
     /// Insert n blank lines at cursor
@@ -462,13 +483,14 @@ impl AnsiParser {
         self.flush_text();
         self.commit_current_line();
         
-        // Shift lines down
-        let row = self.cursor_row;
-        for _ in 0..n {
-            if row < self.lines.len() {
-                self.lines.insert(row, Line::from(""));
-            }
+        if n == 0 || self.cursor_row >= self.lines.len() {
+            return;
         }
+        
+        // Use splice for O(n) performance instead of repeated insert operations
+        let row = self.cursor_row;
+        let blank_lines: Vec<_> = (0..n).map(|_| Line::from("")).collect();
+        self.lines.splice(row..row, blank_lines);
         
         // Trim to terminal height
         self.lines.truncate(self.terminal_height);
@@ -479,12 +501,14 @@ impl AnsiParser {
         self.flush_text();
         self.commit_current_line();
         
-        // Remove lines
-        for _ in 0..n {
-            if self.cursor_row < self.lines.len() {
-                self.lines.remove(self.cursor_row);
-            }
+        if n == 0 || self.cursor_row >= self.lines.len() {
+            return;
         }
+        
+        // Use drain for O(n) performance instead of repeated remove operations
+        let row = self.cursor_row;
+        let end = (row + n).min(self.lines.len());
+        self.lines.drain(row..end);
         
         // Pad back to terminal height
         while self.lines.len() < self.terminal_height {
@@ -1053,8 +1077,8 @@ impl Perform for AnsiParser {
             }
             
             // Erase in Display (ED)
-            // For scrollback preservation (log viewer mode), we don't actually erase content
-            // We just commit current content and continue
+            // For proper terminal emulation, we actually erase content
+            // Applications like vim, htop, etc. depend on this working correctly
             'J' => {
                 self.flush_text();
                 self.commit_current_line();
@@ -1065,20 +1089,12 @@ impl Perform for AnsiParser {
                     .and_then(|p| p.first().copied())
                     .unwrap_or(0);
                 match param {
-                    // 0: Erase from cursor to end - just commit what we have
-                    0 => {
-                        // In scrollback mode, preserve history
-                    }
-                    // 1: Erase from start to cursor - preserve
-                    1 => {
-                        // In scrollback mode, preserve history
-                    }
-                    // 2 or 3: Clear entire display - preserve scrollback
-                    2 | 3 => {
-                        // For scrollback preservation, we DON'T actually clear
-                        // This allows viewing logs where clear screen is just a visual marker
-                        // The content before the clear is preserved in scrollback
-                    }
+                    // 0: Erase from cursor to end of display
+                    0 => self.erase_to_end_of_display(),
+                    // 1: Erase from start of display to cursor
+                    1 => self.erase_to_start_of_display(),
+                    // 2 or 3: Clear entire display
+                    2 | 3 => self.erase_display(),
                     _ => {}
                 }
             }
@@ -1138,10 +1154,12 @@ impl Perform for AnsiParser {
             // Set scroll region (DECSTBM)
             'r' => {
                 let top = param1.saturating_sub(1);
-                let bottom = if param2 == 1 {
-                    self.terminal_height - 1
-                } else {
+                // Check if second parameter was actually provided
+                let bottom = if params.iter().nth(1).is_some() {
                     param2.saturating_sub(1).min(self.terminal_height - 1)
+                } else {
+                    // No second parameter means use terminal height
+                    self.terminal_height - 1
                 };
                 
                 if top < bottom {
