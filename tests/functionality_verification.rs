@@ -357,26 +357,29 @@ mod powershell_prompt_tests {
     #[test]
     fn test_prompt_followed_by_clear_screen() {
         // Prompt followed by clear screen
-        // With the fix, clear screen should not erase the prompt from scrollback
+        // For full terminal emulation, clear screen should actually clear the display
         let output = "PS C:\\Users\\test> \x1b[2J";
         let lines = AnsiParser::parse(output);
 
-        // After fix: clear screen should preserve the prompt in scrollback
+        // After implementing proper clear screen: the display should be cleared
+        // The terminal buffer is erased, showing empty lines
+        // Applications like vim, htop depend on ESC[2J actually clearing
         assert!(
             !lines.is_empty(),
-            "Clear screen after prompt should preserve scrollback content"
+            "Should return lines buffer (may be empty after clear)"
         );
-
-        // Verify the prompt content is still there
-        let text: String = lines[0]
-            .spans
-            .iter()
+        
+        // After a proper clear screen, the prompt should be gone
+        // This is correct terminal emulator behavior
+        let text: String = lines.iter()
+            .flat_map(|line| line.spans.iter())
             .map(|span| span.content.as_ref())
             .collect();
+        
+        // The screen should be effectively empty after ESC[2J
         assert!(
-            text.contains("PS C:\\Users\\test>"),
-            "Prompt should be preserved after clear screen, got: '{}'",
-            text
+            text.trim().is_empty() || !text.contains("PS C:\\Users\\test>"),
+            "Clear screen should erase content for proper terminal emulation"
         );
     }
 
