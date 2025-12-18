@@ -1277,6 +1277,8 @@ impl Perform for AnsiParser {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::colors::TrueColorPalette;
+    use vte::Parser;
 
     #[test]
     fn test_to_color_u8() {
@@ -1521,5 +1523,105 @@ mod tests {
         let text: String = lines[0].spans.iter().map(|s| s.content.as_ref()).collect();
         assert!(text.contains("Hello"));
         assert!(text.contains("世界"));
+    }
+
+    #[test]
+    fn test_custom_palette_is_used() {
+        let palette = TrueColorPalette::default_dark();
+        let lines = AnsiParser::parse_with_palette("\x1b[31mHi", &palette);
+
+        let span = &lines[0].spans[0];
+        match span.style.fg {
+            Some(Color::Rgb(r, g, b)) => assert_eq!((r, g, b), (0xCC, 0x55, 0x55)),
+            other => panic!("Expected RGB color from custom palette, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_indexed_color_without_palette() {
+        let lines = AnsiParser::parse("\x1b[38;5;200mX");
+        let span = &lines[0].spans[0];
+        assert_eq!(span.style.fg, Some(Color::Indexed(200)));
+    }
+
+    #[test]
+    fn test_truecolor_sgr_applied() {
+        let lines = AnsiParser::parse("\x1b[38;2;10;20;30mX");
+        let span = &lines[0].spans[0];
+        assert_eq!(span.style.fg, Some(Color::Rgb(10, 20, 30)));
+    }
+
+    #[test]
+    fn test_reset_restores_default_colors() {
+        let lines = AnsiParser::parse("\x1b[31mred\x1b[0mplain");
+
+        // Last span should be reset to default colors
+        let last_span = lines[0].spans.last().expect("should have spans");
+        assert_eq!(last_span.style.fg, Some(Color::Reset));
+    }
+
+    #[test]
+    fn test_line_wrapping_respects_width() {
+        let mut parser = Parser::new();
+        let mut performer = AnsiParser::with_size(5, 2);
+
+        parser.advance(&mut performer, b"abcdef");
+        performer.flush_text();
+        performer.commit_current_line();
+
+        let line0: String = performer.lines[0]
+            .spans
+            .iter()
+            .map(|s| s.content.as_ref())
+            .collect();
+        let line1: String = performer.lines[1]
+            .spans
+            .iter()
+            .map(|s| s.content.as_ref())
+            .collect();
+
+        assert_eq!(line0, "abcde");
+        assert_eq!(line1, "f");
+    }
+
+    #[test]
+    fn test_alt_screen_switching_restores_main_buffer() {
+        let mut parser = Parser::new();
+        let mut performer = AnsiParser::with_size(10, 2);
+
+        parser.advance(&mut performer, b"main");
+        performer.flush_text();
+        performer.commit_current_line();
+
+        let main_text: String = performer.lines[0]
+            .spans
+            .iter()
+            .map(|s| s.content.as_ref())
+            .collect();
+        assert_eq!(main_text, "main");
+
+        performer.use_alt_screen_buffer();
+        assert!(performer.use_alt_screen);
+        let alt_line: String = performer.lines[0]
+            .spans
+            .iter()
+            .map(|s| s.content.as_ref())
+            .collect();
+        assert!(alt_line.is_empty());
+        assert!(!performer.alt_screen.is_empty());
+
+        parser.advance(&mut performer, b"alt");
+        performer.flush_text();
+        performer.commit_current_line();
+
+        performer.use_main_screen_buffer();
+        assert!(!performer.use_alt_screen);
+
+        let restored_text: String = performer.lines[0]
+            .spans
+            .iter()
+            .map(|s| s.content.as_ref())
+            .collect();
+        assert_eq!(restored_text, "main");
     }
 }

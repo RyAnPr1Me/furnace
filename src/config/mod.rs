@@ -720,6 +720,8 @@ fn detect_default_shell() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use tempfile::tempdir;
 
     #[test]
     fn test_default_config_values() {
@@ -845,5 +847,113 @@ config = {
         // Note: The actual file has platform detection code using os.execute
         // which won't work in a sandboxed test environment.
         // The important thing is the file exists and the structure is valid for real usage.
+    }
+
+    #[test]
+    fn test_hooks_custom_fields() {
+        let lua_config = r#"
+config = {
+    hooks = {
+        custom_keybindings = {
+            ["Ctrl+G"] = "function() return 'ok' end",
+            ["Ctrl+H"] = "function() return 'hey' end",
+        },
+        output_filters = {
+            "function(text) return text .. '!' end",
+            "function(text) return text:upper() end",
+        },
+        custom_widgets = {
+            "function() return 'widget1' end",
+            "function() return 'widget2' end",
+        }
+    }
+}
+"#;
+
+        let lua = Lua::new();
+        lua.load(lua_config).exec().unwrap();
+        let globals = lua.globals();
+        let config_table: Table = globals.get("config").unwrap();
+        let config = Config::from_lua_table(&config_table).unwrap();
+
+        assert_eq!(config.hooks.custom_keybindings.len(), 2);
+        assert_eq!(config.hooks.output_filters.len(), 2);
+        assert_eq!(config.hooks.custom_widgets.len(), 2);
+    }
+
+    #[test]
+    fn test_theme_background_and_cursor_trail_parsing() {
+        let lua_config = r##"
+config = {
+    theme = {
+        background_image = {
+            image_path = "wallpaper.png",
+            color = "#111111",
+            opacity = 2.0,
+            mode = "fit",
+            blur = -1.0,
+        },
+        cursor_trail = {
+            enabled = true,
+            length = 20,
+            color = "#ABCDEF12",
+            fade_mode = "smooth",
+            width = 1.5,
+            animation_speed = 33,
+        }
+    }
+}
+"##;
+
+        let lua = Lua::new();
+        lua.load(lua_config).exec().unwrap();
+        let globals = lua.globals();
+        let config_table: Table = globals.get("config").unwrap();
+        let config = Config::from_lua_table(&config_table).unwrap();
+
+        let bg = config
+            .theme
+            .background_image
+            .expect("background image not parsed");
+        assert_eq!(bg.image_path.as_deref(), Some("wallpaper.png"));
+        assert_eq!(bg.color.as_deref(), Some("#111111"));
+        assert_eq!(bg.mode, "fit");
+        assert_eq!(bg.opacity, 1.0, "opacity should be clamped to 1.0");
+        assert_eq!(bg.blur, 0.0, "blur should not go below 0");
+
+        let trail = config.theme.cursor_trail.expect("cursor trail not parsed");
+        assert!(trail.enabled);
+        assert_eq!(trail.length, 20);
+        assert_eq!(trail.color, "#ABCDEF12");
+        assert_eq!(trail.fade_mode, "smooth");
+        assert_eq!(trail.width, 1.5);
+        assert_eq!(trail.animation_speed, 33);
+    }
+
+    #[test]
+    fn test_load_from_file_missing_config_table_errors() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("invalid.lua");
+        fs::write(&path, "return 42").unwrap();
+
+        let result = Config::load_from_file(&path);
+        assert!(result.is_err(), "loading should fail without config table");
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn test_detect_default_shell_respects_env() {
+        let original = std::env::var("SHELL").ok();
+        std::env::set_var("SHELL", "/bin/zsh");
+
+        let detected = detect_default_shell();
+
+        if let Some(value) = original {
+            std::env::set_var("SHELL", value);
+        } else {
+            std::env::remove_var("SHELL");
+        }
+
+        assert_eq!(detected, "/bin/zsh");
     }
 }

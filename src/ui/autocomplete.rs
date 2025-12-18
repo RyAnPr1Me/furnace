@@ -400,4 +400,41 @@ mod tests {
         assert_eq!(history[2], "cmd2");
         // cmd1 should be removed
     }
+
+    #[test]
+    fn test_clear_history_resets_state() {
+        let mut autocomplete = Autocomplete::new();
+        autocomplete.add_to_history("one".to_string());
+        autocomplete.add_to_history("two".to_string());
+
+        autocomplete.clear_history();
+
+        assert_eq!(autocomplete.history_len(), 0);
+        assert!(autocomplete.get_history().next().is_none());
+        assert!(autocomplete.next_suggestion().is_none());
+
+        // After clearing, suggestions should still come from common commands
+        let suggestions = autocomplete.get_suggestions("git");
+        assert!(suggestions.iter().any(|s| s.starts_with("git")));
+        assert!(autocomplete.next_suggestion().is_some());
+        assert!(autocomplete.previous_suggestion().is_some());
+    }
+
+    #[test]
+    fn test_ignores_empty_or_whitespace_commands() {
+        let mut autocomplete = Autocomplete::new();
+        autocomplete.add_to_history("   ".to_string());
+        autocomplete.add_to_history(String::new());
+
+        assert_eq!(autocomplete.history_len(), 0);
+    }
+
+    #[test]
+    fn test_suggestions_cap_at_limit() {
+        let mut autocomplete = Autocomplete::new();
+
+        // Prefix "c" matches many built-in commands; should cap at 15
+        let suggestions = autocomplete.get_suggestions("c");
+        assert!(suggestions.len() <= 15);
+    }
 }
