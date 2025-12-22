@@ -321,7 +321,8 @@ fn test_config_lua_edge_cases() {
     let path2 = dir.path().join("no_config.lua");
     std::fs::write(&path2, "x = 1").unwrap();
     let result = Config::load_from_file(&path2);
-    assert!(result.is_ok() || result.is_err()); // Either default or error
+    // Either loads with defaults or returns error - both are acceptable
+    let _ = result;
     
     // Syntax error
     let path3 = dir.path().join("syntax_error.lua");
