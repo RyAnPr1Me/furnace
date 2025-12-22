@@ -252,7 +252,8 @@ async fn test_shell_operations() {
 
 #[test]
 fn test_ansi_parser_comprehensive() {
-    assert!(AnsiParser::parse("").len() >= 0);
+    // Empty input returns 1 line (the default line from commit_current_line)
+    assert_eq!(AnsiParser::parse("").len(), 1);
     assert!(AnsiParser::parse("plain text").len() > 0);
     assert!(AnsiParser::parse("\x1b[31mred\x1b[0m").len() > 0);
     assert!(AnsiParser::parse("\x1b[1mbold\x1b[0m").len() > 0);
@@ -280,19 +281,20 @@ fn test_autocomplete_comprehensive() {
     ac.add_to_history("ls -lh".to_string());
     
     let sugg = ac.get_suggestions("ls");
-    assert!(sugg.len() >= 0);
+    assert!(!sugg.is_empty(), "Should have suggestions after adding 'ls' commands");
     
     ac.clear_history();
     let sugg = ac.get_suggestions("l");
-    assert!(sugg.len() >= 0);
+    // After clearing history, common commands like "ls" are still suggested
+    assert!(!sugg.is_empty(), "Should still have common command suggestions after clearing history");
     
     ac.add_to_history("test1".to_string());
     ac.add_to_history("test2".to_string());
     let sugg = ac.get_suggestions("test");
-    assert!(sugg.len() >= 0);
+    assert_eq!(sugg.len(), 2, "Should have exactly 2 suggestions for 'test' prefix");
     
-    let sugg = ac.get_suggestions("nomatch");
-    assert!(sugg.len() >= 0);
+    let sugg = ac.get_suggestions("nomatch_unlikely_xyz_123");
+    assert!(sugg.is_empty(), "Should have no suggestions for non-matching prefix");
 }
 
 // ============================================================================

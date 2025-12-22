@@ -213,8 +213,9 @@ fn test_resource_monitor_edge_cases() {
         assert!(stats.memory_used <= stats.memory_total);
         assert!(stats.process_count > 0);
         
-        // Check disk info
-        assert!(stats.disk_usage.len() >= 0);
+        // Check disk info - disk_usage can be empty on some systems or non-empty
+        // We just verify the structure is accessible without panicking
+        let _ = stats.disk_usage.len();
     }
 }
 
@@ -316,8 +317,9 @@ fn test_theme_manager_load_from_invalid_dir() {
 fn test_config_load_default_error_handling() {
     // Try to load default config
     let result = Config::load_default();
-    // Should either succeed or fail gracefully
-    assert!(result.is_ok() || result.is_err());
+    // Config loading behavior is non-deterministic depending on file system state
+    // Both success and error are acceptable - we just verify no panic occurs
+    let _ = result;
 }
 
 #[test]
