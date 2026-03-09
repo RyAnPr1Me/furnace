@@ -344,7 +344,7 @@ impl ThemeManager {
         let current_idx = names
             .iter()
             .position(|n| n == &current_name)
-            .unwrap_or(names.len().saturating_sub(1));
+            .unwrap_or(0);
         let next_idx = (current_idx + 1) % names.len();
 
         if let Some(theme) = self.available_themes.get(&names[next_idx]) {
@@ -555,6 +555,31 @@ mod tests {
         // Theme names are lowercased
         assert!(manager.switch_theme("Dark")); // Doesn't exist as "Dark"
                                                // Note: switch_theme uses lowercase lookup
+    }
+
+    #[test]
+    fn test_next_theme_fallback_consistency() {
+        let mut manager = ThemeManager::new();
+        let names = manager.available_theme_names();
+        // Switch to a non-existent theme name so fallback triggers
+        manager.current_theme.name = "nonexistent_theme_xyz".to_string();
+        manager.next_theme();
+        let after_next = manager.current_theme.name.clone();
+
+        let mut manager2 = ThemeManager::new();
+        manager2.current_theme.name = "nonexistent_theme_xyz".to_string();
+        manager2.prev_theme();
+        let after_prev = manager2.current_theme.name.clone();
+
+        // Both should produce valid theme names from the available themes
+        assert!(
+            names.contains(&after_next.to_lowercase()),
+            "next_theme fallback should produce a valid theme"
+        );
+        assert!(
+            names.contains(&after_prev.to_lowercase()),
+            "prev_theme fallback should produce a valid theme"
+        );
     }
 
     #[test]

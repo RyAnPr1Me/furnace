@@ -320,7 +320,7 @@ impl TerminalConfig {
         let max_history = table
             .get::<_, Option<usize>>("max_history")?
             .unwrap_or(10000)
-            .min(1_000_000);
+            .clamp(1, 1_000_000);
 
         let scrollback_lines = table
             .get::<_, Option<usize>>("scrollback_lines")?
@@ -1056,5 +1056,22 @@ config = {
         let config = Config::load_from_file(config_path.to_str().unwrap()).unwrap();
         // scrollback_lines 0 should be clamped to 1
         assert_eq!(config.terminal.scrollback_lines, 1);
+    }
+
+    #[test]
+    fn test_max_history_clamped_to_minimum() {
+        let lua_config = r#"
+config = {
+    terminal = {
+        max_history = 0
+    }
+}
+"#;
+        let dir = tempfile::tempdir().unwrap();
+        let config_path = dir.path().join("test_config.lua");
+        std::fs::write(&config_path, lua_config).unwrap();
+        let config = Config::load_from_file(config_path.to_str().unwrap()).unwrap();
+        // max_history 0 should be clamped to 1
+        assert_eq!(config.terminal.max_history, 1);
     }
 }

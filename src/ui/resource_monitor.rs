@@ -174,7 +174,7 @@ impl ResourceMonitor {
     /// Format bytes to human-readable format with const units
     #[must_use]
     pub fn format_bytes(bytes: u64) -> String {
-        const UNITS: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
+        const UNITS: [&str; 6] = ["B", "KB", "MB", "GB", "TB", "PB"];
         const DIVISOR: f64 = 1024.0;
 
         #[allow(clippy::cast_precision_loss)]
@@ -240,6 +240,15 @@ mod tests {
         // Test values that would exceed TB
         let large = 5u64 * 1024 * 1024 * 1024 * 1024;
         assert_eq!(ResourceMonitor::format_bytes(large), "5.00 TB");
+    }
+
+    #[test]
+    fn test_format_bytes_petabytes() {
+        let pb = 1024u64 * 1024 * 1024 * 1024 * 1024;
+        assert_eq!(ResourceMonitor::format_bytes(pb), "1.00 PB");
+
+        let two_pb = 2 * 1024u64 * 1024 * 1024 * 1024 * 1024;
+        assert_eq!(ResourceMonitor::format_bytes(two_pb), "2.00 PB");
     }
 
     #[test]

@@ -1418,7 +1418,7 @@ impl Terminal {
         }
 
         // Fill remaining cols with background
-        for col in full_status.len()..cols {
+        for col in full_status.chars().count()..cols {
             let idx = status_row * cols + col;
             if idx < cells.len() {
                 cells[idx].char_code = ' ' as u32;
@@ -2965,17 +2965,8 @@ impl Terminal {
                     let output = String::from_utf8_lossy(buf);
                     let truncated = if output.len() > 50_000 {
                         // Find the nearest valid UTF-8 char boundary at or after the cut point
-                        // In valid UTF-8, this shifts at most 3 bytes forward
-                        let mut start = output.len() - 50_000;
-                        let max_shift = start + 4; // UTF-8 chars are at most 4 bytes
-                        while !output.is_char_boundary(start) && start < max_shift {
-                            start += 1;
-                        }
-                        if start <= output.len() {
-                            output[start..].to_string()
-                        } else {
-                            output.to_string()
-                        }
+                        let start = output.ceil_char_boundary(output.len() - 50_000);
+                        output[start..].to_string()
                     } else {
                         output.to_string()
                     };
@@ -3141,8 +3132,8 @@ impl Terminal {
         if output.contains("\x1b]133;") {
             if let Some(start) = output.find("\x1b]133;C;") {
                 if let Some(end) = output[start..].find('\x07') {
-                    // OSC 133;C; prefix is 9 characters: ESC ] 1 3 3 ; C ;
-                    const OSC133C_PREFIX_LEN: usize = 9;
+                    // OSC 133;C; prefix is 8 bytes: ESC ] 1 3 3 ; C ;
+                    const OSC133C_PREFIX_LEN: usize = 8;
                     // Ensure we have content after the prefix (end is relative to start)
                     if end > OSC133C_PREFIX_LEN && start + end <= output.len() {
                         let cmd = &output[start + OSC133C_PREFIX_LEN..start + end];
@@ -3155,8 +3146,8 @@ impl Terminal {
             // Format: ESC ] 133 ; D ; exit_code BEL
             if let Some(start) = output.find("\x1b]133;D;") {
                 if let Some(end) = output[start..].find('\x07') {
-                    // OSC 133;D; prefix is 9 characters: ESC ] 1 3 3 ; D ;
-                    const OSC133D_PREFIX_LEN: usize = 9;
+                    // OSC 133;D; prefix is 8 bytes: ESC ] 1 3 3 ; D ;
+                    const OSC133D_PREFIX_LEN: usize = 8;
                     // Ensure we have content after the prefix (end is relative to start)
                     if end > OSC133D_PREFIX_LEN && start + end <= output.len() {
                         let exit_code_str = &output[start + OSC133D_PREFIX_LEN..start + end];
@@ -3950,5 +3941,60 @@ mod tests {
             String::from_utf8_lossy(&terminal.output_buffers[0]),
             "hello world"
         );
+    }
+
+    #[test]
+    fn test_osc133_prefix_lengths() {
+        // Verify the OSC escape sequence prefix lengths are correct.
+        // These are critical for shell integration (command tracking, exit codes).
+        let osc133c = "\x1b]133;C;";
+        let osc133d = "\x1b]133;D;";
+        let osc7 = "\x1b]7;";
+
+        assert_eq!(osc133c.len(), 8, "OSC 133;C; prefix should be 8 bytes");
+        assert_eq!(osc133d.len(), 8, "OSC 133;D; prefix should be 8 bytes");
+        assert_eq!(osc7.len(), 4, "OSC 7; prefix should be 4 bytes");
+
+        // Verify that slicing with correct prefix lengths extracts the right content
+        let cmd_seq = "\x1b]133;C;ls\x07";
+        let start = cmd_seq.find("\x1b]133;C;").unwrap();
+        let end = cmd_seq[start..].find('\x07').unwrap();
+        let cmd = &cmd_seq[start + 8..start + end];
+        assert_eq!(cmd, "ls", "Should extract full command 'ls'");
+
+        let exit_seq = "\x1b]133;D;0\x07";
+        let start = exit_seq.find("\x1b]133;D;").unwrap();
+        let end = exit_seq[start..].find('\x07').unwrap();
+        let exit_code = &exit_seq[start + 8..start + end];
+        assert_eq!(exit_code, "0", "Should extract exit code '0'");
+
+        // Test with multi-digit exit code
+        let exit_seq2 = "\x1b]133;D;127\x07";
+        let start = exit_seq2.find("\x1b]133;D;").unwrap();
+        let end = exit_seq2[start..].find('\x07').unwrap();
+        let exit_code = &exit_seq2[start + 8..start + end];
+        assert_eq!(exit_code, "127", "Should extract full exit code '127'");
+    }
+
+    #[test]
+    fn test_utf8_truncation_with_ceil_char_boundary() {
+        // Verify that ceil_char_boundary-based truncation works correctly
+        let multibyte = "日本語テスト"; // 6 chars, 18 bytes
+        let repeated = multibyte.repeat(10_000); // ~180,000 bytes
+
+        // Simulate the truncation logic from try_save_session
+        let output = &repeated;
+        let truncated = if output.len() > 50_000 {
+            let start = output.ceil_char_boundary(output.len() - 50_000);
+            output[start..].to_string()
+        } else {
+            output.to_string()
+        };
+
+        // Should not panic, and should be valid UTF-8
+        assert!(!truncated.is_empty());
+        assert!(truncated.len() <= 50_003); // max 3 extra bytes due to UTF-8 boundary shift (4-byte chars)
+        // Verify it's valid UTF-8 by iterating chars
+        assert!(truncated.chars().count() > 0);
     }
 }
