@@ -1418,7 +1418,7 @@ impl Terminal {
         }
 
         // Fill remaining cols with background
-        for col in full_status.len()..cols {
+        for col in full_status.chars().count()..cols {
             let idx = status_row * cols + col;
             if idx < cells.len() {
                 cells[idx].char_code = ' ' as u32;
