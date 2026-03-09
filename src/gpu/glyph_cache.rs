@@ -75,13 +75,14 @@ impl GlyphCache {
 
     /// Load font from system or embedded
     ///
-    /// BUG FIX #4: Actually load fonts for rendering
+    /// Tries the requested font first, then falls back to common monospace fonts
+    /// available on various operating systems to ensure text is always rendered.
     fn load_font(font_family: &str) -> Option<fontdue::Font> {
-        // Try to load from common system font paths
+        // Try the requested font family first
         let font_paths = Self::get_font_paths(font_family);
 
-        for path in font_paths {
-            if let Ok(data) = std::fs::read(&path) {
+        for path in &font_paths {
+            if let Ok(data) = std::fs::read(path) {
                 if let Ok(font) = fontdue::Font::from_bytes(data, fontdue::FontSettings::default())
                 {
                     tracing::info!("Loaded font from: {}", path);
@@ -90,26 +91,89 @@ impl GlyphCache {
             }
         }
 
-        // Fallback to embedded font data (a minimal monospace font)
-        // In production, include a default monospace font like JetBrains Mono
-        tracing::warn!("Could not load font '{}', using fallback", font_family);
+        // Try common fallback monospace fonts on all platforms
+        let fallback_families = [
+            "DejaVuSansMono",
+            "DejaVu Sans Mono",
+            "LiberationMono",
+            "Liberation Mono",
+            "NotoSansMono",
+            "Noto Sans Mono",
+            "UbuntuMono",
+            "Ubuntu Mono",
+            "DroidSansMono",
+            "Consolas",
+            "Courier New",
+            "FreeMono",
+            "Menlo",
+            "Monaco",
+        ];
+
+        for fallback in &fallback_families {
+            if *fallback == font_family {
+                continue; // Already tried this one
+            }
+            for path in &Self::get_font_paths(fallback) {
+                if let Ok(data) = std::fs::read(path) {
+                    if let Ok(font) =
+                        fontdue::Font::from_bytes(data, fontdue::FontSettings::default())
+                    {
+                        tracing::info!(
+                            "Loaded fallback font '{}' from: {}",
+                            fallback,
+                            path
+                        );
+                        return Some(font);
+                    }
+                }
+            }
+        }
+
+        tracing::warn!(
+            "Could not load font '{}' or any fallback, using placeholder glyphs",
+            font_family
+        );
         None
     }
 
     /// Get common font file paths based on font name (platform-specific)
+    ///
+    /// Generates paths using multiple naming conventions (with spaces, without,
+    /// with -Regular suffix, lowercase) to maximize the chance of finding the font.
     fn get_font_paths(font_family: &str) -> Vec<String> {
         let mut paths = Vec::new();
 
+        // Generate name variants: "JetBrains Mono" -> "JetBrainsMono", "jetbrainsmono"
+        let no_spaces: String = font_family.split_whitespace().collect();
+        let lower = font_family.to_lowercase();
+        let lower_no_spaces: String = lower.split_whitespace().collect();
+        let hyphenated = font_family.replace(' ', "-");
+
+        // Collect all name variants (deduplicated via order)
+        let variants = [
+            font_family.to_string(),
+            no_spaces.clone(),
+            lower.clone(),
+            lower_no_spaces.clone(),
+            hyphenated.clone(),
+        ];
+
+        // Suffixes to try for each variant
+        let suffixes = ["", "-Regular", "-regular"];
+
         #[cfg(windows)]
         {
-            paths.push(format!("C:\\Windows\\Fonts\\{}.ttf", font_family));
-            paths.push(format!("C:\\Windows\\Fonts\\{}.otf", font_family));
+            for variant in &variants {
+                for suffix in &suffixes {
+                    paths.push(format!("C:\\Windows\\Fonts\\{}{}.ttf", variant, suffix));
+                    paths.push(format!("C:\\Windows\\Fonts\\{}{}.otf", variant, suffix));
+                }
+            }
 
             // Common monospace fonts on Windows
-            if font_family.contains("Mono") || font_family.contains("Consolas") {
-                paths.push("C:\\Windows\\Fonts\\consola.ttf".to_string());
-                paths.push("C:\\Windows\\Fonts\\cour.ttf".to_string());
-            }
+            paths.push("C:\\Windows\\Fonts\\consola.ttf".to_string());
+            paths.push("C:\\Windows\\Fonts\\cour.ttf".to_string());
+            paths.push("C:\\Windows\\Fonts\\lucon.ttf".to_string());
 
             // User fonts directory on Windows
             if let Some(home) = dirs::home_dir() {
@@ -119,53 +183,117 @@ impl GlyphCache {
                     .join("Microsoft")
                     .join("Windows")
                     .join("Fonts");
-                paths.push(format!("{}\\{}.ttf", local_fonts.display(), font_family));
-                paths.push(format!("{}\\{}.otf", local_fonts.display(), font_family));
+                for variant in &variants {
+                    for suffix in &suffixes {
+                        paths.push(format!(
+                            "{}\\{}{}.ttf",
+                            local_fonts.display(),
+                            variant,
+                            suffix
+                        ));
+                    }
+                }
             }
         }
 
         #[cfg(target_os = "linux")]
         {
-            paths.push(format!(
-                "/usr/share/fonts/truetype/{}/{}.ttf",
-                font_family.to_lowercase(),
-                font_family
-            ));
-            paths.push(format!("/usr/share/fonts/TTF/{}.ttf", font_family));
-            paths.push(format!(
-                "/usr/share/fonts/truetype/{}.ttf",
-                font_family.to_lowercase()
-            ));
+            // Common Linux font directories
+            let font_dirs = [
+                "/usr/share/fonts/truetype",
+                "/usr/share/fonts/TTF",
+                "/usr/share/fonts/opentype",
+                "/usr/share/fonts/OTF",
+                "/usr/share/fonts",
+                "/usr/local/share/fonts",
+            ];
+
+            for dir in &font_dirs {
+                for variant in &variants {
+                    for suffix in &suffixes {
+                        // Direct in directory
+                        paths.push(format!("{}/{}{}.ttf", dir, variant, suffix));
+                        paths.push(format!("{}/{}{}.otf", dir, variant, suffix));
+                        // In subdirectory named after the font
+                        paths.push(format!("{}/{}/{}{}.ttf", dir, lower_no_spaces, variant, suffix));
+                        paths.push(format!("{}/{}/{}{}.ttf", dir, lower, variant, suffix));
+                        paths.push(format!("{}/{}/{}{}.ttf", dir, hyphenated.to_lowercase(), variant, suffix));
+                    }
+                }
+            }
+
+            // Debian/Ubuntu specific paths for common fonts
+            paths.push("/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf".to_string());
+            paths.push("/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf".to_string());
+            paths.push("/usr/share/fonts/truetype/noto/NotoSansMono-Regular.ttf".to_string());
+            paths.push("/usr/share/fonts/truetype/ubuntu/UbuntuMono-R.ttf".to_string());
+            paths.push("/usr/share/fonts/truetype/freefont/FreeMono.ttf".to_string());
+            paths.push("/usr/share/fonts/truetype/droid/DroidSansMono.ttf".to_string());
+
+            // Arch/Fedora/openSUSE paths
+            paths.push("/usr/share/fonts/TTF/DejaVuSansMono.ttf".to_string());
+            paths.push("/usr/share/fonts/liberation-mono/LiberationMono-Regular.ttf".to_string());
+            paths.push("/usr/share/fonts/google-noto/NotoSansMono-Regular.ttf".to_string());
+            paths.push("/usr/share/fonts/noto/NotoSansMono-Regular.ttf".to_string());
 
             // User fonts directory on Linux
             if let Some(home) = dirs::home_dir() {
-                paths.push(format!(
-                    "{}/.local/share/fonts/{}.ttf",
-                    home.display(),
-                    font_family
-                ));
+                for variant in &variants {
+                    for suffix in &suffixes {
+                        paths.push(format!(
+                            "{}/.local/share/fonts/{}{}.ttf",
+                            home.display(),
+                            variant,
+                            suffix
+                        ));
+                    }
+                }
             }
         }
 
         #[cfg(target_os = "macos")]
         {
-            paths.push(format!("/System/Library/Fonts/{}.ttf", font_family));
-            paths.push(format!("/System/Library/Fonts/{}.otf", font_family));
-            paths.push(format!("/Library/Fonts/{}.ttf", font_family));
-            paths.push(format!("/Library/Fonts/{}.otf", font_family));
+            let mac_dirs = [
+                "/System/Library/Fonts",
+                "/Library/Fonts",
+                "/System/Library/Fonts/Supplemental",
+            ];
+
+            for dir in &mac_dirs {
+                for variant in &variants {
+                    for suffix in &suffixes {
+                        paths.push(format!("{}/{}{}.ttf", dir, variant, suffix));
+                        paths.push(format!("{}/{}{}.otf", dir, variant, suffix));
+                        paths.push(format!("{}/{}{}.ttc", dir, variant, suffix));
+                    }
+                }
+            }
+
+            // macOS built-in monospace fonts
+            paths.push("/System/Library/Fonts/Menlo.ttc".to_string());
+            paths.push("/System/Library/Fonts/Monaco.ttf".to_string());
+            paths.push("/System/Library/Fonts/Courier.ttc".to_string());
+            paths.push("/System/Library/Fonts/SFMono-Regular.otf".to_string());
+            paths.push("/Library/Fonts/Courier New.ttf".to_string());
 
             // User fonts directory on macOS
             if let Some(home) = dirs::home_dir() {
-                paths.push(format!(
-                    "{}/Library/Fonts/{}.ttf",
-                    home.display(),
-                    font_family
-                ));
-                paths.push(format!(
-                    "{}/Library/Fonts/{}.otf",
-                    home.display(),
-                    font_family
-                ));
+                for variant in &variants {
+                    for suffix in &suffixes {
+                        paths.push(format!(
+                            "{}/Library/Fonts/{}{}.ttf",
+                            home.display(),
+                            variant,
+                            suffix
+                        ));
+                        paths.push(format!(
+                            "{}/Library/Fonts/{}{}.otf",
+                            home.display(),
+                            variant,
+                            suffix
+                        ));
+                    }
+                }
             }
         }
 
@@ -208,8 +336,23 @@ impl GlyphCache {
         let width = metrics.width as u32;
         let height = metrics.height as u32;
 
-        // Skip if glyph is too large or empty
-        if width == 0 || height == 0 || width > 256 || height > 256 {
+        // For zero-size glyphs (e.g., space), register them with an empty UV region
+        // so they are still recognized as cached and render as blank.
+        if width == 0 || height == 0 {
+            self.glyph_map.insert(
+                code,
+                GlyphInfo {
+                    uv: [0.0, 0.0, 0.0, 0.0],
+                    advance: metrics.advance_width,
+                    bearing: [metrics.xmin as f32, metrics.ymin as f32],
+                    size: [0.0, 0.0],
+                },
+            );
+            return;
+        }
+
+        // Skip if glyph is too large
+        if width > 256 || height > 256 {
             return;
         }
 
@@ -264,14 +407,17 @@ impl GlyphCache {
         self.row_height = self.row_height.max(height);
     }
 
-    /// Fallback: pre-cache ASCII with placeholder rectangles
+    /// Fallback: pre-cache ASCII with solid placeholder rectangles
+    ///
+    /// When no font can be loaded, fill atlas regions with solid white pixels
+    /// so that text is visible as filled blocks rather than invisible.
     fn precache_ascii_placeholders(&mut self) {
         // BUG FIX #8: Use consistent font metric ratios
         const CELL_WIDTH_RATIO: f32 = 0.6;
         const CELL_HEIGHT_RATIO: f32 = 1.2;
         let glyph_width = (self.font_size * CELL_WIDTH_RATIO) as u32;
         let glyph_height = (self.font_size * CELL_HEIGHT_RATIO) as u32;
-        let atlas_size = self.atlas_size as f32;
+        let atlas_size_f = self.atlas_size as f32;
 
         // Cache printable ASCII (32-126)
         for code in 32u32..=126 {
@@ -282,11 +428,31 @@ impl GlyphCache {
                 self.row_height = 0;
             }
 
+            // Check if we have vertical space
+            if self.cursor_y + glyph_height > self.atlas_size {
+                break;
+            }
+
+            // Write solid white pixels into the atlas region so the glyph is visible.
+            // Space (code 32) is left empty so backgrounds render correctly.
+            if code != 32 {
+                for y in 0..glyph_height {
+                    for x in 0..glyph_width {
+                        let dst_x = self.cursor_x + x;
+                        let dst_y = self.cursor_y + y;
+                        let dst_idx = (dst_y * self.atlas_size + dst_x) as usize;
+                        if dst_idx < self.atlas_data.len() {
+                            self.atlas_data[dst_idx] = 255;
+                        }
+                    }
+                }
+            }
+
             let uv = [
-                self.cursor_x as f32 / atlas_size,
-                self.cursor_y as f32 / atlas_size,
-                glyph_width as f32 / atlas_size,
-                glyph_height as f32 / atlas_size,
+                self.cursor_x as f32 / atlas_size_f,
+                self.cursor_y as f32 / atlas_size_f,
+                glyph_width as f32 / atlas_size_f,
+                glyph_height as f32 / atlas_size_f,
             ];
 
             self.glyph_map.insert(
@@ -543,5 +709,30 @@ mod tests {
 
         // Cache should still have ASCII characters
         assert!(cache.len() >= 95);
+    }
+
+    #[test]
+    fn test_placeholder_atlas_has_pixel_data() {
+        // Use a font name that definitely won't exist to force placeholders
+        let cache = GlyphCache::new(14.0, "NonExistentFontXYZ123");
+
+        // ASCII characters should be cached
+        assert!(cache.len() >= 95);
+
+        // The atlas should have non-zero pixel data for visible characters
+        let atlas = cache.atlas_data();
+        let has_nonzero = atlas.iter().any(|&b| b != 0);
+        assert!(
+            has_nonzero,
+            "Placeholder glyph atlas must have non-zero pixel data for text to be visible"
+        );
+
+        // Space (32) should have a glyph entry
+        assert!(cache.get_glyph(' ' as u32).is_some());
+
+        // 'A' (65) should have a glyph entry with non-zero UV dimensions
+        let a_glyph = cache.get_glyph('A' as u32).expect("'A' should be cached");
+        assert!(a_glyph.uv[2] > 0.0, "Glyph width should be non-zero");
+        assert!(a_glyph.uv[3] > 0.0, "Glyph height should be non-zero");
     }
 }
