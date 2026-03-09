@@ -3769,4 +3769,109 @@ mod tests {
 
         assert!(terminal.is_split_pane_enabled());
     }
+
+    #[test]
+    fn test_search_mode_toggle() {
+        let config = Config::default();
+        let mut terminal = Terminal::new(config).unwrap();
+
+        assert!(!terminal.search_mode);
+        terminal.toggle_search_mode();
+        assert!(terminal.search_mode);
+        assert!(terminal.search_query.is_empty());
+        assert!(terminal.search_results.is_empty());
+
+        terminal.toggle_search_mode();
+        assert!(!terminal.search_mode);
+    }
+
+    #[test]
+    fn test_execute_search_empty_query() {
+        let config = Config::default();
+        let mut terminal = Terminal::new(config).unwrap();
+
+        terminal.search_query.clear();
+        terminal.execute_search();
+        assert!(terminal.search_results.is_empty());
+    }
+
+    #[test]
+    fn test_execute_search_with_matches() {
+        let config = Config::default();
+        let mut terminal = Terminal::new(config).unwrap();
+
+        // Terminal starts with no sessions/buffers, so push one
+        terminal.output_buffers.push(b"hello world\nfoo bar\nhello again\n".to_vec());
+        terminal.search_query = "hello".to_string();
+        terminal.execute_search();
+
+        assert_eq!(terminal.search_results.len(), 2);
+        assert_eq!(terminal.search_results[0], 0); // First line
+        assert_eq!(terminal.search_results[1], 2); // Third line
+    }
+
+    #[test]
+    fn test_execute_search_case_insensitive() {
+        let config = Config::default();
+        let mut terminal = Terminal::new(config).unwrap();
+
+        terminal.output_buffers.push(b"Hello World\nHELLO AGAIN\nhello small\n".to_vec());
+        terminal.search_query = "hello".to_string();
+        terminal.execute_search();
+
+        assert_eq!(terminal.search_results.len(), 3);
+    }
+
+    #[test]
+    fn test_execute_search_no_matches() {
+        let config = Config::default();
+        let mut terminal = Terminal::new(config).unwrap();
+
+        terminal.output_buffers.push(b"hello world\nfoo bar\n".to_vec());
+        terminal.search_query = "zzz".to_string();
+        terminal.execute_search();
+
+        assert!(terminal.search_results.is_empty());
+    }
+
+    #[test]
+    fn test_search_navigation() {
+        let config = Config::default();
+        let mut terminal = Terminal::new(config).unwrap();
+
+        terminal.output_buffers.push(b"match1\nno\nmatch2\nno\nmatch3\n".to_vec());
+        terminal.search_query = "match".to_string();
+        terminal.execute_search();
+        assert_eq!(terminal.search_results.len(), 3);
+        assert_eq!(terminal.current_search_result, 0);
+
+        // Navigate forward
+        terminal.search_next();
+        assert_eq!(terminal.current_search_result, 1);
+
+        terminal.search_next();
+        assert_eq!(terminal.current_search_result, 2);
+
+        // Wrap around
+        terminal.search_next();
+        assert_eq!(terminal.current_search_result, 0);
+
+        // Navigate backward (wraps to end)
+        terminal.search_prev();
+        assert_eq!(terminal.current_search_result, 2);
+
+        terminal.search_prev();
+        assert_eq!(terminal.current_search_result, 1);
+    }
+
+    #[test]
+    fn test_search_navigation_empty_results() {
+        let config = Config::default();
+        let mut terminal = Terminal::new(config).unwrap();
+
+        // Should not panic with empty results
+        terminal.search_next();
+        terminal.search_prev();
+        assert_eq!(terminal.current_search_result, 0);
+    }
 }
