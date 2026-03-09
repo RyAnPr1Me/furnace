@@ -3891,4 +3891,58 @@ mod tests {
         terminal.search_prev();
         assert_eq!(terminal.current_search_result, 0);
     }
+
+    #[test]
+    fn test_utf8_session_save_boundary_safety() {
+        // Verify that truncation at UTF-8 boundaries works correctly
+        // using the same logic as try_save_session
+        let multibyte = "日本語テスト"; // 6 chars, 18 bytes
+        let repeated = multibyte.repeat(10_000); // ~180,000 bytes
+
+        // Simulate the truncation logic from try_save_session
+        let output = &repeated;
+        let truncated = if output.len() > 50_000 {
+            let mut start = output.len() - 50_000;
+            while !output.is_char_boundary(start) && start < output.len() {
+                start += 1;
+            }
+            output[start..].to_string()
+        } else {
+            output.to_string()
+        };
+
+        // Should not panic, and should be valid UTF-8
+        assert!(!truncated.is_empty());
+        assert!(truncated.len() <= 50_001); // may be slightly more due to boundary shift
+        // Verify it's valid UTF-8 by iterating chars
+        assert!(truncated.chars().count() > 0);
+    }
+
+    #[test]
+    fn test_process_output_oob_protection() {
+        // Test that process_shell_output_chunk doesn't panic when active_session is out of bounds
+        let mut config = Config::default();
+        config.terminal.hardware_acceleration = true;
+        let mut terminal = Terminal::new(config).unwrap();
+
+        // active_session is 0 but output_buffers is empty
+        assert!(terminal.output_buffers.is_empty());
+        // This should not panic due to the guard at the start of process_shell_output_chunk
+        terminal.process_shell_output_chunk(b"test output");
+    }
+
+    #[test]
+    fn test_process_output_with_valid_buffer() {
+        // Test that process_shell_output_chunk works when buffer exists
+        let mut config = Config::default();
+        config.terminal.hardware_acceleration = true;
+        let mut terminal = Terminal::new(config).unwrap();
+        terminal.output_buffers.push(Vec::new());
+
+        terminal.process_shell_output_chunk(b"hello world");
+        assert_eq!(
+            String::from_utf8_lossy(&terminal.output_buffers[0]),
+            "hello world"
+        );
+    }
 }

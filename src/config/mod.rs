@@ -988,4 +988,72 @@ config = {
 
         assert_eq!(detected, "/bin/zsh");
     }
+
+    #[test]
+    fn test_config_validation_font_size_clamped() {
+        let lua_config = r#"
+config = {
+    terminal = {
+        font_size = 0
+    }
+}
+"#;
+        let dir = tempfile::tempdir().unwrap();
+        let config_path = dir.path().join("test_config.lua");
+        std::fs::write(&config_path, lua_config).unwrap();
+        let config = Config::load_from_file(config_path.to_str().unwrap()).unwrap();
+        // font_size 0 should be clamped to 1
+        assert_eq!(config.terminal.font_size, 1);
+    }
+
+    #[test]
+    fn test_config_validation_font_size_max() {
+        let lua_config = r#"
+config = {
+    terminal = {
+        font_size = 500
+    }
+}
+"#;
+        let dir = tempfile::tempdir().unwrap();
+        let config_path = dir.path().join("test_config.lua");
+        std::fs::write(&config_path, lua_config).unwrap();
+        let config = Config::load_from_file(config_path.to_str().unwrap()).unwrap();
+        // font_size 500 should be clamped to 200
+        assert_eq!(config.terminal.font_size, 200);
+    }
+
+    #[test]
+    fn test_config_validation_invalid_cursor_style() {
+        let lua_config = r#"
+config = {
+    terminal = {
+        cursor_style = "invalid"
+    }
+}
+"#;
+        let dir = tempfile::tempdir().unwrap();
+        let config_path = dir.path().join("test_config.lua");
+        std::fs::write(&config_path, lua_config).unwrap();
+        let config = Config::load_from_file(config_path.to_str().unwrap()).unwrap();
+        // Invalid cursor_style should fall back to "block"
+        assert_eq!(config.terminal.cursor_style, "block");
+    }
+
+    #[test]
+    fn test_config_validation_scrollback_clamped() {
+        let lua_config = r#"
+config = {
+    terminal = {
+        scrollback_lines = 0
+    }
+}
+"#;
+        let dir = tempfile::tempdir().unwrap();
+        let config_path = dir.path().join("test_config.lua");
+        std::fs::write(&config_path, lua_config).unwrap();
+        let config = Config::load_from_file(config_path.to_str().unwrap()).unwrap();
+        // scrollback_lines 0 should be clamped to 1
+        assert_eq!(config.terminal.scrollback_lines, 1);
+    }
 }
