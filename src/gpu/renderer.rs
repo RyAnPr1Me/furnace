@@ -81,6 +81,8 @@ pub struct GpuRenderer {
     index_buffer: wgpu::Buffer,
     /// Instance buffer for cells
     instance_buffer: wgpu::Buffer,
+    /// Maximum number of cell instances the current buffer can hold
+    instance_buffer_capacity: usize,
     /// Uniform buffer for view/projection
     uniform_buffer: wgpu::Buffer,
     /// Bind group for uniforms
@@ -109,6 +111,8 @@ pub struct GpuRenderer {
     stats: GpuStats,
     /// Glyph cache
     glyph_cache: super::glyph_cache::GlyphCache,
+    /// Surface format used to compile render pipelines
+    surface_format: wgpu::TextureFormat,
 }
 
 /// Vertex for rendering quads
@@ -554,6 +558,7 @@ impl GpuRenderer {
             vertex_buffer,
             index_buffer,
             instance_buffer,
+            instance_buffer_capacity: max_cells,
             uniform_buffer,
             uniform_bind_group,
             glyph_atlas,
@@ -568,6 +573,7 @@ impl GpuRenderer {
             config,
             stats: GpuStats::default(),
             glyph_cache,
+            surface_format,
         })
     }
 
@@ -687,9 +693,23 @@ impl GpuRenderer {
             .or_else(|| caps.formats.first().copied())
             .unwrap_or(wgpu::TextureFormat::Bgra8UnormSrgb);
 
+        // Warn if the surface format doesn't match the format used to compile
+        // the render pipelines. A mismatch causes wgpu validation errors and
+        // results in nothing being rendered.
+        if surface_format != self.surface_format {
+            tracing::warn!(
+                "Surface format {:?} differs from pipeline format {:?}; \
+                 rendering may not work correctly. Falling back to pipeline format.",
+                surface_format,
+                self.surface_format
+            );
+        }
+
+        // Always use the pipeline-compatible format for the surface configuration
+        // to avoid format mismatches that cause blank rendering.
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format: surface_format,
+            format: self.surface_format,
             width,
             height,
             present_mode: if self.config.vsync {
@@ -782,6 +802,25 @@ impl GpuRenderer {
                 }
             })
             .collect();
+
+        // Grow instance buffer if current capacity is too small for the cell count.
+        // This prevents wgpu validation errors when the terminal is resized to a
+        // large window on high-resolution displays.
+        if instances.len() > self.instance_buffer_capacity {
+            let new_capacity = instances.len().next_power_of_two();
+            self.instance_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("Instance Buffer"),
+                size: (new_capacity * std::mem::size_of::<CellInstance>()) as u64,
+                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+            self.instance_buffer_capacity = new_capacity;
+            tracing::info!(
+                "Grew instance buffer to {} cells (terminal has {})",
+                new_capacity,
+                instances.len()
+            );
+        }
 
         // Update instance buffer
         self.queue
