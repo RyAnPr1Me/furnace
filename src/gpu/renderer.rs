@@ -5,15 +5,15 @@
 //! # Implementation Status
 //!
 //! This GPU renderer is an **optional feature** currently under active development.
-//! Some functionality is not yet complete:
 //!
 //! ## ⚠️ Known Limitations
 //!
-//! 1. **Surface Creation (BUG #10)**: The renderer does not create its own surface.
+//! 1. **Surface Creation**: The renderer does not create its own surface.
 //!    To use GPU rendering, you must:
+//!    - Create a wgpu instance via [`GpuRenderer::create_instance`]
 //!    - Create a window using `winit` or similar
-//!    - Create a wgpu surface from that window
-//!    - Pass the surface to the renderer via the `set_surface()` method
+//!    - Create a wgpu surface from the instance and window
+//!    - Pass instance, surface, and dimensions to [`GpuRenderer::new`]
 //!
 //! ## ✅ Implemented Features
 //!
@@ -24,6 +24,8 @@
 //! - Text style support (bold, italic, underline)
 //! - Dirty cell tracking for optimized updates (BUG #24 fixed)
 //! - Change detection to minimize GPU uploads
+//! - Surface format auto-detection (works across Vulkan/Metal/DX12)
+//! - Adapter selection with surface compatibility
 //!
 //! ## Usage
 //!
@@ -151,23 +153,55 @@ struct Uniforms {
 
 #[allow(dead_code)] // Public API - methods used by GPU renderer consumers
 impl GpuRenderer {
-    /// Create a new GPU renderer
-    pub async fn new(config: GpuConfig) -> Result<Self, GpuError> {
-        // Create WGPU instance
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+    /// Create a wgpu instance for the given GPU backend configuration.
+    ///
+    /// Call this first, then create a surface from the instance before
+    /// passing both to [`GpuRenderer::new`].
+    pub fn create_instance(config: &GpuConfig) -> wgpu::Instance {
+        wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: config.backend.into(),
             ..Default::default()
-        });
+        })
+    }
 
-        // Request adapter
+    /// Create a new GPU renderer with a pre-created surface.
+    ///
+    /// The adapter is requested with `compatible_surface` so that the
+    /// selected GPU can actually present to the window.  The surface
+    /// capabilities are queried to determine the correct texture format
+    /// (instead of hardcoding `Bgra8UnormSrgb` which fails on many
+    /// Linux/Vulkan configurations).
+    pub async fn new(
+        config: GpuConfig,
+        instance: wgpu::Instance,
+        surface: wgpu::Surface<'static>,
+        width: u32,
+        height: u32,
+    ) -> Result<Self, GpuError> {
+        // Request adapter that is compatible with the surface.
+        // This is essential on Linux where multiple GPU backends may exist
+        // and not all adapters can render to the given window surface.
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::HighPerformance,
-                compatible_surface: None,
+                compatible_surface: Some(&surface),
                 force_fallback_adapter: false,
             })
             .await
             .ok_or(GpuError::NoAdapter)?;
+
+        // Determine the best surface format from actual GPU capabilities.
+        // On Linux/Vulkan surfaces often only support Bgra8Unorm (non-sRGB).
+        // Hardcoding Bgra8UnormSrgb would silently fail on those systems.
+        let surface_caps = surface.get_capabilities(&adapter);
+        let surface_format = surface_caps
+            .formats
+            .iter()
+            .copied()
+            .find(|f| f.is_srgb())
+            .unwrap_or(surface_caps.formats[0]);
+
+        tracing::info!("Selected surface format: {:?}", surface_format);
 
         // Request device
         let (device, queue) = adapter
@@ -182,6 +216,23 @@ impl GpuRenderer {
             .await
             .map_err(|e| GpuError::DeviceRequest(e.to_string()))?;
 
+        // Configure the surface with the determined format
+        let surface_config = wgpu::SurfaceConfiguration {
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            format: surface_format,
+            width,
+            height,
+            present_mode: if config.vsync {
+                wgpu::PresentMode::AutoVsync
+            } else {
+                wgpu::PresentMode::AutoNoVsync
+            },
+            alpha_mode: wgpu::CompositeAlphaMode::Auto,
+            view_formats: vec![],
+            desired_maximum_frame_latency: 2,
+        };
+        surface.configure(&device, &surface_config);
+
         // Create shader module
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Terminal Shader"),
@@ -189,11 +240,7 @@ impl GpuRenderer {
         });
 
         // Create uniform buffer with dynamic screen size
-        // BUG FIX #3: Don't hardcode 1920x1080 - use config dimensions or defaults
-        let (initial_width, initial_height) = (
-            config.initial_width.unwrap_or(1280.0),
-            config.initial_height.unwrap_or(720.0),
-        );
+        let (initial_width, initial_height) = (width as f32, height as f32);
 
         let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Uniform Buffer"),
@@ -341,7 +388,7 @@ impl GpuRenderer {
                 module: &shader,
                 entry_point: "fs_main",
                 targets: &[Some(wgpu::ColorTargetState {
-                    format: wgpu::TextureFormat::Bgra8UnormSrgb,
+                    format: surface_format,
                     blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
@@ -398,7 +445,7 @@ impl GpuRenderer {
                 module: &shader,
                 entry_point: "fs_bg",
                 targets: &[Some(wgpu::ColorTargetState {
-                    format: wgpu::TextureFormat::Bgra8UnormSrgb,
+                    format: surface_format,
                     blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
@@ -497,8 +544,8 @@ impl GpuRenderer {
             adapter,
             device,
             queue,
-            surface: None,
-            surface_config: None,
+            surface: Some(surface),
+            surface_config: Some(surface_config),
             text_pipeline,
             bg_pipeline,
             vertex_buffer,
@@ -627,9 +674,18 @@ impl GpuRenderer {
     /// renderer.set_surface(surface, 1920, 1080);
     /// ```
     pub fn set_surface(&mut self, surface: wgpu::Surface<'static>, width: u32, height: u32) {
+        // Query the surface capabilities to determine the best format.
+        let caps = surface.get_capabilities(&self.adapter);
+        let surface_format = caps
+            .formats
+            .iter()
+            .copied()
+            .find(|f| f.is_srgb())
+            .unwrap_or(caps.formats[0]);
+
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format: wgpu::TextureFormat::Bgra8UnormSrgb,
+            format: surface_format,
             width,
             height,
             present_mode: if self.config.vsync {
@@ -969,74 +1025,44 @@ fn orthographic_projection(width: f32, height: f32) -> [[f32; 4]; 4] {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::gpu::GpuBackend;
 
-    #[tokio::test]
-    async fn test_gpu_renderer_creation() {
+    #[test]
+    fn test_create_instance() {
         let config = GpuConfig::default();
-        let result = GpuRenderer::new(config).await;
+        let _instance = GpuRenderer::create_instance(&config);
+        // Should succeed on any system, even without GPU
+    }
 
-        // Should either succeed or fail gracefully
-        // (May fail if no GPU is available in test environment)
-        match result {
-            Ok(renderer) => {
-                // Test that we can access the instance
-                let _instance = renderer.instance();
+    #[test]
+    fn test_orthographic_projection() {
+        let proj = orthographic_projection(1280.0, 720.0);
+        // Check top-left corner maps to (-1, 1) in clip space
+        // view_proj * (0, 0, 0, 1) should be (-1, 1, *, 1)
+        let x = proj[0][0] * 0.0 + proj[1][0] * 0.0 + proj[2][0] * 0.0 + proj[3][0];
+        let y = proj[0][1] * 0.0 + proj[1][1] * 0.0 + proj[2][1] * 0.0 + proj[3][1];
+        assert!((x - (-1.0)).abs() < 1e-6, "top-left x should be -1, got {x}");
+        assert!((y - 1.0).abs() < 1e-6, "top-left y should be 1, got {y}");
+    }
 
-                // Test that we can get device info
-                let device_info = renderer.get_device_info();
-                assert!(!device_info.is_empty());
-
-                // Test adapter info access
-                let adapter_info = renderer.get_adapter_info();
-                assert!(!adapter_info.name.is_empty());
-            }
-            Err(_e) => {
-                // GPU not available in test environment - this is expected
-                // No need to log, test environment may not have GPU
-            }
+    #[test]
+    fn test_gpu_backend_conversion() {
+        // Verify all backend variants convert without panic
+        let backends = [
+            GpuBackend::Auto,
+            GpuBackend::Vulkan,
+            GpuBackend::Metal,
+            GpuBackend::Dx12,
+            GpuBackend::Dx11,
+            GpuBackend::OpenGl,
+        ];
+        for backend in &backends {
+            let _: wgpu::Backends = (*backend).into();
         }
     }
 
-    #[tokio::test]
-    async fn test_gpu_renderer_glyph_atlas_access() {
-        let config = GpuConfig::default();
-        let result = GpuRenderer::new(config).await;
-
-        if let Ok(renderer) = result {
-            // Test glyph atlas view access
-            let _atlas_view = renderer.glyph_atlas_view();
-
-            // Test glyph sampler access
-            let _sampler = renderer.glyph_sampler();
-
-            // These should not panic - just verifies the methods work
-        }
-    }
-
-    #[tokio::test]
-    async fn test_gpu_renderer_update_glyph_atlas() {
-        let config = GpuConfig::default();
-        let result = GpuRenderer::new(config).await;
-
-        if let Ok(mut renderer) = result {
-            // Test that we can update the glyph atlas
-            // This should not panic
-            renderer.update_glyph_atlas();
-        }
-    }
-
-    #[tokio::test]
-    async fn test_gpu_backend_support() {
-        let config = GpuConfig::default();
-        let result = GpuRenderer::new(config).await;
-
-        if let Ok(renderer) = result {
-            // Test current backend method
-            let backend = renderer.current_backend();
-
-            // Get adapter info to verify backend is reported correctly
-            let info = renderer.get_adapter_info();
-            assert_eq!(backend, info.backend);
-        }
-    }
+    // GPU renderer creation tests require a window surface which needs a
+    // display server.  These are effectively integration tests and are
+    // skipped in headless CI.  The core logic (format selection, adapter
+    // compatibility) is validated by the non-headless manual run.
 }

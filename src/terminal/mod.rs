@@ -587,18 +587,18 @@ impl Terminal {
             initial_height: Some(720.0),
         };
 
-        let mut gpu_renderer = crate::gpu::GpuRenderer::new(gpu_config)
-            .await
-            .context("Failed to create GPU renderer")?;
-
-        // Create surface from window
-        let surface = gpu_renderer
-            .instance()
+        // Create the wgpu instance and surface BEFORE the renderer so that
+        // the adapter can be selected with surface compatibility on Linux.
+        let instance = crate::gpu::GpuRenderer::create_instance(&gpu_config);
+        let surface = instance
             .create_surface(window.clone())
             .context("Failed to create surface")?;
 
         let size = window.inner_size();
-        gpu_renderer.set_surface(surface, size.width, size.height);
+        let gpu_renderer =
+            crate::gpu::GpuRenderer::new(gpu_config, instance, surface, size.width, size.height)
+                .await
+                .context("Failed to create GPU renderer")?;
 
         info!("GPU renderer initialized successfully");
 
