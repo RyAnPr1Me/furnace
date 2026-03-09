@@ -1070,32 +1070,141 @@ impl Terminal {
                         ..
                     } => {
                         if key_event.state == ElementState::Pressed {
-                            // Check for Ctrl+Q to quit (more standard than Escape)
-                            let is_ctrl_q = matches!(
+                            let ctrl_pressed = modifiers_state.control_key()
+                                || (cfg!(target_os = "macos") && modifiers_state.super_key());
+                            let shift_pressed = modifiers_state.shift_key();
+
+                            // Ctrl+Q to quit
+                            if matches!(
                                 key_event.physical_key,
                                 PhysicalKey::Code(WinitKeyCode::KeyQ)
-                            ) && (modifiers_state.control_key()
-                                || (cfg!(target_os = "macos") && modifiers_state.super_key()));
-
-                            if is_ctrl_q {
-                                info!("Ctrl+Q pressed, exiting");
+                            ) && ctrl_pressed
+                            {
+                                info!("Ctrl+Q pressed, exiting GPU terminal");
                                 self.should_quit = true;
                                 target.exit();
                                 return;
                             }
 
-                            // Handle keyboard input - convert winit events to crossterm-style events
-                            // Skip text path when Ctrl is held to prevent double-sending control characters
-                            // (winit 0.30 includes control characters in key_event.text)
+                            // Search mode intercept
+                            if self.search_mode {
+                                if let PhysicalKey::Code(code) = key_event.physical_key {
+                                    match code {
+                                        WinitKeyCode::Escape => {
+                                            self.toggle_search_mode();
+                                        }
+                                        WinitKeyCode::Enter | WinitKeyCode::ArrowDown => {
+                                            self.search_next();
+                                        }
+                                        WinitKeyCode::ArrowUp => {
+                                            self.search_prev();
+                                        }
+                                        WinitKeyCode::Backspace => {
+                                            self.search_query.pop();
+                                            self.execute_search();
+                                        }
+                                        _ => {
+                                            // Type into search query
+                                            if !ctrl_pressed {
+                                                if let Some(text) = &key_event.text {
+                                                    for ch in text.chars() {
+                                                        self.search_query.push(ch);
+                                                    }
+                                                    self.execute_search();
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                self.dirty = true;
+                                return;
+                            }
+
+                            // Ctrl+F: toggle search mode
+                            if matches!(
+                                key_event.physical_key,
+                                PhysicalKey::Code(WinitKeyCode::KeyF)
+                            ) && ctrl_pressed
+                            {
+                                self.toggle_search_mode();
+                                self.dirty = true;
+                                return;
+                            }
+
+                            // Ctrl+N: search next
+                            if matches!(
+                                key_event.physical_key,
+                                PhysicalKey::Code(WinitKeyCode::KeyN)
+                            ) && ctrl_pressed && !shift_pressed
+                            {
+                                self.search_next();
+                                self.dirty = true;
+                                return;
+                            }
+
+                            // Ctrl+Shift+N: search prev
+                            if matches!(
+                                key_event.physical_key,
+                                PhysicalKey::Code(WinitKeyCode::KeyN)
+                            ) && ctrl_pressed && shift_pressed
+                            {
+                                self.search_prev();
+                                self.dirty = true;
+                                return;
+                            }
+
+                            // Ctrl+Shift+V or Ctrl+V: paste from clipboard
+                            if matches!(
+                                key_event.physical_key,
+                                PhysicalKey::Code(WinitKeyCode::KeyV)
+                            ) && ctrl_pressed
+                            {
+                                if let Ok(mut clipboard) = arboard::Clipboard::new() {
+                                    if let Ok(text) = clipboard.get_text() {
+                                        let _ = input_tx.send(text.into_bytes());
+                                    }
+                                }
+                                self.dirty = true;
+                                return;
+                            }
+
+                            // Ctrl+Shift+C: copy (send selection to clipboard)
+                            if matches!(
+                                key_event.physical_key,
+                                PhysicalKey::Code(WinitKeyCode::KeyC)
+                            ) && ctrl_pressed && shift_pressed
+                            {
+                                if let Ok(()) = self.copy_to_clipboard() {
+                                    self.show_notification("Copied to clipboard".to_string());
+                                }
+                                self.dirty = true;
+                                return;
+                            }
+
+                            // Ctrl+R: toggle resource monitor
+                            if matches!(
+                                key_event.physical_key,
+                                PhysicalKey::Code(WinitKeyCode::KeyR)
+                            ) && ctrl_pressed
+                            {
+                                if self.resource_monitor.is_some() {
+                                    self.show_resources = !self.show_resources;
+                                }
+                                self.dirty = true;
+                                return;
+                            }
+
+                            // Handle text input (skip when Ctrl held)
                             if let Some(text) = &key_event.text {
-                                if !modifiers_state.control_key() {
+                                if !ctrl_pressed {
+                                    // Auto-scroll to bottom when user types
+                                    self.scroll_to_bottom();
+
                                     for ch in text.chars() {
                                         let mut buf = [0u8; 4];
                                         let s = ch.encode_utf8(&mut buf);
-                                        // Send to background I/O task via channel (non-blocking)
                                         let _ = input_tx.send(s.as_bytes().to_vec());
 
-                                        // Track in command buffer
                                         if let Some(cmd_buf) =
                                             self.command_buffers.get_mut(self.active_session)
                                         {
@@ -1107,21 +1216,24 @@ impl Terminal {
 
                             // Handle special keys
                             if let PhysicalKey::Code(code) = key_event.physical_key {
-                                // Check for Ctrl key combinations
-                                let ctrl_pressed = modifiers_state.control_key();
-
                                 match code {
                                     WinitKeyCode::Enter => {
-                                        // Send carriage return to background I/O task via channel
+                                        self.scroll_to_bottom();
                                         let _ = input_tx.send(b"\r".to_vec());
                                         if let Some(cmd_buf) =
                                             self.command_buffers.get_mut(self.active_session)
                                         {
+                                            // Track command in autocomplete
+                                            if let Some(ref mut ac) = self.autocomplete {
+                                                let cmd = String::from_utf8_lossy(cmd_buf).to_string();
+                                                if !cmd.trim().is_empty() {
+                                                    ac.add_to_history(cmd);
+                                                }
+                                            }
                                             cmd_buf.clear();
                                         }
                                     }
                                     WinitKeyCode::Backspace => {
-                                        // Send backspace (DEL) to background I/O task via channel
                                         let _ = input_tx.send(vec![127]);
                                         if let Some(cmd_buf) =
                                             self.command_buffers.get_mut(self.active_session)
@@ -1130,11 +1242,12 @@ impl Terminal {
                                         }
                                     }
                                     WinitKeyCode::Tab => {
-                                        // Send tab character for autocompletion
                                         let _ = input_tx.send(b"\t".to_vec());
                                     }
+                                    WinitKeyCode::Escape => {
+                                        self.scroll_to_bottom();
+                                    }
                                     WinitKeyCode::ArrowUp => {
-                                        // Send ANSI escape code for Up arrow (history navigation)
                                         let _ = input_tx.send(b"\x1b[A".to_vec());
                                         if let Some(cmd_buf) =
                                             self.command_buffers.get_mut(self.active_session)
@@ -1143,7 +1256,6 @@ impl Terminal {
                                         }
                                     }
                                     WinitKeyCode::ArrowDown => {
-                                        // Send ANSI escape code for Down arrow (history navigation)
                                         let _ = input_tx.send(b"\x1b[B".to_vec());
                                         if let Some(cmd_buf) =
                                             self.command_buffers.get_mut(self.active_session)
@@ -1152,40 +1264,43 @@ impl Terminal {
                                         }
                                     }
                                     WinitKeyCode::ArrowRight => {
-                                        // Send ANSI escape code for Right arrow (cursor movement)
                                         let _ = input_tx.send(b"\x1b[C".to_vec());
                                     }
                                     WinitKeyCode::ArrowLeft => {
-                                        // Send ANSI escape code for Left arrow (cursor movement)
                                         let _ = input_tx.send(b"\x1b[D".to_vec());
                                     }
                                     WinitKeyCode::Home => {
-                                        // Send ANSI escape code for Home key
                                         let _ = input_tx.send(b"\x1b[H".to_vec());
                                     }
                                     WinitKeyCode::End => {
-                                        // Send ANSI escape code for End key
                                         let _ = input_tx.send(b"\x1b[F".to_vec());
                                     }
                                     WinitKeyCode::Delete => {
-                                        // Send ANSI escape code for Delete key
                                         let _ = input_tx.send(b"\x1b[3~".to_vec());
                                     }
+                                    WinitKeyCode::PageUp if shift_pressed => {
+                                        // Shift+PageUp: scroll back through history
+                                        let scroll_amount = self.terminal_rows.saturating_sub(2).max(1) as usize;
+                                        self.scroll_up(scroll_amount);
+                                    }
                                     WinitKeyCode::PageUp => {
-                                        // Send ANSI escape code for Page Up
                                         let _ = input_tx.send(b"\x1b[5~".to_vec());
                                     }
+                                    WinitKeyCode::PageDown if shift_pressed => {
+                                        // Shift+PageDown: scroll forward through history
+                                        let scroll_amount = self.terminal_rows.saturating_sub(2).max(1) as usize;
+                                        self.scroll_down(scroll_amount);
+                                    }
                                     WinitKeyCode::PageDown => {
-                                        // Send ANSI escape code for Page Down
                                         let _ = input_tx.send(b"\x1b[6~".to_vec());
                                     }
                                     // Ctrl key combinations
-                                    WinitKeyCode::KeyC if ctrl_pressed => {
-                                        // Ctrl+C sends SIGINT (ETX character)
+                                    WinitKeyCode::KeyC if ctrl_pressed && !shift_pressed => {
+                                        // Ctrl+C sends SIGINT
                                         let _ = input_tx.send(vec![0x03]);
                                     }
                                     WinitKeyCode::KeyD if ctrl_pressed => {
-                                        // Ctrl+D sends EOT (End of Transmission)
+                                        // Ctrl+D sends EOT
                                         let _ = input_tx.send(vec![0x04]);
                                     }
                                     WinitKeyCode::KeyL if ctrl_pressed => {
@@ -1193,27 +1308,22 @@ impl Terminal {
                                         let _ = input_tx.send(vec![0x0C]);
                                     }
                                     WinitKeyCode::KeyZ if ctrl_pressed => {
-                                        // Ctrl+Z sends SIGTSTP (suspend)
+                                        // Ctrl+Z sends SIGTSTP
                                         let _ = input_tx.send(vec![0x1A]);
                                     }
                                     WinitKeyCode::KeyA if ctrl_pressed => {
-                                        // Ctrl+A moves to beginning of line
                                         let _ = input_tx.send(vec![0x01]);
                                     }
                                     WinitKeyCode::KeyE if ctrl_pressed => {
-                                        // Ctrl+E moves to end of line
                                         let _ = input_tx.send(vec![0x05]);
                                     }
                                     WinitKeyCode::KeyU if ctrl_pressed => {
-                                        // Ctrl+U clears line before cursor
                                         let _ = input_tx.send(vec![0x15]);
                                     }
                                     WinitKeyCode::KeyK if ctrl_pressed => {
-                                        // Ctrl+K clears line after cursor
                                         let _ = input_tx.send(vec![0x0B]);
                                     }
                                     WinitKeyCode::KeyW if ctrl_pressed => {
-                                        // Ctrl+W deletes word before cursor
                                         let _ = input_tx.send(vec![0x17]);
                                     }
                                     _ => {}
@@ -1415,22 +1525,24 @@ impl Terminal {
         let total_cells = (self.terminal_cols as usize) * (self.terminal_rows as usize);
         let mut cells = vec![crate::gpu::GpuCell::default(); total_cells];
 
+        // Reserve last row for status bar
+        let content_rows = (self.terminal_rows as usize).saturating_sub(1);
+
         if let Some(buffer) = self.output_buffers.get(self.active_session) {
             let output = String::from_utf8_lossy(buffer);
             // Parse ANSI escape codes to get styled lines (same as CPU mode)
             let styled_lines = AnsiParser::parse_with_palette(&output, &self.color_palette);
 
-            // Skip lines to fit terminal height (same logic as CPU mode)
-            let skip_count = styled_lines
-                .len()
-                .saturating_sub(self.terminal_rows as usize);
-            let visible_lines: Vec<_> = styled_lines.into_iter().skip(skip_count).collect();
+            // Skip lines to fit terminal height, applying scroll offset
+            let tail_skip = styled_lines.len().saturating_sub(content_rows);
+            let skip_count = tail_skip.saturating_sub(self.scroll_offset);
+            let visible_lines: Vec<_> = styled_lines.into_iter().skip(skip_count).take(content_rows).collect();
 
             // Convert styled lines to GPU cells with wide glyph support
             for (row, line) in visible_lines
                 .iter()
                 .enumerate()
-                .take(self.terminal_rows as usize)
+                .take(content_rows)
             {
                 let mut col = 0;
                 for span in &line.spans {
@@ -1551,7 +1663,92 @@ impl Terminal {
             }
         }
 
+        // Render GPU status bar on the last row
+        self.render_gpu_status_bar(&mut cells, content_rows);
+
         cells
+    }
+
+    /// Render a status bar into the GPU cell buffer on the given row
+    #[cfg(feature = "gpu")]
+    fn render_gpu_status_bar(&self, cells: &mut [crate::gpu::GpuCell], status_row: usize) {
+        let cols = self.terminal_cols as usize;
+
+        // Build status text
+        let mode_text = if self.search_mode {
+            format!(" SEARCH: {} ", self.search_query)
+        } else if self.scroll_offset > 0 {
+            format!(" SCROLL [+{}] ", self.scroll_offset)
+        } else {
+            " NORMAL ".to_string()
+        };
+
+        let session_info = if self.sessions.len() > 1 {
+            format!(" Tab {}/{} ", self.active_session + 1, self.sessions.len())
+        } else {
+            " Session 1 ".to_string()
+        };
+
+        let hints = if self.search_mode {
+            " Esc: Exit │ Enter: Next │ ↑: Prev"
+        } else if self.scroll_offset > 0 {
+            " Shift+PgUp/PgDn: Scroll │ Esc: Bottom"
+        } else {
+            " Ctrl+F: Search │ Shift+PgUp: Scroll"
+        };
+
+        let full_status = format!("{mode_text}{session_info}{hints}");
+
+        // Mode indicator colors
+        let (mode_fg, mode_bg) = if self.search_mode {
+            ([0.0_f32, 0.0, 0.0, 1.0], [0.87_f32, 0.40, 0.40, 1.0]) // Black on red
+        } else if self.scroll_offset > 0 {
+            ([0.0_f32, 0.0, 0.0, 1.0], [0.80_f32, 0.60, 0.20, 1.0]) // Black on amber
+        } else {
+            ([0.0_f32, 0.0, 0.0, 1.0], [0.42_f32, 0.60, 0.48, 1.0]) // Black on green
+        };
+
+        let bar_bg = [
+            COLOR_STATUS_BG.0 as f32 / 255.0,
+            COLOR_STATUS_BG.1 as f32 / 255.0,
+            COLOR_STATUS_BG.2 as f32 / 255.0,
+            1.0,
+        ];
+        let bar_fg = [
+            COLOR_STATUS_HINT.0 as f32 / 255.0,
+            COLOR_STATUS_HINT.1 as f32 / 255.0,
+            COLOR_STATUS_HINT.2 as f32 / 255.0,
+            1.0,
+        ];
+
+        let mode_len = mode_text.len();
+
+        for (col, ch) in full_status.chars().enumerate() {
+            if col >= cols {
+                break;
+            }
+            let idx = status_row * cols + col;
+            if idx < cells.len() {
+                cells[idx].char_code = ch as u32;
+                if col < mode_len {
+                    cells[idx].fg_color = mode_fg;
+                    cells[idx].bg_color = mode_bg;
+                } else {
+                    cells[idx].fg_color = bar_fg;
+                    cells[idx].bg_color = bar_bg;
+                }
+            }
+        }
+
+        // Fill remaining cols with background
+        for col in full_status.len()..cols {
+            let idx = status_row * cols + col;
+            if idx < cells.len() {
+                cells[idx].char_code = ' ' as u32;
+                cells[idx].fg_color = bar_fg;
+                cells[idx].bg_color = bar_bg;
+            }
+        }
     }
 
     /// Bug #9: Detect shell prompts from various shells
