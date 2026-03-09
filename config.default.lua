@@ -62,6 +62,7 @@ config = {
         session_manager = false,
         theme_manager = false,
         command_palette = false,
+        auto_save_session = false,
     },
 
     keybindings = {
@@ -69,7 +70,7 @@ config = {
         close_tab = "Ctrl+W",
         next_tab = "Ctrl+Tab",
         prev_tab = "Ctrl+Shift+Tab",
-        split_vertical = "Ctrl+Shift+V",
+        split_vertical = "Ctrl+Shift+D",
         split_horizontal = "Ctrl+Shift+H",
         copy = "Ctrl+Shift+C",
         paste = "Ctrl+Shift+V",

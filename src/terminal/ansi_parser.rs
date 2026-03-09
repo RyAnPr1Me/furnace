@@ -214,16 +214,83 @@ impl AnsiParser {
         performer.lines[..last_line.min(performer.lines.len())].to_vec()
     }
 
-    /// Flush accumulated text to a span
+    /// Flush accumulated text to a span, with URL detection and highlighting
     fn flush_text(&mut self) {
         if !self.current_text.is_empty() {
             let text = std::mem::take(&mut self.current_text);
-            // Note: Hyperlink URLs are tracked in self.hyperlink_url but ratatui doesn't
-            // support clickable hyperlinks natively. The URL is preserved for future use
-            // or custom rendering extensions. For now, we just create a normal styled span.
-            let span = Span::styled(text, self.current_style);
-            self.current_line_spans.push(span);
+
+            // Detect URLs in the text and split into URL vs non-URL spans
+            // URL patterns: http://, https://, ftp://, file://
+            let url_spans = Self::split_urls(&text, self.current_style);
+            if url_spans.is_empty() {
+                // No URLs found - use the text as-is (common fast path)
+                let span = Span::styled(text, self.current_style);
+                self.current_line_spans.push(span);
+            } else {
+                self.current_line_spans.extend(url_spans);
+            }
         }
+    }
+
+    /// Split text into URL and non-URL spans with appropriate styling
+    /// URLs get underline + cyan color to make them visually distinct
+    fn split_urls(text: &str, base_style: Style) -> Vec<Span<'static>> {
+        // URL protocol prefixes to detect
+        const PROTOCOLS: &[&str] = &["https://", "http://", "ftp://", "file://"];
+
+        // Quick check: if no protocol found at all, return empty (fast path)
+        if !PROTOCOLS.iter().any(|p| text.contains(p)) {
+            return Vec::new();
+        }
+
+        let mut spans = Vec::new();
+        let mut remaining = text;
+
+        // Scan for URLs by protocol prefix
+        while !remaining.is_empty() {
+            // Find the earliest protocol match
+            let mut earliest: Option<(usize, &str)> = None;
+            for &proto in PROTOCOLS {
+                if let Some(pos) = remaining.find(proto) {
+                    if earliest.is_none() || pos < earliest.unwrap().0 {
+                        earliest = Some((pos, proto));
+                    }
+                }
+            }
+
+            if let Some((start, _proto)) = earliest {
+                // Add any text before the URL as a normal span
+                if start > 0 {
+                    spans.push(Span::styled(remaining[..start].to_string(), base_style));
+                }
+
+                // Find the end of the URL: stop at whitespace or certain punctuation
+                let url_start = &remaining[start..];
+                let url_end = url_start
+                    .find(|c: char| c.is_whitespace() || c == '>' || c == '"' || c == '\'' || c == ')')
+                    .unwrap_or(url_start.len());
+
+                let url = &url_start[..url_end];
+
+                // Style the URL with underline and a distinctive color (cyan)
+                let url_style = base_style
+                    .add_modifier(Modifier::UNDERLINED)
+                    .fg(Color::Rgb(0x5A, 0xCC, 0xE5)); // Cyan for URLs
+
+                spans.push(Span::styled(url.to_string(), url_style));
+
+                // Continue scanning after the URL
+                remaining = &remaining[start + url_end..];
+            } else {
+                // No more URLs - add remaining text
+                if !remaining.is_empty() {
+                    spans.push(Span::styled(remaining.to_string(), base_style));
+                }
+                break;
+            }
+        }
+
+        spans
     }
 
     /// Get the current line, ensuring it exists

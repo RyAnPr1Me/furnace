@@ -9,7 +9,7 @@
 //! - **Memory Safety**: 100% safe Rust with comprehensive error handling
 //! - **Async I/O**: Non-blocking shell I/O using Tokio for responsiveness
 //! - **True Color**: Full 24-bit RGB color support with ANSI parsing
-//! - **GPU Acceleration**: Optional hardware-accelerated rendering via wgpu
+//! - **GPU Acceleration**: Hardware-accelerated rendering via wgpu at 170+ FPS
 //! - **Cross-Platform**: Primarily Windows-focused with portable PTY support
 //!
 //! # Architecture
@@ -24,7 +24,7 @@
 //! - [`keybindings`]: Extensible keyboard shortcut handling
 //! - [`colors`]: 24-bit true color support with blending operations
 //! - [`progress_bar`]: Command execution progress tracking with spinner
-//! - [`gpu`]: GPU-accelerated rendering (optional, requires `gpu` feature)
+//! - [`gpu`]: GPU-accelerated rendering with wgpu
 //!
 //! # Performance Considerations
 //!
@@ -43,6 +43,7 @@
 
 pub mod colors;
 pub mod config;
+pub mod gpu;
 pub mod hooks;
 pub mod keybindings;
 pub mod progress_bar;
@@ -50,10 +51,3 @@ pub mod session;
 pub mod shell;
 pub mod terminal;
 pub mod ui;
-
-/// GPU-accelerated rendering module
-///
-/// Enabled with the `gpu` feature flag. Provides hardware-accelerated
-/// text rendering using wgpu for 170+ FPS performance.
-#[cfg(feature = "gpu")]
-pub mod gpu;

@@ -3,6 +3,7 @@ use mlua::{Lua, Table};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use tracing::warn;
 
 const DEFAULT_CONFIG_LUA: &str = include_str!("../../config.default.lua");
 
@@ -130,6 +131,7 @@ pub struct TerminalConfig {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct ThemeConfig {
     pub name: String,
     pub foreground: String,
@@ -211,6 +213,7 @@ pub struct KeyBindings {
 
 #[derive(Debug, Clone, Default)]
 #[allow(clippy::struct_excessive_bools)]
+#[allow(dead_code)]
 pub struct FeaturesConfig {
     /// Enable resource monitor (Ctrl+R)
     pub resource_monitor: bool,
@@ -224,6 +227,8 @@ pub struct FeaturesConfig {
     pub theme_manager: bool,
     /// Enable command palette
     pub command_palette: bool,
+    /// Auto-save session on exit
+    pub auto_save_session: bool,
 }
 
 impl FeaturesConfig {
@@ -246,6 +251,9 @@ impl FeaturesConfig {
                 .unwrap_or(false),
             command_palette: table
                 .get::<_, Option<bool>>("command_palette")?
+                .unwrap_or(false),
+            auto_save_session: table
+                .get::<_, Option<bool>>("auto_save_session")?
                 .unwrap_or(false),
         })
     }
@@ -304,23 +312,48 @@ impl ShellConfig {
 
 impl TerminalConfig {
     fn from_lua_table(table: &Table) -> Result<Self> {
+        let font_size = table
+            .get::<_, Option<u16>>("font_size")?
+            .unwrap_or(12)
+            .clamp(1, 200);
+
+        let max_history = table
+            .get::<_, Option<usize>>("max_history")?
+            .unwrap_or(10000)
+            .min(1_000_000);
+
+        let scrollback_lines = table
+            .get::<_, Option<usize>>("scrollback_lines")?
+            .unwrap_or(10000)
+            .clamp(1, 1_000_000);
+
+        let cursor_style = table
+            .get::<_, Option<String>>("cursor_style")?
+            .unwrap_or_else(|| "block".to_string());
+
+        // Validate cursor style, fall back to "block" for invalid values
+        let cursor_style = match cursor_style.as_str() {
+            "block" | "underline" | "bar" => cursor_style,
+            _ => {
+                warn!(
+                    "Invalid cursor_style '{}', falling back to 'block'",
+                    cursor_style
+                );
+                "block".to_string()
+            }
+        };
+
         Ok(Self {
-            max_history: table
-                .get::<_, Option<usize>>("max_history")?
-                .unwrap_or(10000),
+            max_history,
             enable_tabs: table
                 .get::<_, Option<bool>>("enable_tabs")?
                 .unwrap_or(false),
             enable_split_pane: table
                 .get::<_, Option<bool>>("enable_split_pane")?
                 .unwrap_or(false),
-            font_size: table.get::<_, Option<u16>>("font_size")?.unwrap_or(12),
-            cursor_style: table
-                .get::<_, Option<String>>("cursor_style")?
-                .unwrap_or_else(|| "block".to_string()),
-            scrollback_lines: table
-                .get::<_, Option<usize>>("scrollback_lines")?
-                .unwrap_or(10000),
+            font_size,
+            cursor_style,
+            scrollback_lines,
             hardware_acceleration: table
                 .get::<_, Option<bool>>("hardware_acceleration")?
                 .unwrap_or(true),
@@ -460,7 +493,7 @@ impl Default for KeyBindings {
             close_tab: "Ctrl+W".to_string(),
             next_tab: "Ctrl+Tab".to_string(),
             prev_tab: "Ctrl+Shift+Tab".to_string(),
-            split_vertical: "Ctrl+Shift+V".to_string(),
+            split_vertical: "Ctrl+Shift+D".to_string(),
             split_horizontal: "Ctrl+Shift+H".to_string(),
             copy: "Ctrl+Shift+C".to_string(),
             paste: "Ctrl+Shift+V".to_string(),
@@ -487,7 +520,7 @@ impl KeyBindings {
                 .unwrap_or_else(|| "Ctrl+Shift+Tab".to_string()),
             split_vertical: table
                 .get::<_, Option<String>>("split_vertical")?
-                .unwrap_or_else(|| "Ctrl+Shift+V".to_string()),
+                .unwrap_or_else(|| "Ctrl+Shift+D".to_string()),
             split_horizontal: table
                 .get::<_, Option<String>>("split_horizontal")?
                 .unwrap_or_else(|| "Ctrl+Shift+H".to_string()),
@@ -955,5 +988,73 @@ config = {
         }
 
         assert_eq!(detected, "/bin/zsh");
+    }
+
+    #[test]
+    fn test_config_validation_font_size_clamped() {
+        let lua_config = r#"
+config = {
+    terminal = {
+        font_size = 0
+    }
+}
+"#;
+        let dir = tempfile::tempdir().unwrap();
+        let config_path = dir.path().join("test_config.lua");
+        std::fs::write(&config_path, lua_config).unwrap();
+        let config = Config::load_from_file(config_path.to_str().unwrap()).unwrap();
+        // font_size 0 should be clamped to 1
+        assert_eq!(config.terminal.font_size, 1);
+    }
+
+    #[test]
+    fn test_config_validation_font_size_max() {
+        let lua_config = r#"
+config = {
+    terminal = {
+        font_size = 500
+    }
+}
+"#;
+        let dir = tempfile::tempdir().unwrap();
+        let config_path = dir.path().join("test_config.lua");
+        std::fs::write(&config_path, lua_config).unwrap();
+        let config = Config::load_from_file(config_path.to_str().unwrap()).unwrap();
+        // font_size 500 should be clamped to 200
+        assert_eq!(config.terminal.font_size, 200);
+    }
+
+    #[test]
+    fn test_config_validation_invalid_cursor_style() {
+        let lua_config = r#"
+config = {
+    terminal = {
+        cursor_style = "invalid"
+    }
+}
+"#;
+        let dir = tempfile::tempdir().unwrap();
+        let config_path = dir.path().join("test_config.lua");
+        std::fs::write(&config_path, lua_config).unwrap();
+        let config = Config::load_from_file(config_path.to_str().unwrap()).unwrap();
+        // Invalid cursor_style should fall back to "block"
+        assert_eq!(config.terminal.cursor_style, "block");
+    }
+
+    #[test]
+    fn test_config_validation_scrollback_clamped() {
+        let lua_config = r#"
+config = {
+    terminal = {
+        scrollback_lines = 0
+    }
+}
+"#;
+        let dir = tempfile::tempdir().unwrap();
+        let config_path = dir.path().join("test_config.lua");
+        std::fs::write(&config_path, lua_config).unwrap();
+        let config = Config::load_from_file(config_path.to_str().unwrap()).unwrap();
+        // scrollback_lines 0 should be clamped to 1
+        assert_eq!(config.terminal.scrollback_lines, 1);
     }
 }

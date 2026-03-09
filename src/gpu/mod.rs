@@ -1,6 +1,6 @@
 //! GPU-accelerated rendering module for Furnace terminal
 //!
-//! This module provides true hardware-accelerated rendering using wgpu,
+//! This module provides hardware-accelerated rendering using wgpu,
 //! enabling 170+ FPS rendering with minimal CPU usage.
 //!
 //! # Features
@@ -11,16 +11,12 @@
 //! - Background blur and transparency effects
 //! - Smooth cursor animation
 
-#[cfg(feature = "gpu")]
 pub mod renderer;
 
-#[cfg(feature = "gpu")]
 pub mod text;
 
-#[cfg(feature = "gpu")]
 pub mod glyph_cache;
 
-#[cfg(feature = "gpu")]
 #[allow(unused_imports)] // Re-export may not be used internally but is part of public API
 pub use renderer::GpuRenderer;
 
@@ -95,7 +91,6 @@ pub enum GpuBackend {
     WebGpu,
 }
 
-#[cfg(feature = "gpu")]
 impl From<GpuBackend> for wgpu::Backends {
     fn from(backend: GpuBackend) -> Self {
         match backend {
@@ -176,7 +171,6 @@ pub struct GpuStats {
 }
 
 /// Check if GPU rendering is available
-#[cfg(feature = "gpu")]
 #[must_use]
 pub fn is_gpu_available() -> bool {
     // Try to create an instance to check availability
@@ -198,16 +192,9 @@ pub fn is_gpu_available() -> bool {
     })
 }
 
-#[cfg(not(feature = "gpu"))]
-#[must_use]
-pub fn is_gpu_available() -> bool {
-    false
-}
-
 /// Get GPU device information
 ///
 /// Returns information about the available GPU device for debugging.
-#[cfg(feature = "gpu")]
 #[must_use]
 #[allow(dead_code)] // Public API - used for debugging and diagnostics
 pub fn get_gpu_info() -> Option<String> {
@@ -232,10 +219,4 @@ pub fn get_gpu_info() -> Option<String> {
                 )
             })
     })
-}
-
-#[cfg(not(feature = "gpu"))]
-#[must_use]
-pub fn get_gpu_info() -> Option<String> {
-    None
 }

@@ -103,8 +103,9 @@ impl HooksExecutor {
     /// Execute output hook
     pub fn on_output(&self, script: &str, output: &str) -> Result<()> {
         // Limit output to prevent performance issues
+        // Use floor_char_boundary to avoid panicking on multi-byte UTF-8 characters
         let limited_output = if output.len() > 1000 {
-            &output[..1000]
+            &output[..output.floor_char_boundary(1000)]
         } else {
             output
         };
@@ -415,6 +416,19 @@ mod tests {
         // Test with very long output (should be truncated to 1000 chars)
         let long_output = "x".repeat(2000);
         let result = executor.on_output("print(context)", &long_output);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_output_hook_truncation_multibyte_utf8() {
+        let executor = HooksExecutor::new().unwrap();
+        // Test with multi-byte UTF-8 characters that would cause a panic if sliced
+        // at byte boundaries. Each emoji is 4 bytes, so 300 emoji = 1200 bytes > 1000.
+        let emoji_output = "🔥".repeat(300);
+        assert!(emoji_output.len() > 1000); // Confirm it exceeds the byte limit
+        // This must NOT panic - previously &output[..1000] would slice in the middle
+        // of a multi-byte character
+        let result = executor.on_output("print(context)", &emoji_output);
         assert!(result.is_ok());
     }
 

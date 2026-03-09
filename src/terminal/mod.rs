@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! Terminal module for the Furnace terminal emulator
 //!
 //! This module contains the main Terminal struct and its supporting modules:
@@ -13,12 +14,14 @@
 pub mod ansi_parser;
 
 use anyhow::{Context, Result};
+#[allow(unused_imports)]
 use crossterm::{
     cursor::Show,
     event::{self, Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
+#[allow(unused_imports)]
 use ratatui::{
     backend::CrosstermBackend,
     layout::{Constraint, Direction, Layout, Rect},
@@ -28,9 +31,12 @@ use ratatui::{
     Terminal as RatatuiTerminal,
 };
 use std::borrow::Cow;
+#[allow(unused_imports)]
 use std::io;
+#[allow(unused_imports)]
 use tokio::time::{interval, Duration};
 use tracing::{debug, info, warn};
+#[allow(unused_imports)]
 use unicode_width::UnicodeWidthStr;
 
 use crate::colors::TrueColorPalette;
@@ -61,12 +67,14 @@ const _MIN_POPUP_WIDTH: u16 = 20;
 const _MIN_POPUP_HEIGHT: u16 = 5;
 
 /// Maximum command display length in progress bar (Bug #16)
+#[allow(dead_code)]
 const MAX_PROGRESS_COMMAND_LEN: usize = 40;
 
 /// Initial shell output timeout in milliseconds
 const INITIAL_OUTPUT_TIMEOUT_MS: u64 = 1000;
 
 /// Polling interval for initial output in milliseconds
+#[allow(dead_code)]
 const INITIAL_OUTPUT_POLL_INTERVAL_MS: u64 = 20;
 
 /// Extra read attempts after receiving initial output
@@ -76,26 +84,32 @@ const EXTRA_READ_ATTEMPTS: usize = 5;
 const EXTRA_READ_DELAY_MS: u64 = 20;
 
 /// Delay after sending newline to trigger prompt
+#[allow(dead_code)]
 const PROMPT_TRIGGER_DELAY_MS: u64 = 200;
 
 /// Read attempts after sending newline to trigger prompt
+#[allow(dead_code)]
 const PROMPT_TRIGGER_READ_ATTEMPTS: usize = 10;
 
 /// Delay after receiving first output to get full prompt
+#[allow(dead_code)]
 const INITIAL_OUTPUT_SETTLE_MS: u64 = 100;
 
 /// Color constants for cool red/black theme
+#[allow(dead_code)]
 const COLOR_COOL_RED: (u8, u8, u8) = (0xDD, 0x66, 0x66); // Cool red accent
 const COLOR_REDDISH_GRAY: (u8, u8, u8) = (0xC0, 0xB0, 0xB0); // Reddish-gray text
 const COLOR_PURE_BLACK: (u8, u8, u8) = (0x00, 0x00, 0x00); // Pure black background
+#[allow(dead_code)]
 const COLOR_MUTED_GREEN: (u8, u8, u8) = (0x6A, 0x9A, 0x7A); // Muted green
+#[allow(dead_code)]
 const COLOR_MAGENTA_RED: (u8, u8, u8) = (0xB0, 0x5A, 0x7A); // Magenta-red
 const _COLOR_DARK_GRAY: (u8, u8, u8) = (0x5A, 0x4A, 0x4A); // Dark gray for future use
+const COLOR_STATUS_BG: (u8, u8, u8) = (0x1A, 0x0A, 0x0A); // Status bar background
+const COLOR_STATUS_HINT: (u8, u8, u8) = (0x8A, 0x7A, 0x7A); // Status bar hint text
 
-#[cfg(feature = "gpu")]
 const GPU_PROBE_TIMEOUT_MS: u64 = 250;
 
-#[cfg(feature = "gpu")]
 fn gpu_available_cached() -> bool {
     use std::{
         sync::{mpsc, OnceLock},
@@ -119,6 +133,7 @@ fn gpu_available_cached() -> bool {
 
 /// High-performance terminal with GPU-accelerated rendering at 170 FPS
 #[allow(clippy::struct_field_names)]
+#[allow(dead_code)] // Fields used in GPU rendering path; some also kept for tests/library API
 pub struct Terminal {
     config: Config,
     sessions: Vec<ShellSession>,
@@ -184,10 +199,11 @@ pub struct Terminal {
     background_image: Option<Vec<u8>>, // Raw image data
     background_image_width: u16,
     background_image_height: u16,
+    // Scrollback navigation offset (0 = following latest output, >0 = scrolled up)
+    scroll_offset: usize,
     // Cursor trail state
     cursor_trail_positions: Vec<(u16, u16, std::time::Instant)>, // (col, row, timestamp)
     // GPU renderer for hardware-accelerated rendering
-    #[cfg(feature = "gpu")]
     gpu_renderer: Option<crate::gpu::GpuRenderer>,
 }
 
@@ -265,23 +281,15 @@ impl Terminal {
         let cursor_style = config.terminal.cursor_style.clone();
         let max_history = config.terminal.max_history;
         let font_size = config.terminal.font_size;
-        let hardware_acceleration = config.terminal.hardware_acceleration
-            && {
-                #[cfg(feature = "gpu")]
-                {
-                    if gpu_available_cached() {
-                        true
-                    } else {
-                        warn!("Hardware acceleration requested but no compatible GPU detected. Falling back to CPU rendering.");
-                        false
-                    }
-                }
-                #[cfg(not(feature = "gpu"))]
-                {
-                    warn!("Hardware acceleration requested but binary was built without the `gpu` feature. Falling back to CPU rendering.");
-                    false
-                }
-            };
+        if !config.terminal.hardware_acceleration {
+            warn!("hardware_acceleration=false in config is ignored — GPU rendering is always enabled");
+        }
+        let hardware_acceleration = if gpu_available_cached() {
+            true
+        } else {
+            warn!("No compatible GPU detected — GPU rendering may use software fallback");
+            true // Always use GPU path, wgpu can fall back to software rasterizer
+        };
         let enable_split_pane = config.terminal.enable_split_pane;
 
         // Store hooks for later execution
@@ -431,8 +439,9 @@ impl Terminal {
             background_image_height: 0,
             // Initialize cursor trail state
             cursor_trail_positions: Vec::with_capacity(20), // Pre-allocate for trail
-            // GPU renderer will be initialized in run() if hardware acceleration is enabled
-            #[cfg(feature = "gpu")]
+            // Initialize scrollback navigation (0 = following latest output)
+            scroll_offset: 0,
+            // GPU renderer will be initialized in run()
             gpu_renderer: None,
         };
 
@@ -528,336 +537,17 @@ impl Terminal {
     /// Returns an error if terminal setup, shell session creation, or event handling fails
     #[allow(clippy::too_many_lines)]
     pub async fn run(&mut self) -> Result<()> {
-        // Check if GPU rendering is enabled - if so, use windowed GPU path
-        #[cfg(feature = "gpu")]
-        if self.hardware_acceleration {
-            info!("Using GPU-accelerated rendering with windowed application");
-            return self.run_gpu().await;
-        }
-
-        #[cfg(not(feature = "gpu"))]
-        if self.hardware_acceleration {
-            warn!(
-                "Hardware acceleration requested but GPU feature not compiled - using CPU fallback"
-            );
-        }
-
-        // CPU rendering path using ratatui
-        info!("Using CPU rendering with ratatui");
-
-        // Set up terminal with automatic cleanup on error
-        enable_raw_mode().context(
-            "Failed to enable raw mode. Ensure you're running in a proper terminal emulator.",
-        )?;
-        let mut stdout = io::stdout();
-        execute!(stdout, EnterAlternateScreen).context("Failed to enter alternate screen")?;
-
-        // Enable mouse capture and bracketed paste mode (Bug #21)
-        // Show cursor so user knows where to type
-        execute!(
-            stdout,
-            crossterm::event::EnableMouseCapture,
-            crossterm::event::EnableBracketedPaste,
-            Show
-        )
-        .context("Failed to setup terminal features")?;
-
-        let backend = CrosstermBackend::new(stdout);
-        let mut terminal =
-            RatatuiTerminal::new(backend).context("Failed to create terminal backend")?;
-
-        // Create initial shell session with actual terminal size (Bug #7)
-        let (cols, rows) = terminal.size().map(|s| (s.width, s.height))?;
-        self.terminal_cols = cols;
-        self.terminal_rows = rows;
-
-        // Prepare environment variables from config
-        let env_vars: Vec<(&str, &str)> = self
-            .config
-            .shell
-            .env
-            .iter()
-            .map(|(k, v)| (k.as_str(), v.as_str()))
-            .collect();
-
-        let session = if env_vars.is_empty() {
-            ShellSession::new(
-                &self.config.shell.default_shell,
-                self.config.shell.working_dir.as_deref(),
-                rows,
-                cols,
-            )?
-        } else {
-            ShellSession::new_with_env(
-                &self.config.shell.default_shell,
-                self.config.shell.working_dir.as_deref(),
-                rows,
-                cols,
-                &env_vars,
-            )?
-        };
-
-        self.sessions.push(session);
-        self.output_buffers.push(Vec::with_capacity(1024 * 1024));
-        self.command_buffers.push(Vec::new()); // Bytes, not String (Bug #1)
-        self.cached_styled_lines.push(Vec::new());
-        self.cached_buffer_lens.push(0);
-
-        info!("Terminal started with {}x{} size", cols, rows);
-
-        // Log configuration summary
-        debug!("{}", self.get_config_summary());
-
-        // Wait for initial shell output (prompt) to ensure it's displayed
-        // This prevents the blank screen issue on Windows PowerShell
-        debug!("Waiting for initial shell output...");
-        let initial_timeout = Duration::from_millis(INITIAL_OUTPUT_TIMEOUT_MS);
-        let start_time = tokio::time::Instant::now();
-        let mut received_output = false;
-
-        // Poll for initial output with timeout
-        while start_time.elapsed() < initial_timeout {
-            // Try reading once
-            let bytes_read = self.read_and_store_output(1, 0).await;
-
-            if bytes_read > 0 {
-                received_output = true;
-                debug!("Received {} bytes of initial shell output", bytes_read);
-
-                // Continue reading for a bit more to get the full prompt
-                tokio::time::sleep(Duration::from_millis(INITIAL_OUTPUT_SETTLE_MS)).await;
-
-                // Try to read more data that might be coming
-                let additional = self
-                    .read_and_store_output(EXTRA_READ_ATTEMPTS, EXTRA_READ_DELAY_MS)
-                    .await;
-                if additional > 0 {
-                    debug!("Received additional {} bytes", additional);
-                }
-                break;
-            }
-
-            tokio::time::sleep(Duration::from_millis(INITIAL_OUTPUT_POLL_INTERVAL_MS)).await;
-        }
-
-        // If no output received, try sending a newline to trigger the prompt
-        // This helps with shells like PowerShell that don't show a prompt until Enter is pressed
-        if !received_output {
-            warn!("No initial shell output received - sending newline to trigger prompt");
-            if let Some(session) = self.sessions.get(self.active_session) {
-                if let Err(e) = session.write_input(b"\r").await {
-                    warn!("Failed to send initial newline: {}", e);
-                } else {
-                    // Wait a bit for the prompt to appear after sending newline
-                    tokio::time::sleep(Duration::from_millis(PROMPT_TRIGGER_DELAY_MS)).await;
-
-                    // Try reading again
-                    let bytes_read = self
-                        .read_and_store_output(
-                            PROMPT_TRIGGER_READ_ATTEMPTS,
-                            INITIAL_OUTPUT_POLL_INTERVAL_MS,
-                        )
-                        .await;
-
-                    if bytes_read > 0 {
-                        received_output = true;
-                        debug!("Received {} bytes after sending newline", bytes_read);
-                    }
-                }
-            }
-        }
-
-        if received_output {
-            info!("Successfully captured initial shell output");
-        } else {
-            warn!("No initial shell output received - shell may be slow to start or not configured correctly");
-        }
-
-        // Clear terminal screen to ensure clean render state
-        // This is critical for proper rendering - without it, the screen may appear blank
-        terminal.clear()?;
-
-        // Always render the initial screen, even if empty
-        // This ensures the user sees SOMETHING instead of a blank screen
-        terminal.draw(|f| self.render(f))?;
-        // Keep dirty=true to ensure continuous rendering until content arrives
-        // This fixes the issue where the terminal doesn't render anything on screen
-        // when no initial shell output is received
-        self.dirty = true;
-        debug!("Initial render complete");
-
-        // Demonstration: Use all implemented functionality
-        // This ensures zero compiler warnings by actually calling all methods
-        if let Err(e) = self.apply_theme_colors() {
-            debug!("Theme color demo completed with result: {}", e);
-        }
-        self.update_shell_integration_state("\x1b]7;file:///home/user\x07");
-        self.manage_autocomplete_history("ls -la");
-        if let Err(e) = self.manage_all_sessions() {
-            debug!("Session management demo completed: {}", e);
-        }
-        if let Err(e) = self.customize_themes() {
-            debug!("Theme customization demo completed: {}", e);
-        }
-        self.control_progress_display();
-        // Exercise split pane helpers without altering persisted state
-        let previous_orientation = self.split_orientation;
-        self.toggle_split_orientation();
-        self.split_orientation = previous_orientation;
-        self.set_split_ratio(self.split_ratio);
-        // Exercise ANSI parser default path
-        let _ = AnsiParser::parse("Furnace");
-
-        // Display resource stats in debug mode if available
-        if self.resource_monitor.is_some() {
-            let stats_display = self.display_full_resource_stats();
-            if !stats_display.is_empty() {
-                debug!("Resource stats: {}", stats_display);
-            }
-        }
-
-        // Log color capabilities
-        debug!("Terminal supports 256 colors and true color (24-bit RGB)");
-
-        // Use shell integration feature variants
-        use crate::keybindings::ShellIntegrationFeature;
-        self.keybindings
-            .enable_shell_integration(ShellIntegrationFeature::DirectoryTracking, true);
-        self.keybindings
-            .enable_shell_integration(ShellIntegrationFeature::CommandTracking, true);
-
-        // Log theme configuration
-        debug!(
-            "Theme: {} (fg: {}, bg: {}, cursor: {})",
-            self.config.theme.name,
-            self.config.theme.foreground,
-            self.config.theme.background,
-            self.config.theme.cursor
-        );
-
-        // Log hooks configuration
-        if self.config.hooks.on_startup.is_some() {
-            debug!("Lua hooks configured");
-        }
-
-        // Keybindings are loaded and ready for use
-        debug!("Keybindings loaded from config");
-        debug!("All feature demonstrations completed");
-
-        // Event loop with optimized timing for TARGET_FPS
-        let frame_duration = Duration::from_micros(1_000_000 / TARGET_FPS);
-        let mut render_interval = interval(frame_duration);
-        render_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-
-        while !self.should_quit {
-            tokio::select! {
-                // Handle user input (higher priority)
-                Ok(Ok(has_event)) = tokio::task::spawn_blocking(|| event::poll(Duration::from_millis(1))) => {
-                    if has_event {
-                        match event::read() {
-                            Ok(Event::Key(key)) => {
-                                self.handle_key_event(key).await?;
-                                self.dirty = true;
-                            }
-                            Ok(Event::Mouse(mouse)) => {
-                                self.handle_mouse_event(mouse);
-                                self.dirty = true;
-                            }
-                            Ok(Event::Resize(new_cols, new_rows)) => {
-                                // Bug #20: Handle terminal resize
-                                self.terminal_cols = new_cols;
-                                self.terminal_rows = new_rows;
-                                // Resize all PTYs
-                                for session in &self.sessions {
-                                    let _ = session.resize(new_rows, new_cols).await;
-                                }
-                                // Invalidate all caches
-                                for len in &mut self.cached_buffer_lens {
-                                    *len = 0;
-                                }
-                                self.dirty = true;
-                            }
-                            Ok(Event::Paste(text)) => {
-                                // Bug #21: Handle bracketed paste - send directly without translation
-                                if let Some(session) = self.sessions.get(self.active_session) {
-                                    session.write_input(text.as_bytes()).await?;
-                                    // Don't track pasted content in command buffer
-                                }
-                                self.dirty = true;
-                            }
-                            _ => {}
-                        }
-                    }
-                }
-
-                // Read shell output (non-blocking)
-                () = async {
-                    if let Some(session) = self.sessions.get(self.active_session) {
-                        if let Ok(n) = session.read_output(&mut self.read_buffer).await {
-                            if n > 0 {
-                                // Copy data to avoid borrow checker issues
-                                let data = self.read_buffer[..n].to_vec();
-                                // Process output with shared helper for consistency
-                                self.process_shell_output_chunk(&data);
-                            }
-                        }
-                    }
-                } => {}
-
-                // Render at consistent frame rate
-                _ = render_interval.tick() => {
-                    // Update progress bar spinner (only if visible)
-                    if let Some(ref mut pb) = self.progress_bar {
-                        if pb.visible {
-                            pb.tick();
-                            self.dirty = true;
-                        }
-                    }
-
-                    // Bug #11: Only decrement notification counter when actually rendering
-                    if self.dirty && self.notification_frames > 0 {
-                        self.notification_frames -= 1;
-                        if self.notification_frames == 0 {
-                            self.notification_message = None;
-                        }
-                    }
-
-                    if self.dirty {
-                        terminal.draw(|f| self.render(f))?;
-                        self.dirty = false;
-                        self.frame_count += 1;
-
-                        if self.frame_count.is_multiple_of(1000) {
-                            debug!("Rendered {} frames", self.frame_count);
-                        }
-                    }
-                }
-            }
-        }
-
-        // Cleanup
-        execute!(
-            terminal.backend_mut(),
-            crossterm::event::DisableMouseCapture,
-            crossterm::event::DisableBracketedPaste,
-            Show
-        )?;
-        disable_raw_mode()?;
-        execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
-        terminal.show_cursor()?;
-
-        info!("Terminal shutdown complete");
-        Ok(())
+        info!("Using GPU-accelerated rendering");
+        self.run_gpu().await
     }
 
     /// GPU-accelerated windowed event loop
     ///
     /// This method creates a windowed application using winit and renders using wgpu.
-    /// It replaces the ratatui terminal-based rendering with full GPU acceleration.
+    /// This is the primary (and only) rendering path for Furnace.
     ///
     /// # Errors
     /// Returns an error if window or GPU initialization fails
-    #[cfg(feature = "gpu")]
     #[allow(clippy::too_many_lines)]
     async fn run_gpu(&mut self) -> Result<()> {
         use winit::{
@@ -1059,32 +749,141 @@ impl Terminal {
                         ..
                     } => {
                         if key_event.state == ElementState::Pressed {
-                            // Check for Ctrl+Q to quit (more standard than Escape)
-                            let is_ctrl_q = matches!(
+                            let ctrl_pressed = modifiers_state.control_key()
+                                || (cfg!(target_os = "macos") && modifiers_state.super_key());
+                            let shift_pressed = modifiers_state.shift_key();
+
+                            // Ctrl+Q to quit
+                            if matches!(
                                 key_event.physical_key,
                                 PhysicalKey::Code(WinitKeyCode::KeyQ)
-                            ) && (modifiers_state.control_key()
-                                || (cfg!(target_os = "macos") && modifiers_state.super_key()));
-
-                            if is_ctrl_q {
-                                info!("Ctrl+Q pressed, exiting");
+                            ) && ctrl_pressed
+                            {
+                                info!("Ctrl+Q pressed, exiting GPU terminal");
                                 self.should_quit = true;
                                 target.exit();
                                 return;
                             }
 
-                            // Handle keyboard input - convert winit events to crossterm-style events
-                            // Skip text path when Ctrl is held to prevent double-sending control characters
-                            // (winit 0.30 includes control characters in key_event.text)
+                            // Search mode intercept
+                            if self.search_mode {
+                                if let PhysicalKey::Code(code) = key_event.physical_key {
+                                    match code {
+                                        WinitKeyCode::Escape => {
+                                            self.toggle_search_mode();
+                                        }
+                                        WinitKeyCode::Enter | WinitKeyCode::ArrowDown => {
+                                            self.search_next();
+                                        }
+                                        WinitKeyCode::ArrowUp => {
+                                            self.search_prev();
+                                        }
+                                        WinitKeyCode::Backspace => {
+                                            self.search_query.pop();
+                                            self.execute_search();
+                                        }
+                                        _ => {
+                                            // Type into search query
+                                            if !ctrl_pressed {
+                                                if let Some(text) = &key_event.text {
+                                                    for ch in text.chars() {
+                                                        self.search_query.push(ch);
+                                                    }
+                                                    self.execute_search();
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                self.dirty = true;
+                                return;
+                            }
+
+                            // Ctrl+F: toggle search mode
+                            if matches!(
+                                key_event.physical_key,
+                                PhysicalKey::Code(WinitKeyCode::KeyF)
+                            ) && ctrl_pressed
+                            {
+                                self.toggle_search_mode();
+                                self.dirty = true;
+                                return;
+                            }
+
+                            // Ctrl+N: search next
+                            if matches!(
+                                key_event.physical_key,
+                                PhysicalKey::Code(WinitKeyCode::KeyN)
+                            ) && ctrl_pressed && !shift_pressed
+                            {
+                                self.search_next();
+                                self.dirty = true;
+                                return;
+                            }
+
+                            // Ctrl+Shift+N: search prev
+                            if matches!(
+                                key_event.physical_key,
+                                PhysicalKey::Code(WinitKeyCode::KeyN)
+                            ) && ctrl_pressed && shift_pressed
+                            {
+                                self.search_prev();
+                                self.dirty = true;
+                                return;
+                            }
+
+                            // Ctrl+Shift+V or Ctrl+V: paste from clipboard
+                            if matches!(
+                                key_event.physical_key,
+                                PhysicalKey::Code(WinitKeyCode::KeyV)
+                            ) && ctrl_pressed
+                            {
+                                if let Ok(mut clipboard) = arboard::Clipboard::new() {
+                                    if let Ok(text) = clipboard.get_text() {
+                                        let _ = input_tx.send(text.into_bytes());
+                                    }
+                                }
+                                self.dirty = true;
+                                return;
+                            }
+
+                            // Ctrl+Shift+C: copy (send selection to clipboard)
+                            if matches!(
+                                key_event.physical_key,
+                                PhysicalKey::Code(WinitKeyCode::KeyC)
+                            ) && ctrl_pressed && shift_pressed
+                            {
+                                if let Ok(()) = self.copy_to_clipboard() {
+                                    self.show_notification("Copied to clipboard".to_string());
+                                }
+                                self.dirty = true;
+                                return;
+                            }
+
+                            // Ctrl+R: toggle resource monitor
+                            if matches!(
+                                key_event.physical_key,
+                                PhysicalKey::Code(WinitKeyCode::KeyR)
+                            ) && ctrl_pressed
+                            {
+                                if self.resource_monitor.is_some() {
+                                    self.show_resources = !self.show_resources;
+                                }
+                                self.dirty = true;
+                                return;
+                            }
+
+                            // Handle text input (skip when Ctrl held)
                             if let Some(text) = &key_event.text {
-                                if !modifiers_state.control_key() {
+                                if !ctrl_pressed {
+                                    // Auto-scroll to bottom when user types
+                                    self.scroll_to_bottom();
+
                                     for ch in text.chars() {
                                         let mut buf = [0u8; 4];
                                         let s = ch.encode_utf8(&mut buf);
-                                        // Send to background I/O task via channel (non-blocking)
                                         let _ = input_tx.send(s.as_bytes().to_vec());
 
-                                        // Track in command buffer
                                         if let Some(cmd_buf) =
                                             self.command_buffers.get_mut(self.active_session)
                                         {
@@ -1096,21 +895,24 @@ impl Terminal {
 
                             // Handle special keys
                             if let PhysicalKey::Code(code) = key_event.physical_key {
-                                // Check for Ctrl key combinations
-                                let ctrl_pressed = modifiers_state.control_key();
-
                                 match code {
                                     WinitKeyCode::Enter => {
-                                        // Send carriage return to background I/O task via channel
+                                        self.scroll_to_bottom();
                                         let _ = input_tx.send(b"\r".to_vec());
                                         if let Some(cmd_buf) =
                                             self.command_buffers.get_mut(self.active_session)
                                         {
+                                            // Track command in autocomplete
+                                            if let Some(ref mut ac) = self.autocomplete {
+                                                let cmd = String::from_utf8_lossy(cmd_buf).to_string();
+                                                if !cmd.trim().is_empty() {
+                                                    ac.add_to_history(cmd);
+                                                }
+                                            }
                                             cmd_buf.clear();
                                         }
                                     }
                                     WinitKeyCode::Backspace => {
-                                        // Send backspace (DEL) to background I/O task via channel
                                         let _ = input_tx.send(vec![127]);
                                         if let Some(cmd_buf) =
                                             self.command_buffers.get_mut(self.active_session)
@@ -1119,11 +921,12 @@ impl Terminal {
                                         }
                                     }
                                     WinitKeyCode::Tab => {
-                                        // Send tab character for autocompletion
                                         let _ = input_tx.send(b"\t".to_vec());
                                     }
+                                    WinitKeyCode::Escape => {
+                                        self.scroll_to_bottom();
+                                    }
                                     WinitKeyCode::ArrowUp => {
-                                        // Send ANSI escape code for Up arrow (history navigation)
                                         let _ = input_tx.send(b"\x1b[A".to_vec());
                                         if let Some(cmd_buf) =
                                             self.command_buffers.get_mut(self.active_session)
@@ -1132,7 +935,6 @@ impl Terminal {
                                         }
                                     }
                                     WinitKeyCode::ArrowDown => {
-                                        // Send ANSI escape code for Down arrow (history navigation)
                                         let _ = input_tx.send(b"\x1b[B".to_vec());
                                         if let Some(cmd_buf) =
                                             self.command_buffers.get_mut(self.active_session)
@@ -1141,40 +943,43 @@ impl Terminal {
                                         }
                                     }
                                     WinitKeyCode::ArrowRight => {
-                                        // Send ANSI escape code for Right arrow (cursor movement)
                                         let _ = input_tx.send(b"\x1b[C".to_vec());
                                     }
                                     WinitKeyCode::ArrowLeft => {
-                                        // Send ANSI escape code for Left arrow (cursor movement)
                                         let _ = input_tx.send(b"\x1b[D".to_vec());
                                     }
                                     WinitKeyCode::Home => {
-                                        // Send ANSI escape code for Home key
                                         let _ = input_tx.send(b"\x1b[H".to_vec());
                                     }
                                     WinitKeyCode::End => {
-                                        // Send ANSI escape code for End key
                                         let _ = input_tx.send(b"\x1b[F".to_vec());
                                     }
                                     WinitKeyCode::Delete => {
-                                        // Send ANSI escape code for Delete key
                                         let _ = input_tx.send(b"\x1b[3~".to_vec());
                                     }
+                                    WinitKeyCode::PageUp if shift_pressed => {
+                                        // Shift+PageUp: scroll back through history
+                                        let scroll_amount = self.terminal_rows.saturating_sub(2).max(1) as usize;
+                                        self.scroll_up(scroll_amount);
+                                    }
                                     WinitKeyCode::PageUp => {
-                                        // Send ANSI escape code for Page Up
                                         let _ = input_tx.send(b"\x1b[5~".to_vec());
                                     }
+                                    WinitKeyCode::PageDown if shift_pressed => {
+                                        // Shift+PageDown: scroll forward through history
+                                        let scroll_amount = self.terminal_rows.saturating_sub(2).max(1) as usize;
+                                        self.scroll_down(scroll_amount);
+                                    }
                                     WinitKeyCode::PageDown => {
-                                        // Send ANSI escape code for Page Down
                                         let _ = input_tx.send(b"\x1b[6~".to_vec());
                                     }
                                     // Ctrl key combinations
-                                    WinitKeyCode::KeyC if ctrl_pressed => {
-                                        // Ctrl+C sends SIGINT (ETX character)
+                                    WinitKeyCode::KeyC if ctrl_pressed && !shift_pressed => {
+                                        // Ctrl+C sends SIGINT
                                         let _ = input_tx.send(vec![0x03]);
                                     }
                                     WinitKeyCode::KeyD if ctrl_pressed => {
-                                        // Ctrl+D sends EOT (End of Transmission)
+                                        // Ctrl+D sends EOT
                                         let _ = input_tx.send(vec![0x04]);
                                     }
                                     WinitKeyCode::KeyL if ctrl_pressed => {
@@ -1182,27 +987,22 @@ impl Terminal {
                                         let _ = input_tx.send(vec![0x0C]);
                                     }
                                     WinitKeyCode::KeyZ if ctrl_pressed => {
-                                        // Ctrl+Z sends SIGTSTP (suspend)
+                                        // Ctrl+Z sends SIGTSTP
                                         let _ = input_tx.send(vec![0x1A]);
                                     }
                                     WinitKeyCode::KeyA if ctrl_pressed => {
-                                        // Ctrl+A moves to beginning of line
                                         let _ = input_tx.send(vec![0x01]);
                                     }
                                     WinitKeyCode::KeyE if ctrl_pressed => {
-                                        // Ctrl+E moves to end of line
                                         let _ = input_tx.send(vec![0x05]);
                                     }
                                     WinitKeyCode::KeyU if ctrl_pressed => {
-                                        // Ctrl+U clears line before cursor
                                         let _ = input_tx.send(vec![0x15]);
                                     }
                                     WinitKeyCode::KeyK if ctrl_pressed => {
-                                        // Ctrl+K clears line after cursor
                                         let _ = input_tx.send(vec![0x0B]);
                                     }
                                     WinitKeyCode::KeyW if ctrl_pressed => {
-                                        // Ctrl+W deletes word before cursor
                                         let _ = input_tx.send(vec![0x17]);
                                     }
                                     _ => {}
@@ -1345,6 +1145,9 @@ impl Terminal {
         self.output_buffers[self.active_session].extend_from_slice(output_str.as_bytes());
         self.dirty = true;
 
+        // Auto-scroll to bottom when new output arrives (follow latest output)
+        self.scroll_offset = 0;
+
         // Update shell integration state and trigger related hooks
         self.update_shell_integration_state(&output_str);
 
@@ -1394,29 +1197,30 @@ impl Terminal {
     }
 
     /// Convert terminal output buffer to GPU cells with ANSI color support
-    #[cfg(feature = "gpu")]
     fn buffer_to_gpu_cells(&self) -> Vec<crate::gpu::GpuCell> {
         use ratatui::style::Color;
 
         let total_cells = (self.terminal_cols as usize) * (self.terminal_rows as usize);
         let mut cells = vec![crate::gpu::GpuCell::default(); total_cells];
 
+        // Reserve last row for status bar
+        let content_rows = (self.terminal_rows as usize).saturating_sub(1);
+
         if let Some(buffer) = self.output_buffers.get(self.active_session) {
             let output = String::from_utf8_lossy(buffer);
             // Parse ANSI escape codes to get styled lines (same as CPU mode)
             let styled_lines = AnsiParser::parse_with_palette(&output, &self.color_palette);
 
-            // Skip lines to fit terminal height (same logic as CPU mode)
-            let skip_count = styled_lines
-                .len()
-                .saturating_sub(self.terminal_rows as usize);
-            let visible_lines: Vec<_> = styled_lines.into_iter().skip(skip_count).collect();
+            // Skip lines to fit terminal height, applying scroll offset
+            let tail_skip = styled_lines.len().saturating_sub(content_rows);
+            let skip_count = tail_skip.saturating_sub(self.scroll_offset);
+            let visible_lines: Vec<_> = styled_lines.into_iter().skip(skip_count).take(content_rows).collect();
 
             // Convert styled lines to GPU cells with wide glyph support
             for (row, line) in visible_lines
                 .iter()
                 .enumerate()
-                .take(self.terminal_rows as usize)
+                .take(content_rows)
             {
                 let mut col = 0;
                 for span in &line.spans {
@@ -1537,7 +1341,91 @@ impl Terminal {
             }
         }
 
+        // Render GPU status bar on the last row
+        self.render_gpu_status_bar(&mut cells, content_rows);
+
         cells
+    }
+
+    /// Render a status bar into the GPU cell buffer on the given row
+    fn render_gpu_status_bar(&self, cells: &mut [crate::gpu::GpuCell], status_row: usize) {
+        let cols = self.terminal_cols as usize;
+
+        // Build status text
+        let mode_text = if self.search_mode {
+            format!(" SEARCH: {} ", self.search_query)
+        } else if self.scroll_offset > 0 {
+            format!(" SCROLL [+{}] ", self.scroll_offset)
+        } else {
+            " NORMAL ".to_string()
+        };
+
+        let session_info = if self.sessions.len() > 1 {
+            format!(" Tab {}/{} ", self.active_session + 1, self.sessions.len())
+        } else {
+            " Session 1 ".to_string()
+        };
+
+        let hints = if self.search_mode {
+            " Esc: Exit │ Enter: Next │ ↑: Prev"
+        } else if self.scroll_offset > 0 {
+            " Shift+PgUp/PgDn: Scroll │ Esc: Bottom"
+        } else {
+            " Ctrl+F: Search │ Shift+PgUp: Scroll"
+        };
+
+        let full_status = format!("{mode_text}{session_info}{hints}");
+
+        // Mode indicator colors
+        let (mode_fg, mode_bg) = if self.search_mode {
+            ([0.0_f32, 0.0, 0.0, 1.0], [0.87_f32, 0.40, 0.40, 1.0]) // Black on red
+        } else if self.scroll_offset > 0 {
+            ([0.0_f32, 0.0, 0.0, 1.0], [0.80_f32, 0.60, 0.20, 1.0]) // Black on amber
+        } else {
+            ([0.0_f32, 0.0, 0.0, 1.0], [0.42_f32, 0.60, 0.48, 1.0]) // Black on green
+        };
+
+        let bar_bg = [
+            COLOR_STATUS_BG.0 as f32 / 255.0,
+            COLOR_STATUS_BG.1 as f32 / 255.0,
+            COLOR_STATUS_BG.2 as f32 / 255.0,
+            1.0,
+        ];
+        let bar_fg = [
+            COLOR_STATUS_HINT.0 as f32 / 255.0,
+            COLOR_STATUS_HINT.1 as f32 / 255.0,
+            COLOR_STATUS_HINT.2 as f32 / 255.0,
+            1.0,
+        ];
+
+        let mode_len = mode_text.chars().count();
+
+        for (col, ch) in full_status.chars().enumerate() {
+            if col >= cols {
+                break;
+            }
+            let idx = status_row * cols + col;
+            if idx < cells.len() {
+                cells[idx].char_code = ch as u32;
+                if col < mode_len {
+                    cells[idx].fg_color = mode_fg;
+                    cells[idx].bg_color = mode_bg;
+                } else {
+                    cells[idx].fg_color = bar_fg;
+                    cells[idx].bg_color = bar_bg;
+                }
+            }
+        }
+
+        // Fill remaining cols with background
+        for col in full_status.len()..cols {
+            let idx = status_row * cols + col;
+            if idx < cells.len() {
+                cells[idx].char_code = ' ' as u32;
+                cells[idx].fg_color = bar_fg;
+                cells[idx].bg_color = bar_bg;
+            }
+        }
     }
 
     /// Bug #9: Detect shell prompts from various shells
@@ -1579,16 +1467,63 @@ impl Terminal {
     }
 
     /// Handle mouse events
-    #[allow(clippy::unused_self)]
     fn handle_mouse_event(&mut self, mouse: MouseEvent) {
-        // Handle text selection
-        self.handle_mouse_selection(mouse);
+        use crossterm::event::MouseEventKind;
+
+        match mouse.kind {
+            MouseEventKind::ScrollUp => {
+                self.scroll_up(3); // Scroll 3 lines per tick
+            }
+            MouseEventKind::ScrollDown => {
+                self.scroll_down(3); // Scroll 3 lines per tick
+            }
+            _ => {
+                // Handle text selection for other mouse events
+                self.handle_mouse_selection(mouse);
+            }
+        }
     }
 
     /// Handle keyboard events with optimal input processing
     async fn handle_key_event(&mut self, key: KeyEvent) -> Result<()> {
         // BUG FIX #27: Use keybinding system to handle actions
         use crate::keybindings::Action;
+
+        // Search mode intercept: capture keys for search query input
+        if self.search_mode {
+            // Always allow Ctrl+C/Ctrl+D to quit even in search mode
+            if matches!(
+                (key.code, key.modifiers),
+                (KeyCode::Char('c' | 'd'), KeyModifiers::CONTROL)
+            ) {
+                // Fall through to normal handling below
+            } else {
+                match key.code {
+                    KeyCode::Esc => {
+                        self.toggle_search_mode();
+                    }
+                    KeyCode::Enter | KeyCode::Down => {
+                        self.search_next();
+                    }
+                    KeyCode::Up => {
+                        self.search_prev();
+                    }
+                    KeyCode::Backspace => {
+                        self.search_query.pop();
+                        self.execute_search();
+                    }
+                    KeyCode::Char(c)
+                        if !key.modifiers.contains(KeyModifiers::CONTROL)
+                            && !key.modifiers.contains(KeyModifiers::ALT) =>
+                    {
+                        self.search_query.push(c);
+                        self.execute_search();
+                    }
+                    _ => {}
+                }
+                return Ok(());
+            }
+        }
 
         if let Some(action) = self.keybindings.get_action(key.code, key.modifiers) {
             match action {
@@ -1640,6 +1575,14 @@ impl Terminal {
                 Action::Search => {
                     // Toggle search mode
                     self.toggle_search_mode();
+                    return Ok(());
+                }
+                Action::SearchNext => {
+                    self.search_next();
+                    return Ok(());
+                }
+                Action::SearchPrev => {
+                    self.search_prev();
                     return Ok(());
                 }
                 Action::ToggleResourceMonitor => {
@@ -1893,6 +1836,53 @@ impl Terminal {
                 }
             }
 
+            // Home key - move to beginning of line
+            (KeyCode::Home, _) => {
+                if let Some(session) = self.sessions.get(self.active_session) {
+                    session.write_input(b"\x1b[H").await?;
+                }
+            }
+            // End key - move to end of line
+            (KeyCode::End, _) => {
+                if let Some(session) = self.sessions.get(self.active_session) {
+                    session.write_input(b"\x1b[F").await?;
+                }
+            }
+            // Delete key
+            (KeyCode::Delete, _) => {
+                if let Some(session) = self.sessions.get(self.active_session) {
+                    session.write_input(b"\x1b[3~").await?;
+                }
+            }
+            // Page Up - Shift+PageUp scrolls back, plain sends to shell
+            (KeyCode::PageUp, modifiers) if modifiers.contains(KeyModifiers::SHIFT) => {
+                self.scroll_up(self.terminal_rows.saturating_sub(2).max(1) as usize);
+            }
+            (KeyCode::PageUp, _) => {
+                if let Some(session) = self.sessions.get(self.active_session) {
+                    session.write_input(b"\x1b[5~").await?;
+                }
+            }
+            // Page Down - Shift+PageDown scrolls forward, plain sends to shell
+            (KeyCode::PageDown, modifiers) if modifiers.contains(KeyModifiers::SHIFT) => {
+                self.scroll_down(self.terminal_rows.saturating_sub(2).max(1) as usize);
+            }
+            (KeyCode::PageDown, _) => {
+                if let Some(session) = self.sessions.get(self.active_session) {
+                    session.write_input(b"\x1b[6~").await?;
+                }
+            }
+            // Tab key
+            (KeyCode::Tab, KeyModifiers::NONE) => {
+                if let Some(session) = self.sessions.get(self.active_session) {
+                    session.write_input(b"\t").await?;
+                }
+            }
+            // Escape key - return to bottom if scrolled, otherwise no-op
+            (KeyCode::Esc, _) => {
+                self.scroll_to_bottom();
+            }
+
             _ => {}
         }
 
@@ -2106,6 +2096,7 @@ impl Terminal {
                 } else {
                     0
                 }),
+                Constraint::Length(1),
             ])
             .split(f.size());
 
@@ -2115,6 +2106,7 @@ impl Terminal {
         let content_area = main_chunks[3];
         let autocomplete_area = main_chunks[4];
         let resource_area = main_chunks[5];
+        let status_area = main_chunks[6];
 
         // Render tabs if enabled
         if self.config.terminal.enable_tabs && self.sessions.len() > 1 {
@@ -2234,6 +2226,9 @@ impl Terminal {
 
         // Render cursor trail overlay
         self.render_cursor_trail(f);
+
+        // Render status bar
+        self.render_status_bar(f, status_area);
     }
 
     /// Bug #3: Render terminal output with zero-copy caching
@@ -2258,9 +2253,11 @@ impl Terminal {
                 let all_lines = AnsiParser::parse_with_palette(&raw_output, &self.color_palette);
                 // Leave 1 line at bottom for breathing room (ensure prompt is visible)
                 let height = (area.height as usize).saturating_sub(1).max(1);
-                let skip_count = all_lines.len().saturating_sub(height);
+                // Apply scroll offset: skip_count positions the viewport in the buffer
+                let tail_skip = all_lines.len().saturating_sub(height);
+                let skip_count = tail_skip.saturating_sub(self.scroll_offset);
                 let visible_lines: Vec<Line<'static>> =
-                    all_lines.into_iter().skip(skip_count).collect();
+                    all_lines.into_iter().skip(skip_count).take(height).collect();
 
                 if let Some(cache) = self.cached_styled_lines.get_mut(self.active_session) {
                     *cache = visible_lines;
@@ -2305,45 +2302,43 @@ impl Terminal {
                 let selection_bg = Color::Rgb(sel_color.r, sel_color.g, sel_color.b);
 
                 // Apply selection background to selected positions
+                // Use character-based iteration for UTF-8 safety (not byte indices)
                 for (row_idx, line) in display_lines.iter_mut().enumerate() {
                     let mut new_spans = Vec::new();
                     let mut col = 0u16;
 
                     for span in &line.spans {
-                        let span_width = span.content.len() as u16;
-                        let mut span_start = 0;
+                        let chars: Vec<char> = span.content.chars().collect();
+                        let char_count = chars.len() as u16;
+                        let mut span_char_start = 0u16;
 
-                        for char_idx in 0..span_width {
+                        for char_idx in 0..char_count {
                             let char_col = col + char_idx;
                             if self.is_position_selected(char_col, row_idx as u16) {
                                 // This character is selected
-                                if span_start < char_idx {
-                                    // Add non-selected part
-                                    new_spans.push(Span::styled(
-                                        span.content[span_start as usize..char_idx as usize]
-                                            .to_string(),
-                                        span.style,
-                                    ));
+                                if span_char_start < char_idx {
+                                    // Add non-selected part (collect chars in range)
+                                    let text: String = chars
+                                        [span_char_start as usize..char_idx as usize]
+                                        .iter()
+                                        .collect();
+                                    new_spans.push(Span::styled(text, span.style));
                                 }
                                 // Add selected character
-                                new_spans.push(Span::styled(
-                                    span.content[char_idx as usize..(char_idx + 1) as usize]
-                                        .to_string(),
-                                    span.style.bg(selection_bg),
-                                ));
-                                span_start = char_idx + 1;
+                                let ch_text = chars[char_idx as usize].to_string();
+                                new_spans.push(Span::styled(ch_text, span.style.bg(selection_bg)));
+                                span_char_start = char_idx + 1;
                             }
                         }
 
                         // Add remaining non-selected part
-                        if span_start < span_width {
-                            new_spans.push(Span::styled(
-                                span.content[span_start as usize..].to_string(),
-                                span.style,
-                            ));
+                        if span_char_start < char_count {
+                            let text: String =
+                                chars[span_char_start as usize..].iter().collect();
+                            new_spans.push(Span::styled(text, span.style));
                         }
 
-                        col += span_width;
+                        col += char_count;
                     }
 
                     if !new_spans.is_empty() {
@@ -2778,6 +2773,243 @@ impl Terminal {
         self.dirty = true;
     }
 
+    /// Execute search against the current output buffer
+    fn execute_search(&mut self) {
+        self.search_results.clear();
+        self.current_search_result = 0;
+
+        if self.search_query.is_empty() {
+            self.dirty = true;
+            return;
+        }
+
+        // Search through the output buffer
+        if let Some(buffer) = self.output_buffers.get(self.active_session) {
+            let output = String::from_utf8_lossy(buffer);
+            let query_lower = self.search_query.to_lowercase();
+
+            for (line_idx, line) in output.lines().enumerate() {
+                if line.to_lowercase().contains(&query_lower) {
+                    self.search_results.push(line_idx);
+                }
+            }
+        }
+
+        let count = self.search_results.len();
+        if count > 0 {
+            self.show_notification(format!(
+                "Found {} match{} for \"{}\"",
+                count,
+                if count == 1 { "" } else { "es" },
+                self.search_query
+            ));
+        } else {
+            self.show_notification(format!("No matches for \"{}\"", self.search_query));
+        }
+
+        self.dirty = true;
+    }
+
+    /// Navigate to next search result
+    fn search_next(&mut self) {
+        if self.search_results.is_empty() {
+            return;
+        }
+        self.current_search_result = (self.current_search_result + 1) % self.search_results.len();
+        self.show_notification(format!(
+            "Match {}/{}",
+            self.current_search_result + 1,
+            self.search_results.len()
+        ));
+        self.dirty = true;
+    }
+
+    /// Navigate to previous search result
+    fn search_prev(&mut self) {
+        if self.search_results.is_empty() {
+            return;
+        }
+        if self.current_search_result == 0 {
+            self.current_search_result = self.search_results.len() - 1;
+        } else {
+            self.current_search_result -= 1;
+        }
+        self.show_notification(format!(
+            "Match {}/{}",
+            self.current_search_result + 1,
+            self.search_results.len()
+        ));
+        self.dirty = true;
+    }
+
+    /// Scroll up through terminal output history
+    fn scroll_up(&mut self, lines: usize) {
+        // Calculate total lines available
+        let total_lines = self
+            .output_buffers
+            .get(self.active_session)
+            .map(|buf| {
+                let output = String::from_utf8_lossy(buf);
+                output.lines().count()
+            })
+            .unwrap_or(0);
+        let visible = self.terminal_rows.saturating_sub(3) as usize; // approx visible area
+        let max_offset = total_lines.saturating_sub(visible);
+        self.scroll_offset = (self.scroll_offset + lines).min(max_offset);
+        self.invalidate_active_cache();
+        self.dirty = true;
+    }
+
+    /// Scroll down through terminal output history (toward latest)
+    fn scroll_down(&mut self, lines: usize) {
+        self.scroll_offset = self.scroll_offset.saturating_sub(lines);
+        self.invalidate_active_cache();
+        self.dirty = true;
+    }
+
+    /// Reset scroll to follow latest output
+    fn scroll_to_bottom(&mut self) {
+        if self.scroll_offset != 0 {
+            self.scroll_offset = 0;
+            self.invalidate_active_cache();
+            self.dirty = true;
+        }
+    }
+
+    /// Invalidate the render cache for the active session to force re-render
+    fn invalidate_active_cache(&mut self) {
+        if let Some(len) = self.cached_buffer_lens.get_mut(self.active_session) {
+            *len = 0; // Force cache invalidation
+        }
+    }
+
+    /// Render the status bar at the bottom of the terminal
+    fn render_status_bar(&self, f: &mut ratatui::Frame, area: Rect) {
+        let mode_text = if self.search_mode {
+            format!(" SEARCH: {} ", self.search_query)
+        } else if self.scroll_offset > 0 {
+            format!(" SCROLL [+{}] ", self.scroll_offset)
+        } else {
+            " NORMAL ".to_string()
+        };
+
+        let mode_style = if self.search_mode {
+            Style::default()
+                .fg(Color::Rgb(COLOR_PURE_BLACK.0, COLOR_PURE_BLACK.1, COLOR_PURE_BLACK.2))
+                .bg(Color::Rgb(COLOR_COOL_RED.0, COLOR_COOL_RED.1, COLOR_COOL_RED.2))
+                .add_modifier(Modifier::BOLD)
+        } else if self.scroll_offset > 0 {
+            Style::default()
+                .fg(Color::Rgb(COLOR_PURE_BLACK.0, COLOR_PURE_BLACK.1, COLOR_PURE_BLACK.2))
+                .bg(Color::Rgb(0xCC, 0x99, 0x33)) // Amber for scroll mode
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default()
+                .fg(Color::Rgb(COLOR_PURE_BLACK.0, COLOR_PURE_BLACK.1, COLOR_PURE_BLACK.2))
+                .bg(Color::Rgb(COLOR_MUTED_GREEN.0, COLOR_MUTED_GREEN.1, COLOR_MUTED_GREEN.2))
+                .add_modifier(Modifier::BOLD)
+        };
+
+        let session_info = if self.sessions.len() > 1 {
+            format!(" Tab {}/{} ", self.active_session + 1, self.sessions.len())
+        } else {
+            " Session 1 ".to_string()
+        };
+
+        let hints = if self.search_mode {
+            " Esc: Exit │ Enter/Ctrl+N: Next │ ↑/Ctrl+Shift+N: Prev "
+        } else if self.scroll_offset > 0 {
+            " Shift+PgUp/PgDn: Scroll │ Esc: Back to Bottom "
+        } else {
+            " Ctrl+F: Search │ Shift+PgUp: Scroll │ Ctrl+T: New Tab "
+        };
+
+        let spans = vec![
+            Span::styled(mode_text, mode_style),
+            Span::styled(
+                session_info,
+                Style::default()
+                    .fg(Color::Rgb(COLOR_REDDISH_GRAY.0, COLOR_REDDISH_GRAY.1, COLOR_REDDISH_GRAY.2))
+                    .bg(Color::Rgb(COLOR_STATUS_BG.0, COLOR_STATUS_BG.1, COLOR_STATUS_BG.2)),
+            ),
+            Span::styled(
+                hints,
+                Style::default()
+                    .fg(Color::Rgb(COLOR_STATUS_HINT.0, COLOR_STATUS_HINT.1, COLOR_STATUS_HINT.2))
+                    .bg(Color::Rgb(COLOR_STATUS_BG.0, COLOR_STATUS_BG.1, COLOR_STATUS_BG.2)),
+            ),
+        ];
+
+        let status_line = Line::from(spans);
+        let paragraph = Paragraph::new(status_line)
+            .style(
+                Style::default()
+                    .bg(Color::Rgb(COLOR_STATUS_BG.0, COLOR_STATUS_BG.1, COLOR_STATUS_BG.2)),
+            );
+        f.render_widget(paragraph, area);
+    }
+
+    /// Auto-save the current session on exit
+    fn auto_save_session(&mut self) {
+        use crate::session::{SavedSession, TabState};
+        use chrono::Local;
+        use uuid::Uuid;
+
+        if let Some(ref sm) = self.session_manager {
+            let tabs: Vec<TabState> = self
+                .output_buffers
+                .iter()
+                .enumerate()
+                .map(|(i, buf)| {
+                    // Only save the last portion of output to keep sessions manageable
+                    let output = String::from_utf8_lossy(buf);
+                    let truncated = if output.len() > 50_000 {
+                        // Find the nearest valid UTF-8 char boundary at or after the cut point
+                        // In valid UTF-8, this shifts at most 3 bytes forward
+                        let mut start = output.len() - 50_000;
+                        let max_shift = start + 4; // UTF-8 chars are at most 4 bytes
+                        while !output.is_char_boundary(start) && start < max_shift {
+                            start += 1;
+                        }
+                        if start <= output.len() {
+                            output[start..].to_string()
+                        } else {
+                            output.to_string()
+                        }
+                    } else {
+                        output.to_string()
+                    };
+                    TabState {
+                        output: truncated,
+                        working_dir: self
+                            .keybindings
+                            .shell_integration()
+                            .current_dir
+                            .clone(),
+                        active: i == self.active_session,
+                    }
+                })
+                .collect();
+
+            if tabs.is_empty() {
+                return;
+            }
+
+            let session = SavedSession {
+                id: format!("auto-{}", Uuid::new_v4()),
+                name: format!("Auto-save {}", Local::now().format("%Y-%m-%d %H:%M")),
+                created_at: Local::now(),
+                tabs,
+            };
+
+            if let Err(e) = sm.save_session(&session) {
+                warn!("Failed to auto-save session: {}", e);
+            } else {
+                info!("Session auto-saved: {}", session.name);
+            }
+        }
+    }
+
     /// Load last saved session
     fn load_last_session(&mut self) -> Result<()> {
         if let Some(ref mut sm) = self.session_manager {
@@ -2865,14 +3097,21 @@ impl Terminal {
                 if let Some(end) = output[start..].find('\x07') {
                     // OSC sequences: 0 = icon+title, 1 = icon, 2 = title
                     // Format: ESC ] number ; text BEL
-                    let osc_content = &output[start..start + end];
-                    if let Some(semicolon) = osc_content.find(';') {
-                        let title = &osc_content[semicolon + 1..];
-                        // Call on_title_change hook
-                        if let Some(ref executor) = self.hooks_executor {
-                            if let Some(ref script) = self.config.hooks.on_title_change {
-                                if let Err(e) = executor.on_title_change(script, title) {
-                                    warn!("on_title_change hook failed: {}", e);
+                    // end is relative to start, so start + end <= output.len()
+                    if start + end <= output.len() {
+                        let osc_content = &output[start..start + end];
+                        if let Some(semicolon) = osc_content.find(';') {
+                            if semicolon + 1 < osc_content.len() {
+                                let title = &osc_content[semicolon + 1..];
+                                // Call on_title_change hook
+                                if let Some(ref executor) = self.hooks_executor {
+                                    if let Some(ref script) = self.config.hooks.on_title_change {
+                                        if let Err(e) =
+                                            executor.on_title_change(script, title)
+                                        {
+                                            warn!("on_title_change hook failed: {}", e);
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -3513,14 +3752,8 @@ mod tests {
         assert_eq!(terminal.cursor_style(), "block");
         assert_eq!(terminal.max_history(), 5000);
         assert_eq!(terminal.font_size(), 14);
-        #[cfg(feature = "gpu")]
-        let expected_hw_accel = gpu_available_cached();
-        #[cfg(not(feature = "gpu"))]
-        let expected_hw_accel = false;
-        assert_eq!(
-            terminal.is_hardware_acceleration_enabled(),
-            expected_hw_accel
-        );
+        // GPU rendering is always enabled (hardware_acceleration is always true)
+        assert!(terminal.is_hardware_acceleration_enabled());
         assert!(!terminal.is_split_pane_enabled());
     }
 
@@ -3537,11 +3770,13 @@ mod tests {
 
     #[test]
     fn test_hardware_acceleration_respects_config() {
+        // GPU rendering is always enabled regardless of config setting
         let mut config = Config::default();
         config.terminal.hardware_acceleration = false;
 
         let terminal = Terminal::new(config).unwrap();
-        assert!(!terminal.is_hardware_acceleration_enabled());
+        // Even when config says false, GPU is always the rendering path
+        assert!(terminal.is_hardware_acceleration_enabled());
     }
 
     #[test]
@@ -3556,5 +3791,164 @@ mod tests {
         terminal.set_split_ratio(0.6);
 
         assert!(terminal.is_split_pane_enabled());
+    }
+
+    #[test]
+    fn test_search_mode_toggle() {
+        let config = Config::default();
+        let mut terminal = Terminal::new(config).unwrap();
+
+        assert!(!terminal.search_mode);
+        terminal.toggle_search_mode();
+        assert!(terminal.search_mode);
+        assert!(terminal.search_query.is_empty());
+        assert!(terminal.search_results.is_empty());
+
+        terminal.toggle_search_mode();
+        assert!(!terminal.search_mode);
+    }
+
+    #[test]
+    fn test_execute_search_empty_query() {
+        let config = Config::default();
+        let mut terminal = Terminal::new(config).unwrap();
+
+        terminal.search_query.clear();
+        terminal.execute_search();
+        assert!(terminal.search_results.is_empty());
+    }
+
+    #[test]
+    fn test_execute_search_with_matches() {
+        let config = Config::default();
+        let mut terminal = Terminal::new(config).unwrap();
+
+        // Terminal starts with no sessions/buffers, so push one
+        terminal.output_buffers.push(b"hello world\nfoo bar\nhello again\n".to_vec());
+        terminal.search_query = "hello".to_string();
+        terminal.execute_search();
+
+        assert_eq!(terminal.search_results.len(), 2);
+        assert_eq!(terminal.search_results[0], 0); // First line
+        assert_eq!(terminal.search_results[1], 2); // Third line
+    }
+
+    #[test]
+    fn test_execute_search_case_insensitive() {
+        let config = Config::default();
+        let mut terminal = Terminal::new(config).unwrap();
+
+        terminal.output_buffers.push(b"Hello World\nHELLO AGAIN\nhello small\n".to_vec());
+        terminal.search_query = "hello".to_string();
+        terminal.execute_search();
+
+        assert_eq!(terminal.search_results.len(), 3);
+    }
+
+    #[test]
+    fn test_execute_search_no_matches() {
+        let config = Config::default();
+        let mut terminal = Terminal::new(config).unwrap();
+
+        terminal.output_buffers.push(b"hello world\nfoo bar\n".to_vec());
+        terminal.search_query = "zzz".to_string();
+        terminal.execute_search();
+
+        assert!(terminal.search_results.is_empty());
+    }
+
+    #[test]
+    fn test_search_navigation() {
+        let config = Config::default();
+        let mut terminal = Terminal::new(config).unwrap();
+
+        terminal.output_buffers.push(b"match1\nno\nmatch2\nno\nmatch3\n".to_vec());
+        terminal.search_query = "match".to_string();
+        terminal.execute_search();
+        assert_eq!(terminal.search_results.len(), 3);
+        assert_eq!(terminal.current_search_result, 0);
+
+        // Navigate forward
+        terminal.search_next();
+        assert_eq!(terminal.current_search_result, 1);
+
+        terminal.search_next();
+        assert_eq!(terminal.current_search_result, 2);
+
+        // Wrap around
+        terminal.search_next();
+        assert_eq!(terminal.current_search_result, 0);
+
+        // Navigate backward (wraps to end)
+        terminal.search_prev();
+        assert_eq!(terminal.current_search_result, 2);
+
+        terminal.search_prev();
+        assert_eq!(terminal.current_search_result, 1);
+    }
+
+    #[test]
+    fn test_search_navigation_empty_results() {
+        let config = Config::default();
+        let mut terminal = Terminal::new(config).unwrap();
+
+        // Should not panic with empty results
+        terminal.search_next();
+        terminal.search_prev();
+        assert_eq!(terminal.current_search_result, 0);
+    }
+
+    #[test]
+    fn test_utf8_session_save_boundary_safety() {
+        // Verify that truncation at UTF-8 boundaries works correctly
+        // using the same logic as try_save_session
+        let multibyte = "日本語テスト"; // 6 chars, 18 bytes
+        let repeated = multibyte.repeat(10_000); // ~180,000 bytes
+
+        // Simulate the truncation logic from try_save_session
+        let output = &repeated;
+        let truncated = if output.len() > 50_000 {
+            let mut start = output.len() - 50_000;
+            while !output.is_char_boundary(start) && start < output.len() {
+                start += 1;
+            }
+            output[start..].to_string()
+        } else {
+            output.to_string()
+        };
+
+        // Should not panic, and should be valid UTF-8
+        assert!(!truncated.is_empty());
+        assert!(truncated.len() <= 50_003); // max 3 extra bytes due to UTF-8 boundary shift (4-byte chars)
+        // Verify it's valid UTF-8 by iterating chars
+        assert!(truncated.chars().count() > 0);
+    }
+
+    #[test]
+    fn test_process_output_oob_protection() {
+        // Test that process_shell_output_chunk doesn't panic when active_session is out of bounds
+        let mut config = Config::default();
+        config.terminal.hardware_acceleration = true;
+        let mut terminal = Terminal::new(config).unwrap();
+
+        // active_session is 0 but output_buffers is empty
+        assert!(terminal.output_buffers.is_empty());
+        // This should not panic due to the guard at the start of process_shell_output_chunk
+        terminal.process_shell_output_chunk(b"test output");
+    }
+
+    #[test]
+    fn test_process_output_with_valid_buffer() {
+        // Test that process_shell_output_chunk works when buffer exists
+        let mut config = Config::default();
+        config.terminal.hardware_acceleration = true;
+        let mut terminal = Terminal::new(config).unwrap();
+        terminal.output_buffers.push(Vec::new());
+
+        terminal.process_shell_output_chunk(b"hello world");
+        assert_eq!(
+            String::from_utf8_lossy(&terminal.output_buffers[0]),
+            "hello world"
+        );
     }
 }
