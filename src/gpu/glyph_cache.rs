@@ -13,7 +13,6 @@ pub struct GlyphCache {
     /// Map from character code to UV coordinates in atlas
     glyph_map: HashMap<u32, GlyphInfo>,
     /// Font for rasterization
-    #[cfg(feature = "gpu")]
     font: Option<fontdue::Font>,
     /// Font size
     font_size: f32,
@@ -53,13 +52,11 @@ impl GlyphCache {
     ///
     /// BUG FIX #4: Implement actual font loading and rasterization
     pub fn new(font_size: f32, font_family: &str) -> Self {
-        #[cfg(feature = "gpu")]
         let font = Self::load_font(font_family);
 
         let atlas_size = 2048;
         let mut cache = Self {
             glyph_map: HashMap::with_capacity(256),
-            #[cfg(feature = "gpu")]
             font,
             font_size,
             font_family: font_family.to_string(),
@@ -79,7 +76,6 @@ impl GlyphCache {
     /// Load font from system or embedded
     ///
     /// BUG FIX #4: Actually load fonts for rendering
-    #[cfg(feature = "gpu")]
     fn load_font(font_family: &str) -> Option<fontdue::Font> {
         // Try to load from common system font paths
         let font_paths = Self::get_font_paths(font_family);
@@ -101,7 +97,6 @@ impl GlyphCache {
     }
 
     /// Get common font file paths based on font name
-    #[cfg(feature = "gpu")]
     fn get_font_paths(font_family: &str) -> Vec<String> {
         let mut paths = Vec::new();
 
@@ -134,7 +129,6 @@ impl GlyphCache {
     ///
     /// BUG FIX #4: Actually rasterize glyphs and upload to atlas
     fn precache_ascii(&mut self) {
-        #[cfg(feature = "gpu")]
         {
             if self.font.is_some() {
                 // Cache printable ASCII (32-126)
@@ -155,7 +149,6 @@ impl GlyphCache {
     /// Cache a single glyph by rendering it
     ///
     /// BUG FIX #4: Helper method to avoid borrow conflicts
-    #[cfg(feature = "gpu")]
     fn cache_glyph_rendered(&mut self, c: char, code: u32) {
         // Get font reference
         let Some(ref font) = self.font else {
@@ -399,7 +392,6 @@ impl GlyphCache {
     ///
     /// # Returns
     /// Returns `true` if the font was successfully loaded, `false` if fallback was used
-    #[cfg(feature = "gpu")]
     pub fn reload_font(&mut self, font_family: &str) -> bool {
         self.font_family = font_family.to_string();
         self.font = Self::load_font(font_family);
@@ -427,10 +419,7 @@ impl GlyphCache {
     /// # Returns
     /// A tuple of (font_size, font_family, has_real_font, cached_glyph_count)
     pub fn font_metrics(&self) -> (f32, &str, bool, usize) {
-        #[cfg(feature = "gpu")]
         let has_font = self.font.is_some();
-        #[cfg(not(feature = "gpu"))]
-        let has_font = false;
 
         (
             self.font_size,
@@ -498,7 +487,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "gpu")]
     fn test_reload_font() {
         let mut cache = GlyphCache::new(14.0, "Monospace");
 

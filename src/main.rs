@@ -1,12 +1,10 @@
 use anyhow::{Context, Result};
 use clap::Parser;
-use std::io::IsTerminal;
 use tracing::Level;
 use tracing_subscriber::FmtSubscriber;
 
 mod colors;
 mod config;
-#[cfg(feature = "gpu")]
 mod gpu;
 mod hooks;
 mod keybindings;
@@ -19,7 +17,7 @@ mod ui;
 use config::Config;
 use terminal::Terminal;
 
-/// Furnace - An extremely advanced, high-performance terminal emulator for Windows
+/// Furnace - An extremely advanced, GPU-accelerated terminal emulator
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
@@ -70,21 +68,7 @@ async fn main() -> Result<()> {
         config.shell.default_shell = shell;
     }
 
-    // Check if hardware acceleration is enabled
-    #[cfg(feature = "gpu")]
-    let using_gpu = config.terminal.hardware_acceleration;
-    #[cfg(not(feature = "gpu"))]
-    let using_gpu = false;
-
-    // Only check for TTY if using CPU rendering (ratatui)
-    // GPU rendering uses a windowed application and doesn't need TTY
-    if !using_gpu && !std::io::stdout().is_terminal() {
-        eprintln!("Error: Furnace CPU rendering mode must be run in an interactive terminal.");
-        eprintln!("It cannot be run with redirected output or in non-TTY environments.");
-        eprintln!("\nUsage: Run 'furnace' directly in a terminal emulator.");
-        eprintln!("Tip: Enable GPU rendering with 'terminal.hardware_acceleration = true' to run in windowed mode.");
-        std::process::exit(1);
-    }
+    // GPU rendering uses a windowed application — no TTY check needed
 
     // Create and run terminal
     let mut terminal = Terminal::new(config)?;

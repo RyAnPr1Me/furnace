@@ -94,10 +94,8 @@ const _COLOR_DARK_GRAY: (u8, u8, u8) = (0x5A, 0x4A, 0x4A); // Dark gray for futu
 const COLOR_STATUS_BG: (u8, u8, u8) = (0x1A, 0x0A, 0x0A); // Status bar background
 const COLOR_STATUS_HINT: (u8, u8, u8) = (0x8A, 0x7A, 0x7A); // Status bar hint text
 
-#[cfg(feature = "gpu")]
 const GPU_PROBE_TIMEOUT_MS: u64 = 250;
 
-#[cfg(feature = "gpu")]
 fn gpu_available_cached() -> bool {
     use std::{
         sync::{mpsc, OnceLock},
@@ -121,6 +119,7 @@ fn gpu_available_cached() -> bool {
 
 /// High-performance terminal with GPU-accelerated rendering at 170 FPS
 #[allow(clippy::struct_field_names)]
+#[allow(dead_code)] // Fields used in GPU rendering path; some also kept for tests/library API
 pub struct Terminal {
     config: Config,
     sessions: Vec<ShellSession>,
@@ -191,7 +190,6 @@ pub struct Terminal {
     // Cursor trail state
     cursor_trail_positions: Vec<(u16, u16, std::time::Instant)>, // (col, row, timestamp)
     // GPU renderer for hardware-accelerated rendering
-    #[cfg(feature = "gpu")]
     gpu_renderer: Option<crate::gpu::GpuRenderer>,
 }
 
@@ -269,23 +267,12 @@ impl Terminal {
         let cursor_style = config.terminal.cursor_style.clone();
         let max_history = config.terminal.max_history;
         let font_size = config.terminal.font_size;
-        let hardware_acceleration = config.terminal.hardware_acceleration
-            && {
-                #[cfg(feature = "gpu")]
-                {
-                    if gpu_available_cached() {
-                        true
-                    } else {
-                        warn!("Hardware acceleration requested but no compatible GPU detected. Falling back to CPU rendering.");
-                        false
-                    }
-                }
-                #[cfg(not(feature = "gpu"))]
-                {
-                    warn!("Hardware acceleration requested but binary was built without the `gpu` feature. Falling back to CPU rendering.");
-                    false
-                }
-            };
+        let hardware_acceleration = if gpu_available_cached() {
+            true
+        } else {
+            warn!("No compatible GPU detected — GPU rendering may use software fallback");
+            true // Always use GPU path, wgpu can fall back to software rasterizer
+        };
         let enable_split_pane = config.terminal.enable_split_pane;
 
         // Store hooks for later execution
@@ -437,8 +424,7 @@ impl Terminal {
             cursor_trail_positions: Vec::with_capacity(20), // Pre-allocate for trail
             // Initialize scrollback navigation (0 = following latest output)
             scroll_offset: 0,
-            // GPU renderer will be initialized in run() if hardware acceleration is enabled
-            #[cfg(feature = "gpu")]
+            // GPU renderer will be initialized in run()
             gpu_renderer: None,
         };
 
@@ -534,341 +520,17 @@ impl Terminal {
     /// Returns an error if terminal setup, shell session creation, or event handling fails
     #[allow(clippy::too_many_lines)]
     pub async fn run(&mut self) -> Result<()> {
-        // Check if GPU rendering is enabled - if so, use windowed GPU path
-        #[cfg(feature = "gpu")]
-        if self.hardware_acceleration {
-            info!("Using GPU-accelerated rendering with windowed application");
-            return self.run_gpu().await;
-        }
-
-        #[cfg(not(feature = "gpu"))]
-        if self.hardware_acceleration {
-            warn!(
-                "Hardware acceleration requested but GPU feature not compiled - using CPU fallback"
-            );
-        }
-
-        // CPU rendering path using ratatui
-        info!("Using CPU rendering with ratatui");
-
-        // Set up terminal with automatic cleanup on error
-        enable_raw_mode().context(
-            "Failed to enable raw mode. Ensure you're running in a proper terminal emulator.",
-        )?;
-        let mut stdout = io::stdout();
-        execute!(stdout, EnterAlternateScreen).context("Failed to enter alternate screen")?;
-
-        // Enable mouse capture and bracketed paste mode (Bug #21)
-        // Show cursor so user knows where to type
-        execute!(
-            stdout,
-            crossterm::event::EnableMouseCapture,
-            crossterm::event::EnableBracketedPaste,
-            Show
-        )
-        .context("Failed to setup terminal features")?;
-
-        let backend = CrosstermBackend::new(stdout);
-        let mut terminal =
-            RatatuiTerminal::new(backend).context("Failed to create terminal backend")?;
-
-        // Create initial shell session with actual terminal size (Bug #7)
-        let (cols, rows) = terminal.size().map(|s| (s.width, s.height))?;
-        self.terminal_cols = cols;
-        self.terminal_rows = rows;
-
-        // Prepare environment variables from config
-        let env_vars: Vec<(&str, &str)> = self
-            .config
-            .shell
-            .env
-            .iter()
-            .map(|(k, v)| (k.as_str(), v.as_str()))
-            .collect();
-
-        let session = if env_vars.is_empty() {
-            ShellSession::new(
-                &self.config.shell.default_shell,
-                self.config.shell.working_dir.as_deref(),
-                rows,
-                cols,
-            )?
-        } else {
-            ShellSession::new_with_env(
-                &self.config.shell.default_shell,
-                self.config.shell.working_dir.as_deref(),
-                rows,
-                cols,
-                &env_vars,
-            )?
-        };
-
-        self.sessions.push(session);
-        self.output_buffers.push(Vec::with_capacity(1024 * 1024));
-        self.command_buffers.push(Vec::new()); // Bytes, not String (Bug #1)
-        self.cached_styled_lines.push(Vec::new());
-        self.cached_buffer_lens.push(0);
-
-        info!("Terminal started with {}x{} size", cols, rows);
-
-        // Log configuration summary
-        debug!("{}", self.get_config_summary());
-
-        // Wait for initial shell output (prompt) to ensure it's displayed
-        // This prevents the blank screen issue on Windows PowerShell
-        debug!("Waiting for initial shell output...");
-        let initial_timeout = Duration::from_millis(INITIAL_OUTPUT_TIMEOUT_MS);
-        let start_time = tokio::time::Instant::now();
-        let mut received_output = false;
-
-        // Poll for initial output with timeout
-        while start_time.elapsed() < initial_timeout {
-            // Try reading once
-            let bytes_read = self.read_and_store_output(1, 0).await;
-
-            if bytes_read > 0 {
-                received_output = true;
-                debug!("Received {} bytes of initial shell output", bytes_read);
-
-                // Continue reading for a bit more to get the full prompt
-                tokio::time::sleep(Duration::from_millis(INITIAL_OUTPUT_SETTLE_MS)).await;
-
-                // Try to read more data that might be coming
-                let additional = self
-                    .read_and_store_output(EXTRA_READ_ATTEMPTS, EXTRA_READ_DELAY_MS)
-                    .await;
-                if additional > 0 {
-                    debug!("Received additional {} bytes", additional);
-                }
-                break;
-            }
-
-            tokio::time::sleep(Duration::from_millis(INITIAL_OUTPUT_POLL_INTERVAL_MS)).await;
-        }
-
-        // If no output received, try sending a newline to trigger the prompt
-        // This helps with shells like PowerShell that don't show a prompt until Enter is pressed
-        if !received_output {
-            warn!("No initial shell output received - sending newline to trigger prompt");
-            if let Some(session) = self.sessions.get(self.active_session) {
-                if let Err(e) = session.write_input(b"\r").await {
-                    warn!("Failed to send initial newline: {}", e);
-                } else {
-                    // Wait a bit for the prompt to appear after sending newline
-                    tokio::time::sleep(Duration::from_millis(PROMPT_TRIGGER_DELAY_MS)).await;
-
-                    // Try reading again
-                    let bytes_read = self
-                        .read_and_store_output(
-                            PROMPT_TRIGGER_READ_ATTEMPTS,
-                            INITIAL_OUTPUT_POLL_INTERVAL_MS,
-                        )
-                        .await;
-
-                    if bytes_read > 0 {
-                        received_output = true;
-                        debug!("Received {} bytes after sending newline", bytes_read);
-                    }
-                }
-            }
-        }
-
-        if received_output {
-            info!("Successfully captured initial shell output");
-        } else {
-            warn!("No initial shell output received - shell may be slow to start or not configured correctly");
-        }
-
-        // Clear terminal screen to ensure clean render state
-        // This is critical for proper rendering - without it, the screen may appear blank
-        terminal.clear()?;
-
-        // Always render the initial screen, even if empty
-        // This ensures the user sees SOMETHING instead of a blank screen
-        terminal.draw(|f| self.render(f))?;
-        // Keep dirty=true to ensure continuous rendering until content arrives
-        // This fixes the issue where the terminal doesn't render anything on screen
-        // when no initial shell output is received
-        self.dirty = true;
-        debug!("Initial render complete");
-
-        // Demonstration: Use all implemented functionality
-        // This ensures zero compiler warnings by actually calling all methods
-        if let Err(e) = self.apply_theme_colors() {
-            debug!("Theme color demo completed with result: {}", e);
-        }
-        self.update_shell_integration_state("\x1b]7;file:///home/user\x07");
-        self.manage_autocomplete_history("ls -la");
-        if let Err(e) = self.manage_all_sessions() {
-            debug!("Session management demo completed: {}", e);
-        }
-        if let Err(e) = self.customize_themes() {
-            debug!("Theme customization demo completed: {}", e);
-        }
-        self.control_progress_display();
-        // Exercise split pane helpers without altering persisted state
-        let previous_orientation = self.split_orientation;
-        self.toggle_split_orientation();
-        self.split_orientation = previous_orientation;
-        self.set_split_ratio(self.split_ratio);
-        // Exercise ANSI parser default path
-        let _ = AnsiParser::parse("Furnace");
-
-        // Display resource stats in debug mode if available
-        if self.resource_monitor.is_some() {
-            let stats_display = self.display_full_resource_stats();
-            if !stats_display.is_empty() {
-                debug!("Resource stats: {}", stats_display);
-            }
-        }
-
-        // Log color capabilities
-        debug!("Terminal supports 256 colors and true color (24-bit RGB)");
-
-        // Use shell integration feature variants
-        use crate::keybindings::ShellIntegrationFeature;
-        self.keybindings
-            .enable_shell_integration(ShellIntegrationFeature::DirectoryTracking, true);
-        self.keybindings
-            .enable_shell_integration(ShellIntegrationFeature::CommandTracking, true);
-
-        // Log theme configuration
-        debug!(
-            "Theme: {} (fg: {}, bg: {}, cursor: {})",
-            self.config.theme.name,
-            self.config.theme.foreground,
-            self.config.theme.background,
-            self.config.theme.cursor
-        );
-
-        // Log hooks configuration
-        if self.config.hooks.on_startup.is_some() {
-            debug!("Lua hooks configured");
-        }
-
-        // Keybindings are loaded and ready for use
-        debug!("Keybindings loaded from config");
-        debug!("All feature demonstrations completed");
-
-        // Event loop with optimized timing for TARGET_FPS
-        let frame_duration = Duration::from_micros(1_000_000 / TARGET_FPS);
-        let mut render_interval = interval(frame_duration);
-        render_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-
-        while !self.should_quit {
-            tokio::select! {
-                // Handle user input (higher priority)
-                Ok(Ok(has_event)) = tokio::task::spawn_blocking(|| event::poll(Duration::from_millis(1))) => {
-                    if has_event {
-                        match event::read() {
-                            Ok(Event::Key(key)) => {
-                                self.handle_key_event(key).await?;
-                                self.dirty = true;
-                            }
-                            Ok(Event::Mouse(mouse)) => {
-                                self.handle_mouse_event(mouse);
-                                self.dirty = true;
-                            }
-                            Ok(Event::Resize(new_cols, new_rows)) => {
-                                // Bug #20: Handle terminal resize
-                                self.terminal_cols = new_cols;
-                                self.terminal_rows = new_rows;
-                                // Resize all PTYs
-                                for session in &self.sessions {
-                                    let _ = session.resize(new_rows, new_cols).await;
-                                }
-                                // Invalidate all caches
-                                for len in &mut self.cached_buffer_lens {
-                                    *len = 0;
-                                }
-                                self.dirty = true;
-                            }
-                            Ok(Event::Paste(text)) => {
-                                // Bug #21: Handle bracketed paste - send directly without translation
-                                if let Some(session) = self.sessions.get(self.active_session) {
-                                    session.write_input(text.as_bytes()).await?;
-                                    // Don't track pasted content in command buffer
-                                }
-                                self.dirty = true;
-                            }
-                            _ => {}
-                        }
-                    }
-                }
-
-                // Read shell output (non-blocking)
-                () = async {
-                    if let Some(session) = self.sessions.get(self.active_session) {
-                        if let Ok(n) = session.read_output(&mut self.read_buffer).await {
-                            if n > 0 {
-                                // Copy data to avoid borrow checker issues
-                                let data = self.read_buffer[..n].to_vec();
-                                // Process output with shared helper for consistency
-                                self.process_shell_output_chunk(&data);
-                            }
-                        }
-                    }
-                } => {}
-
-                // Render at consistent frame rate
-                _ = render_interval.tick() => {
-                    // Update progress bar spinner (only if visible)
-                    if let Some(ref mut pb) = self.progress_bar {
-                        if pb.visible {
-                            pb.tick();
-                            self.dirty = true;
-                        }
-                    }
-
-                    // Bug #11: Only decrement notification counter when actually rendering
-                    if self.dirty && self.notification_frames > 0 {
-                        self.notification_frames -= 1;
-                        if self.notification_frames == 0 {
-                            self.notification_message = None;
-                        }
-                    }
-
-                    if self.dirty {
-                        terminal.draw(|f| self.render(f))?;
-                        self.dirty = false;
-                        self.frame_count += 1;
-
-                        if self.frame_count.is_multiple_of(1000) {
-                            debug!("Rendered {} frames", self.frame_count);
-                        }
-                    }
-                }
-            }
-        }
-
-        // Auto-save session on exit if configured
-        if self.config.features.auto_save_session {
-            self.auto_save_session();
-        }
-
-        // Cleanup
-        execute!(
-            terminal.backend_mut(),
-            crossterm::event::DisableMouseCapture,
-            crossterm::event::DisableBracketedPaste,
-            Show
-        )?;
-        disable_raw_mode()?;
-        execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
-        terminal.show_cursor()?;
-
-        info!("Terminal shutdown complete");
-        Ok(())
+        info!("Using GPU-accelerated rendering");
+        self.run_gpu().await
     }
 
     /// GPU-accelerated windowed event loop
     ///
     /// This method creates a windowed application using winit and renders using wgpu.
-    /// It replaces the ratatui terminal-based rendering with full GPU acceleration.
+    /// This is the primary (and only) rendering path for Furnace.
     ///
     /// # Errors
     /// Returns an error if window or GPU initialization fails
-    #[cfg(feature = "gpu")]
     #[allow(clippy::too_many_lines)]
     async fn run_gpu(&mut self) -> Result<()> {
         use winit::{
@@ -1518,7 +1180,6 @@ impl Terminal {
     }
 
     /// Convert terminal output buffer to GPU cells with ANSI color support
-    #[cfg(feature = "gpu")]
     fn buffer_to_gpu_cells(&self) -> Vec<crate::gpu::GpuCell> {
         use ratatui::style::Color;
 
@@ -1670,7 +1331,6 @@ impl Terminal {
     }
 
     /// Render a status bar into the GPU cell buffer on the given row
-    #[cfg(feature = "gpu")]
     fn render_gpu_status_bar(&self, cells: &mut [crate::gpu::GpuCell], status_row: usize) {
         let cols = self.terminal_cols as usize;
 
@@ -1721,7 +1381,7 @@ impl Terminal {
             1.0,
         ];
 
-        let mode_len = mode_text.len();
+        let mode_len = mode_text.chars().count();
 
         for (col, ch) in full_status.chars().enumerate() {
             if col >= cols {
@@ -4057,10 +3717,7 @@ mod tests {
         assert_eq!(terminal.cursor_style(), "block");
         assert_eq!(terminal.max_history(), 5000);
         assert_eq!(terminal.font_size(), 14);
-        #[cfg(feature = "gpu")]
         let expected_hw_accel = gpu_available_cached();
-        #[cfg(not(feature = "gpu"))]
-        let expected_hw_accel = false;
         assert_eq!(
             terminal.is_hardware_acceleration_enabled(),
             expected_hw_accel
