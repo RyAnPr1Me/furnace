@@ -91,6 +91,8 @@ const COLOR_PURE_BLACK: (u8, u8, u8) = (0x00, 0x00, 0x00); // Pure black backgro
 const COLOR_MUTED_GREEN: (u8, u8, u8) = (0x6A, 0x9A, 0x7A); // Muted green
 const COLOR_MAGENTA_RED: (u8, u8, u8) = (0xB0, 0x5A, 0x7A); // Magenta-red
 const _COLOR_DARK_GRAY: (u8, u8, u8) = (0x5A, 0x4A, 0x4A); // Dark gray for future use
+const COLOR_STATUS_BG: (u8, u8, u8) = (0x1A, 0x0A, 0x0A); // Status bar background
+const COLOR_STATUS_HINT: (u8, u8, u8) = (0x8A, 0x7A, 0x7A); // Status bar hint text
 
 #[cfg(feature = "gpu")]
 const GPU_PROBE_TIMEOUT_MS: u64 = 250;
@@ -2960,7 +2962,7 @@ impl Terminal {
         };
 
         let hints = if self.search_mode {
-            " Esc: Exit │ Enter: Next │ ↑↓: Navigate "
+            " Esc: Exit │ Enter/Ctrl+N: Next │ ↑/Ctrl+Shift+N: Prev "
         } else {
             " Ctrl+F: Search │ Ctrl+R: Resources │ Ctrl+T: New Tab "
         };
@@ -2971,13 +2973,13 @@ impl Terminal {
                 session_info,
                 Style::default()
                     .fg(Color::Rgb(COLOR_REDDISH_GRAY.0, COLOR_REDDISH_GRAY.1, COLOR_REDDISH_GRAY.2))
-                    .bg(Color::Rgb(0x1A, 0x0A, 0x0A)),
+                    .bg(Color::Rgb(COLOR_STATUS_BG.0, COLOR_STATUS_BG.1, COLOR_STATUS_BG.2)),
             ),
             Span::styled(
                 hints,
                 Style::default()
-                    .fg(Color::Rgb(0x8A, 0x7A, 0x7A))
-                    .bg(Color::Rgb(0x1A, 0x0A, 0x0A)),
+                    .fg(Color::Rgb(COLOR_STATUS_HINT.0, COLOR_STATUS_HINT.1, COLOR_STATUS_HINT.2))
+                    .bg(Color::Rgb(COLOR_STATUS_BG.0, COLOR_STATUS_BG.1, COLOR_STATUS_BG.2)),
             ),
         ];
 
@@ -2985,7 +2987,7 @@ impl Terminal {
         let paragraph = Paragraph::new(status_line)
             .style(
                 Style::default()
-                    .bg(Color::Rgb(0x1A, 0x0A, 0x0A)),
+                    .bg(Color::Rgb(COLOR_STATUS_BG.0, COLOR_STATUS_BG.1, COLOR_STATUS_BG.2)),
             );
         f.render_widget(paragraph, area);
     }
