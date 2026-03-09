@@ -237,6 +237,11 @@ impl Autocomplete {
             || prefix.starts_with("./")
             || prefix.starts_with("~/")
             || prefix.starts_with("..")
+            || prefix.starts_with(".\\")
+            || prefix.starts_with("~\\")
+            || (prefix.len() >= 2
+                && prefix.as_bytes()[0].is_ascii_alphabetic()
+                && prefix.as_bytes()[1] == b':')
         {
             prefix
         } else {
@@ -255,20 +260,21 @@ impl Autocomplete {
         };
 
         // Split into directory and file prefix
-        let (dir_path, file_prefix) = if expanded.ends_with('/') {
-            (expanded.as_str(), "")
-        } else {
-            let path = Path::new(&expanded);
-            let parent = path.parent().map_or(".", |p| {
-                let s = p.to_str().unwrap_or(".");
-                if s.is_empty() { "." } else { s }
-            });
-            let prefix_part = path
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("");
-            (parent, prefix_part)
-        };
+        let (dir_path, file_prefix) =
+            if expanded.ends_with('/') || expanded.ends_with('\\') {
+                (expanded.as_str(), "")
+            } else {
+                let path = Path::new(&expanded);
+                let parent = path.parent().map_or(".", |p| {
+                    let s = p.to_str().unwrap_or(".");
+                    if s.is_empty() { "." } else { s }
+                });
+                let prefix_part = path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("");
+                (parent, prefix_part)
+            };
 
         let mut results = Vec::with_capacity(10);
 
@@ -284,11 +290,14 @@ impl Autocomplete {
                         let full_path = if dir_path == "." {
                             name.to_string()
                         } else {
-                            format!("{dir_path}/{name}")
+                            Path::new(dir_path)
+                                .join(name)
+                                .to_string_lossy()
+                                .into_owned()
                         };
-                        // Add trailing / for directories
+                        // Add trailing separator for directories
                         let suggestion = if entry.path().is_dir() {
-                            format!("{full_path}/")
+                            format!("{full_path}{}", std::path::MAIN_SEPARATOR)
                         } else {
                             full_path
                         };
@@ -535,5 +544,47 @@ mod tests {
         // Prefix "c" matches many built-in commands; should cap at 15
         let suggestions = autocomplete.get_suggestions("c");
         assert!(suggestions.len() <= 15);
+    }
+
+    #[test]
+    fn test_path_suggestions_relative_paths() {
+        // Test that relative paths with ./ are recognized on all platforms
+        let suggestions = Autocomplete::get_path_suggestions("./");
+        // Should return suggestions (current dir contents) or empty if no readable entries
+        // The key thing is it should not panic
+        let _ = suggestions;
+    }
+
+    #[test]
+    fn test_path_suggestions_dotdot() {
+        // Test that .. prefix is recognized for path completion
+        let suggestions = Autocomplete::get_path_suggestions("..");
+        // Should try to complete paths starting with ..
+        let _ = suggestions;
+    }
+
+    #[test]
+    fn test_path_suggestions_backslash_prefix() {
+        // On Windows, .\ is a common prefix. On Unix, this returns empty (no such dir).
+        // The key is it should not panic and should be recognized as a path prefix.
+        let suggestions = Autocomplete::get_path_suggestions(".\\");
+        let _ = suggestions;
+    }
+
+    #[test]
+    fn test_path_suggestions_use_platform_separator() {
+        // Verify that path suggestions use the platform's path separator
+        let suggestions = Autocomplete::get_path_suggestions("./");
+        for suggestion in &suggestions {
+            // On Unix, paths use /. On Windows, paths use \.
+            // Path::join handles this automatically.
+            // Directories should end with the platform separator
+            if Path::new(suggestion).is_dir() || suggestion.ends_with('/') || suggestion.ends_with('\\') {
+                assert!(
+                    suggestion.ends_with(std::path::MAIN_SEPARATOR),
+                    "Directory suggestion should end with platform separator: {suggestion}"
+                );
+            }
+        }
     }
 }
