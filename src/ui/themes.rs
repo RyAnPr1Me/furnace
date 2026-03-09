@@ -560,6 +560,7 @@ mod tests {
     #[test]
     fn test_next_theme_fallback_consistency() {
         let mut manager = ThemeManager::new();
+        let names = manager.available_theme_names();
         // Switch to a non-existent theme name so fallback triggers
         manager.current_theme.name = "nonexistent_theme_xyz".to_string();
         manager.next_theme();
@@ -571,7 +572,6 @@ mod tests {
         let after_prev = manager2.current_theme.name.clone();
 
         // Both should produce valid theme names from the available themes
-        let names = ThemeManager::new().available_theme_names();
         assert!(
             names.contains(&after_next.to_lowercase()),
             "next_theme fallback should produce a valid theme"
