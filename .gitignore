@@ -43,3 +43,6 @@ config.yaml
 # Rust specific
 **/*.rs.bk
 *.pdb
+
+# Generated reports
+tarpaulin-report.html

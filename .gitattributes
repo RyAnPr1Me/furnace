@@ -1,0 +1,6 @@
+# Mark release binaries as generated so GitHub Linguist
+# excludes them from language statistics
+releases/** linguist-generated=true
+
+# Mark generated coverage reports as generated
+cobertura.xml linguist-generated=true

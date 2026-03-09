@@ -87,8 +87,6 @@ pub enum GpuBackend {
     Dx11,
     /// OpenGL (fallback, all platforms)
     OpenGl,
-    /// WebGPU (browser)
-    WebGpu,
 }
 
 impl From<GpuBackend> for wgpu::Backends {
@@ -105,7 +103,6 @@ impl From<GpuBackend> for wgpu::Backends {
                 wgpu::Backends::DX12
             }
             GpuBackend::OpenGl => wgpu::Backends::GL,
-            GpuBackend::WebGpu => wgpu::Backends::BROWSER_WEBGPU,
         }
     }
 }
