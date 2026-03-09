@@ -2328,8 +2328,7 @@ impl Terminal {
                                     new_spans.push(Span::styled(text, span.style));
                                 }
                                 // Add selected character
-                                let ch_text: String =
-                                    chars[char_idx as usize..=char_idx as usize].iter().collect();
+                                let ch_text = chars[char_idx as usize].to_string();
                                 new_spans.push(Span::styled(ch_text, span.style.bg(selection_bg)));
                                 span_char_start = char_idx + 1;
                             }
