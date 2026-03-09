@@ -281,6 +281,9 @@ impl Terminal {
         let cursor_style = config.terminal.cursor_style.clone();
         let max_history = config.terminal.max_history;
         let font_size = config.terminal.font_size;
+        if !config.terminal.hardware_acceleration {
+            warn!("hardware_acceleration=false in config is ignored — GPU rendering is always enabled");
+        }
         let hardware_acceleration = if gpu_available_cached() {
             true
         } else {
