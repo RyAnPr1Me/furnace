@@ -131,7 +131,11 @@ config = {
         
         -- Theme manager - switch themes dynamically
         -- Cycle through multiple color schemes
-        theme_manager = false
+        theme_manager = false,
+
+        -- Auto-save session on exit - automatically preserve terminal state
+        -- Requires session_manager = true
+        auto_save_session = false
     },
 
     -- ========================================================================

@@ -21,6 +21,7 @@ fn test_config_features() {
         session_manager: true,
         theme_manager: true,
         command_palette: true,
+        auto_save_session: false,
     };
     
     assert!(features.resource_monitor);

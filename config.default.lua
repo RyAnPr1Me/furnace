@@ -62,6 +62,7 @@ config = {
         session_manager = false,
         theme_manager = false,
         command_palette = false,
+        auto_save_session = false,
     },
 
     keybindings = {

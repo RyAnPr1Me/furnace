@@ -186,6 +186,8 @@ pub struct Terminal {
     background_image: Option<Vec<u8>>, // Raw image data
     background_image_width: u16,
     background_image_height: u16,
+    // Scrollback navigation offset (0 = following latest output, >0 = scrolled up)
+    scroll_offset: usize,
     // Cursor trail state
     cursor_trail_positions: Vec<(u16, u16, std::time::Instant)>, // (col, row, timestamp)
     // GPU renderer for hardware-accelerated rendering
@@ -433,6 +435,8 @@ impl Terminal {
             background_image_height: 0,
             // Initialize cursor trail state
             cursor_trail_positions: Vec::with_capacity(20), // Pre-allocate for trail
+            // Initialize scrollback navigation (0 = following latest output)
+            scroll_offset: 0,
             // GPU renderer will be initialized in run() if hardware acceleration is enabled
             #[cfg(feature = "gpu")]
             gpu_renderer: None,
@@ -835,6 +839,11 @@ impl Terminal {
                     }
                 }
             }
+        }
+
+        // Auto-save session on exit if configured
+        if self.config.features.auto_save_session {
+            self.auto_save_session();
         }
 
         // Cleanup
@@ -1347,6 +1356,9 @@ impl Terminal {
         self.output_buffers[self.active_session].extend_from_slice(output_str.as_bytes());
         self.dirty = true;
 
+        // Auto-scroll to bottom when new output arrives (follow latest output)
+        self.scroll_offset = 0;
+
         // Update shell integration state and trigger related hooks
         self.update_shell_integration_state(&output_str);
 
@@ -1581,10 +1593,21 @@ impl Terminal {
     }
 
     /// Handle mouse events
-    #[allow(clippy::unused_self)]
     fn handle_mouse_event(&mut self, mouse: MouseEvent) {
-        // Handle text selection
-        self.handle_mouse_selection(mouse);
+        use crossterm::event::MouseEventKind;
+
+        match mouse.kind {
+            MouseEventKind::ScrollUp => {
+                self.scroll_up(3); // Scroll 3 lines per tick
+            }
+            MouseEventKind::ScrollDown => {
+                self.scroll_down(3); // Scroll 3 lines per tick
+            }
+            _ => {
+                // Handle text selection for other mouse events
+                self.handle_mouse_selection(mouse);
+            }
+        }
     }
 
     /// Handle keyboard events with optimal input processing
@@ -1957,13 +1980,19 @@ impl Terminal {
                     session.write_input(b"\x1b[3~").await?;
                 }
             }
-            // Page Up
+            // Page Up - Shift+PageUp scrolls back, plain sends to shell
+            (KeyCode::PageUp, modifiers) if modifiers.contains(KeyModifiers::SHIFT) => {
+                self.scroll_up(self.terminal_rows.saturating_sub(2).max(1) as usize);
+            }
             (KeyCode::PageUp, _) => {
                 if let Some(session) = self.sessions.get(self.active_session) {
                     session.write_input(b"\x1b[5~").await?;
                 }
             }
-            // Page Down
+            // Page Down - Shift+PageDown scrolls forward, plain sends to shell
+            (KeyCode::PageDown, modifiers) if modifiers.contains(KeyModifiers::SHIFT) => {
+                self.scroll_down(self.terminal_rows.saturating_sub(2).max(1) as usize);
+            }
             (KeyCode::PageDown, _) => {
                 if let Some(session) = self.sessions.get(self.active_session) {
                     session.write_input(b"\x1b[6~").await?;
@@ -1975,8 +2004,10 @@ impl Terminal {
                     session.write_input(b"\t").await?;
                 }
             }
-            // Escape key (when not in search mode - already handled above)
-            (KeyCode::Esc, _) => {}
+            // Escape key - return to bottom if scrolled, otherwise no-op
+            (KeyCode::Esc, _) => {
+                self.scroll_to_bottom();
+            }
 
             _ => {}
         }
@@ -2348,9 +2379,11 @@ impl Terminal {
                 let all_lines = AnsiParser::parse_with_palette(&raw_output, &self.color_palette);
                 // Leave 1 line at bottom for breathing room (ensure prompt is visible)
                 let height = (area.height as usize).saturating_sub(1).max(1);
-                let skip_count = all_lines.len().saturating_sub(height);
+                // Apply scroll offset: skip_count positions the viewport in the buffer
+                let tail_skip = all_lines.len().saturating_sub(height);
+                let skip_count = tail_skip.saturating_sub(self.scroll_offset);
                 let visible_lines: Vec<Line<'static>> =
-                    all_lines.into_iter().skip(skip_count).collect();
+                    all_lines.into_iter().skip(skip_count).take(height).collect();
 
                 if let Some(cache) = self.cached_styled_lines.get_mut(self.active_session) {
                     *cache = visible_lines;
@@ -2935,10 +2968,53 @@ impl Terminal {
         self.dirty = true;
     }
 
+    /// Scroll up through terminal output history
+    fn scroll_up(&mut self, lines: usize) {
+        // Calculate total lines available
+        let total_lines = self
+            .output_buffers
+            .get(self.active_session)
+            .map(|buf| {
+                let output = String::from_utf8_lossy(buf);
+                output.lines().count()
+            })
+            .unwrap_or(0);
+        let visible = self.terminal_rows.saturating_sub(3) as usize; // approx visible area
+        let max_offset = total_lines.saturating_sub(visible);
+        self.scroll_offset = (self.scroll_offset + lines).min(max_offset);
+        self.invalidate_active_cache();
+        self.dirty = true;
+    }
+
+    /// Scroll down through terminal output history (toward latest)
+    fn scroll_down(&mut self, lines: usize) {
+        self.scroll_offset = self.scroll_offset.saturating_sub(lines);
+        self.invalidate_active_cache();
+        self.dirty = true;
+    }
+
+    /// Reset scroll to follow latest output
+    fn scroll_to_bottom(&mut self) {
+        if self.scroll_offset != 0 {
+            self.scroll_offset = 0;
+            self.invalidate_active_cache();
+            self.dirty = true;
+        }
+    }
+
+    /// Invalidate the render cache for the active session to force re-render
+    fn invalidate_active_cache(&mut self) {
+        if let Some(len) = self.cached_buffer_lens.get_mut(self.active_session) {
+            *len = 0; // Force cache invalidation
+        }
+    }
+
     /// Render the status bar at the bottom of the terminal
     fn render_status_bar(&self, f: &mut ratatui::Frame, area: Rect) {
         let mode_text = if self.search_mode {
             format!(" SEARCH: {} ", self.search_query)
+        } else if self.scroll_offset > 0 {
+            format!(" SCROLL [+{}] ", self.scroll_offset)
         } else {
             " NORMAL ".to_string()
         };
@@ -2947,6 +3023,11 @@ impl Terminal {
             Style::default()
                 .fg(Color::Rgb(COLOR_PURE_BLACK.0, COLOR_PURE_BLACK.1, COLOR_PURE_BLACK.2))
                 .bg(Color::Rgb(COLOR_COOL_RED.0, COLOR_COOL_RED.1, COLOR_COOL_RED.2))
+                .add_modifier(Modifier::BOLD)
+        } else if self.scroll_offset > 0 {
+            Style::default()
+                .fg(Color::Rgb(COLOR_PURE_BLACK.0, COLOR_PURE_BLACK.1, COLOR_PURE_BLACK.2))
+                .bg(Color::Rgb(0xCC, 0x99, 0x33)) // Amber for scroll mode
                 .add_modifier(Modifier::BOLD)
         } else {
             Style::default()
@@ -2963,8 +3044,10 @@ impl Terminal {
 
         let hints = if self.search_mode {
             " Esc: Exit │ Enter/Ctrl+N: Next │ ↑/Ctrl+Shift+N: Prev "
+        } else if self.scroll_offset > 0 {
+            " Shift+PgUp/PgDn: Scroll │ Esc: Back to Bottom "
         } else {
-            " Ctrl+F: Search │ Ctrl+R: Resources │ Ctrl+T: New Tab "
+            " Ctrl+F: Search │ Shift+PgUp: Scroll │ Ctrl+T: New Tab "
         };
 
         let spans = vec![
@@ -2990,6 +3073,56 @@ impl Terminal {
                     .bg(Color::Rgb(COLOR_STATUS_BG.0, COLOR_STATUS_BG.1, COLOR_STATUS_BG.2)),
             );
         f.render_widget(paragraph, area);
+    }
+
+    /// Auto-save the current session on exit
+    fn auto_save_session(&mut self) {
+        use crate::session::{SavedSession, TabState};
+        use chrono::Local;
+        use uuid::Uuid;
+
+        if let Some(ref sm) = self.session_manager {
+            let tabs: Vec<TabState> = self
+                .output_buffers
+                .iter()
+                .enumerate()
+                .map(|(i, buf)| {
+                    // Only save the last portion of output to keep sessions manageable
+                    let output = String::from_utf8_lossy(buf);
+                    let truncated = if output.len() > 50_000 {
+                        output[output.len() - 50_000..].to_string()
+                    } else {
+                        output.to_string()
+                    };
+                    TabState {
+                        output: truncated,
+                        working_dir: self
+                            .keybindings
+                            .shell_integration()
+                            .current_dir
+                            .clone(),
+                        active: i == self.active_session,
+                    }
+                })
+                .collect();
+
+            if tabs.is_empty() {
+                return;
+            }
+
+            let session = SavedSession {
+                id: format!("auto-{}", Uuid::new_v4()),
+                name: format!("Auto-save {}", Local::now().format("%Y-%m-%d %H:%M")),
+                created_at: Local::now(),
+                tabs,
+            };
+
+            if let Err(e) = sm.save_session(&session) {
+                warn!("Failed to auto-save session: {}", e);
+            } else {
+                info!("Session auto-saved: {}", session.name);
+            }
+        }
     }
 
     /// Load last saved session

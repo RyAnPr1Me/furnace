@@ -1,4 +1,5 @@
 use std::collections::{HashSet, VecDeque};
+use std::path::Path;
 use std::sync::Arc;
 
 /// Common commands - cached as &'static str (Bug #26: avoid re-allocation)
@@ -200,11 +201,109 @@ impl Autocomplete {
             }
         }
 
+        // Add file path suggestions if the prefix looks like a path or follows a path-taking command
+        let path_suggestions = Self::get_path_suggestions(prefix);
+        for path_str in &path_suggestions {
+            let shared: SharedString = Arc::from(path_str.as_str());
+            if seen.insert(shared.clone()) && self.current_suggestions.len() < 15 {
+                self.current_suggestions.push(shared);
+            }
+        }
+
         // Return cloned strings (required by API)
         self.current_suggestions
             .iter()
             .map(std::string::ToString::to_string)
             .collect()
+    }
+
+    /// Get file path suggestions based on the current input prefix
+    /// Supports: "cd dir", "cat file", "vim path", bare paths starting with / or ./ or ~/
+    fn get_path_suggestions(prefix: &str) -> Vec<String> {
+        // Commands that commonly take file/directory arguments
+        const PATH_COMMANDS: &[&str] = &[
+            "cd ", "ls ", "cat ", "vim ", "nano ", "less ", "more ", "head ", "tail ",
+            "mkdir ", "rmdir ", "rm ", "cp ", "mv ", "chmod ", "chown ",
+            "source ", ".", "code ", "open ",
+        ];
+
+        // Extract the path portion from the prefix
+        let path_part = if let Some(stripped) = PATH_COMMANDS
+            .iter()
+            .find_map(|cmd| prefix.strip_prefix(cmd))
+        {
+            stripped
+        } else if prefix.starts_with('/')
+            || prefix.starts_with("./")
+            || prefix.starts_with("~/")
+            || prefix.starts_with("..")
+        {
+            prefix
+        } else {
+            return Vec::new();
+        };
+
+        // Expand ~ to home directory
+        let expanded = if let Some(rest) = path_part.strip_prefix('~') {
+            if let Some(home) = dirs::home_dir() {
+                format!("{}{rest}", home.display())
+            } else {
+                return Vec::new();
+            }
+        } else {
+            path_part.to_string()
+        };
+
+        // Split into directory and file prefix
+        let (dir_path, file_prefix) = if expanded.ends_with('/') {
+            (expanded.as_str(), "")
+        } else {
+            let path = Path::new(&expanded);
+            let parent = path.parent().map_or(".", |p| {
+                let s = p.to_str().unwrap_or(".");
+                if s.is_empty() { "." } else { s }
+            });
+            let prefix_part = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("");
+            (parent, prefix_part)
+        };
+
+        let mut results = Vec::with_capacity(10);
+
+        // Read directory entries
+        if let Ok(entries) = std::fs::read_dir(dir_path) {
+            for entry in entries.take(50).flatten() {
+                if let Some(name) = entry.file_name().to_str() {
+                    // Skip hidden files unless the prefix explicitly starts with .
+                    if name.starts_with('.') && !file_prefix.starts_with('.') {
+                        continue;
+                    }
+                    if name.starts_with(file_prefix) {
+                        let full_path = if dir_path == "." {
+                            name.to_string()
+                        } else {
+                            format!("{dir_path}/{name}")
+                        };
+                        // Add trailing / for directories
+                        let suggestion = if entry.path().is_dir() {
+                            format!("{full_path}/")
+                        } else {
+                            full_path
+                        };
+                        // Reconstruct the full command prefix + suggestion
+                        let cmd_prefix = &prefix[..prefix.len() - path_part.len()];
+                        results.push(format!("{cmd_prefix}{suggestion}"));
+                        if results.len() >= 10 {
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        results
     }
 
     /// Get next suggestion (Bug #27: return reference, avoid clone)

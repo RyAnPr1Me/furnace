@@ -224,6 +224,8 @@ pub struct FeaturesConfig {
     pub theme_manager: bool,
     /// Enable command palette
     pub command_palette: bool,
+    /// Auto-save session on exit
+    pub auto_save_session: bool,
 }
 
 impl FeaturesConfig {
@@ -246,6 +248,9 @@ impl FeaturesConfig {
                 .unwrap_or(false),
             command_palette: table
                 .get::<_, Option<bool>>("command_palette")?
+                .unwrap_or(false),
+            auto_save_session: table
+                .get::<_, Option<bool>>("auto_save_session")?
                 .unwrap_or(false),
         })
     }
