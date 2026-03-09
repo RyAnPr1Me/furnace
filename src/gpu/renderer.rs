@@ -693,13 +693,14 @@ impl GpuRenderer {
             .or_else(|| caps.formats.first().copied())
             .unwrap_or(wgpu::TextureFormat::Bgra8UnormSrgb);
 
-        // Warn if the surface format doesn't match the format used to compile
-        // the render pipelines. A mismatch causes wgpu validation errors and
-        // results in nothing being rendered.
+        // Warn if the preferred surface format differs from the format used to
+        // compile the render pipelines.  We always configure with the pipeline
+        // format to guarantee consistency; the surface must still support it
+        // (which is the case when the same adapter is used).
         if surface_format != self.surface_format {
             tracing::warn!(
-                "Surface format {:?} differs from pipeline format {:?}; \
-                 rendering may not work correctly. Falling back to pipeline format.",
+                "Preferred surface format {:?} differs from pipeline format {:?}; \
+                 using pipeline format for consistency.",
                 surface_format,
                 self.surface_format
             );
@@ -805,9 +806,13 @@ impl GpuRenderer {
 
         // Grow instance buffer if current capacity is too small for the cell count.
         // This prevents wgpu validation errors when the terminal is resized to a
-        // large window on high-resolution displays.
+        // large window on high-resolution displays.  We grow to at least double the
+        // previous capacity (power-of-two) to avoid frequent reallocations.
         if instances.len() > self.instance_buffer_capacity {
-            let new_capacity = instances.len().next_power_of_two();
+            let new_capacity = instances
+                .len()
+                .next_power_of_two()
+                .max(self.instance_buffer_capacity * 2);
             self.instance_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("Instance Buffer"),
                 size: (new_capacity * std::mem::size_of::<CellInstance>()) as u64,
