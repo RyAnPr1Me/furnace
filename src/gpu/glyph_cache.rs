@@ -148,14 +148,15 @@ impl GlyphCache {
         let lower = font_family.to_lowercase();
         let lower_no_spaces: String = lower.split_whitespace().collect();
         let hyphenated = font_family.replace(' ', "-");
+        let lower_hyphenated = hyphenated.to_lowercase();
 
-        // Collect all name variants (deduplicated via order)
-        let variants = [
-            font_family.to_string(),
-            no_spaces.clone(),
-            lower.clone(),
-            lower_no_spaces.clone(),
-            hyphenated.clone(),
+        // Collect all name variants as references to avoid cloning
+        let variants: [&str; 5] = [
+            font_family,
+            &no_spaces,
+            &lower,
+            &lower_no_spaces,
+            &hyphenated,
         ];
 
         // Suffixes to try for each variant
@@ -216,8 +217,11 @@ impl GlyphCache {
                         paths.push(format!("{}/{}{}.otf", dir, variant, suffix));
                         // In subdirectory named after the font
                         paths.push(format!("{}/{}/{}{}.ttf", dir, lower_no_spaces, variant, suffix));
+                        paths.push(format!("{}/{}/{}{}.otf", dir, lower_no_spaces, variant, suffix));
                         paths.push(format!("{}/{}/{}{}.ttf", dir, lower, variant, suffix));
-                        paths.push(format!("{}/{}/{}{}.ttf", dir, hyphenated.to_lowercase(), variant, suffix));
+                        paths.push(format!("{}/{}/{}{}.otf", dir, lower, variant, suffix));
+                        paths.push(format!("{}/{}/{}{}.ttf", dir, lower_hyphenated, variant, suffix));
+                        paths.push(format!("{}/{}/{}{}.otf", dir, lower_hyphenated, variant, suffix));
                     }
                 }
             }
