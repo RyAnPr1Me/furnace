@@ -350,7 +350,10 @@ impl GpuRenderer {
                 topology: wgpu::PrimitiveTopology::TriangleList,
                 strip_index_format: None,
                 front_face: wgpu::FrontFace::Ccw,
-                cull_mode: Some(wgpu::Face::Back),
+                // Must use None (no culling) because the orthographic projection
+                // flips the Y axis, reversing triangle winding order in clip space.
+                // Back-face culling would discard all geometry.
+                cull_mode: None,
                 polygon_mode: wgpu::PolygonMode::Fill,
                 unclipped_depth: false,
                 conservative: false,
