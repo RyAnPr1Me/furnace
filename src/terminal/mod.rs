@@ -1590,6 +1590,42 @@ impl Terminal {
         // BUG FIX #27: Use keybinding system to handle actions
         use crate::keybindings::Action;
 
+        // Search mode intercept: capture keys for search query input
+        if self.search_mode {
+            // Always allow Ctrl+C/Ctrl+D to quit even in search mode
+            if matches!(
+                (key.code, key.modifiers),
+                (KeyCode::Char('c' | 'd'), KeyModifiers::CONTROL)
+            ) {
+                // Fall through to normal handling below
+            } else {
+                match key.code {
+                    KeyCode::Esc => {
+                        self.toggle_search_mode();
+                    }
+                    KeyCode::Enter | KeyCode::Down => {
+                        self.search_next();
+                    }
+                    KeyCode::Up => {
+                        self.search_prev();
+                    }
+                    KeyCode::Backspace => {
+                        self.search_query.pop();
+                        self.execute_search();
+                    }
+                    KeyCode::Char(c)
+                        if !key.modifiers.contains(KeyModifiers::CONTROL)
+                            && !key.modifiers.contains(KeyModifiers::ALT) =>
+                    {
+                        self.search_query.push(c);
+                        self.execute_search();
+                    }
+                    _ => {}
+                }
+                return Ok(());
+            }
+        }
+
         if let Some(action) = self.keybindings.get_action(key.code, key.modifiers) {
             match action {
                 Action::NewTab => {
@@ -1640,6 +1676,14 @@ impl Terminal {
                 Action::Search => {
                     // Toggle search mode
                     self.toggle_search_mode();
+                    return Ok(());
+                }
+                Action::SearchNext => {
+                    self.search_next();
+                    return Ok(());
+                }
+                Action::SearchPrev => {
+                    self.search_prev();
                     return Ok(());
                 }
                 Action::ToggleResourceMonitor => {
@@ -1893,6 +1937,45 @@ impl Terminal {
                 }
             }
 
+            // Home key - move to beginning of line
+            (KeyCode::Home, _) => {
+                if let Some(session) = self.sessions.get(self.active_session) {
+                    session.write_input(b"\x1b[H").await?;
+                }
+            }
+            // End key - move to end of line
+            (KeyCode::End, _) => {
+                if let Some(session) = self.sessions.get(self.active_session) {
+                    session.write_input(b"\x1b[F").await?;
+                }
+            }
+            // Delete key
+            (KeyCode::Delete, _) => {
+                if let Some(session) = self.sessions.get(self.active_session) {
+                    session.write_input(b"\x1b[3~").await?;
+                }
+            }
+            // Page Up
+            (KeyCode::PageUp, _) => {
+                if let Some(session) = self.sessions.get(self.active_session) {
+                    session.write_input(b"\x1b[5~").await?;
+                }
+            }
+            // Page Down
+            (KeyCode::PageDown, _) => {
+                if let Some(session) = self.sessions.get(self.active_session) {
+                    session.write_input(b"\x1b[6~").await?;
+                }
+            }
+            // Tab key
+            (KeyCode::Tab, KeyModifiers::NONE) => {
+                if let Some(session) = self.sessions.get(self.active_session) {
+                    session.write_input(b"\t").await?;
+                }
+            }
+            // Escape key (when not in search mode - already handled above)
+            (KeyCode::Esc, _) => {}
+
             _ => {}
         }
 
@@ -2106,6 +2189,7 @@ impl Terminal {
                 } else {
                     0
                 }),
+                Constraint::Length(1),
             ])
             .split(f.size());
 
@@ -2115,6 +2199,7 @@ impl Terminal {
         let content_area = main_chunks[3];
         let autocomplete_area = main_chunks[4];
         let resource_area = main_chunks[5];
+        let status_area = main_chunks[6];
 
         // Render tabs if enabled
         if self.config.terminal.enable_tabs && self.sessions.len() > 1 {
@@ -2234,6 +2319,9 @@ impl Terminal {
 
         // Render cursor trail overlay
         self.render_cursor_trail(f);
+
+        // Render status bar
+        self.render_status_bar(f, status_area);
     }
 
     /// Bug #3: Render terminal output with zero-copy caching
@@ -2774,6 +2862,132 @@ impl Terminal {
             self.show_notification("Search mode exited".to_string());
         }
         self.dirty = true;
+    }
+
+    /// Execute search against the current output buffer
+    fn execute_search(&mut self) {
+        self.search_results.clear();
+        self.current_search_result = 0;
+
+        if self.search_query.is_empty() {
+            self.dirty = true;
+            return;
+        }
+
+        // Search through the output buffer
+        if let Some(buffer) = self.output_buffers.get(self.active_session) {
+            let output = String::from_utf8_lossy(buffer);
+            let query_lower = self.search_query.to_lowercase();
+
+            for (line_idx, line) in output.lines().enumerate() {
+                if line.to_lowercase().contains(&query_lower) {
+                    self.search_results.push(line_idx);
+                }
+            }
+        }
+
+        let count = self.search_results.len();
+        if count > 0 {
+            self.show_notification(format!(
+                "Found {} match{} for \"{}\"",
+                count,
+                if count == 1 { "" } else { "es" },
+                self.search_query
+            ));
+        } else {
+            self.show_notification(format!("No matches for \"{}\"", self.search_query));
+        }
+
+        self.dirty = true;
+    }
+
+    /// Navigate to next search result
+    fn search_next(&mut self) {
+        if self.search_results.is_empty() {
+            return;
+        }
+        self.current_search_result = (self.current_search_result + 1) % self.search_results.len();
+        self.show_notification(format!(
+            "Match {}/{}",
+            self.current_search_result + 1,
+            self.search_results.len()
+        ));
+        self.dirty = true;
+    }
+
+    /// Navigate to previous search result
+    fn search_prev(&mut self) {
+        if self.search_results.is_empty() {
+            return;
+        }
+        if self.current_search_result == 0 {
+            self.current_search_result = self.search_results.len() - 1;
+        } else {
+            self.current_search_result -= 1;
+        }
+        self.show_notification(format!(
+            "Match {}/{}",
+            self.current_search_result + 1,
+            self.search_results.len()
+        ));
+        self.dirty = true;
+    }
+
+    /// Render the status bar at the bottom of the terminal
+    fn render_status_bar(&self, f: &mut ratatui::Frame, area: Rect) {
+        let mode_text = if self.search_mode {
+            format!(" SEARCH: {} ", self.search_query)
+        } else {
+            " NORMAL ".to_string()
+        };
+
+        let mode_style = if self.search_mode {
+            Style::default()
+                .fg(Color::Rgb(COLOR_PURE_BLACK.0, COLOR_PURE_BLACK.1, COLOR_PURE_BLACK.2))
+                .bg(Color::Rgb(COLOR_COOL_RED.0, COLOR_COOL_RED.1, COLOR_COOL_RED.2))
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default()
+                .fg(Color::Rgb(COLOR_PURE_BLACK.0, COLOR_PURE_BLACK.1, COLOR_PURE_BLACK.2))
+                .bg(Color::Rgb(COLOR_MUTED_GREEN.0, COLOR_MUTED_GREEN.1, COLOR_MUTED_GREEN.2))
+                .add_modifier(Modifier::BOLD)
+        };
+
+        let session_info = if self.sessions.len() > 1 {
+            format!(" Tab {}/{} ", self.active_session + 1, self.sessions.len())
+        } else {
+            " Session 1 ".to_string()
+        };
+
+        let hints = if self.search_mode {
+            " Esc: Exit │ Enter: Next │ ↑↓: Navigate "
+        } else {
+            " Ctrl+F: Search │ Ctrl+R: Resources │ Ctrl+T: New Tab "
+        };
+
+        let spans = vec![
+            Span::styled(mode_text, mode_style),
+            Span::styled(
+                session_info,
+                Style::default()
+                    .fg(Color::Rgb(COLOR_REDDISH_GRAY.0, COLOR_REDDISH_GRAY.1, COLOR_REDDISH_GRAY.2))
+                    .bg(Color::Rgb(0x1A, 0x0A, 0x0A)),
+            ),
+            Span::styled(
+                hints,
+                Style::default()
+                    .fg(Color::Rgb(0x8A, 0x7A, 0x7A))
+                    .bg(Color::Rgb(0x1A, 0x0A, 0x0A)),
+            ),
+        ];
+
+        let status_line = Line::from(spans);
+        let paragraph = Paragraph::new(status_line)
+            .style(
+                Style::default()
+                    .bg(Color::Rgb(0x1A, 0x0A, 0x0A)),
+            );
+        f.render_widget(paragraph, area);
     }
 
     /// Load last saved session
