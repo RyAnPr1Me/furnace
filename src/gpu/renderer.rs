@@ -199,7 +199,10 @@ impl GpuRenderer {
             .iter()
             .copied()
             .find(|f| f.is_srgb())
-            .unwrap_or(surface_caps.formats[0]);
+            .or_else(|| surface_caps.formats.first().copied())
+            .ok_or_else(|| {
+                GpuError::SurfaceError("Surface reports no supported formats".to_string())
+            })?;
 
         tracing::info!("Selected surface format: {:?}", surface_format);
 
@@ -681,7 +684,8 @@ impl GpuRenderer {
             .iter()
             .copied()
             .find(|f| f.is_srgb())
-            .unwrap_or(caps.formats[0]);
+            .or_else(|| caps.formats.first().copied())
+            .unwrap_or(wgpu::TextureFormat::Bgra8UnormSrgb);
 
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
@@ -1037,12 +1041,10 @@ mod tests {
     #[test]
     fn test_orthographic_projection() {
         let proj = orthographic_projection(1280.0, 720.0);
-        // Check top-left corner maps to (-1, 1) in clip space
-        // view_proj * (0, 0, 0, 1) should be (-1, 1, *, 1)
-        let x = proj[0][0] * 0.0 + proj[1][0] * 0.0 + proj[2][0] * 0.0 + proj[3][0];
-        let y = proj[0][1] * 0.0 + proj[1][1] * 0.0 + proj[2][1] * 0.0 + proj[3][1];
-        assert!((x - (-1.0)).abs() < 1e-6, "top-left x should be -1, got {x}");
-        assert!((y - 1.0).abs() < 1e-6, "top-left y should be 1, got {y}");
+        // The last row of the matrix holds the translation.
+        // For top-left origin at (0,0): clip x = -1, clip y = 1
+        assert!((proj[3][0] - (-1.0)).abs() < 1e-6, "top-left x should be -1, got {}", proj[3][0]);
+        assert!((proj[3][1] - 1.0).abs() < 1e-6, "top-left y should be 1, got {}", proj[3][1]);
     }
 
     #[test]
