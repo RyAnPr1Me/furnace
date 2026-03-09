@@ -3,6 +3,7 @@ use mlua::{Lua, Table};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use tracing::warn;
 
 const DEFAULT_CONFIG_LUA: &str = include_str!("../../config.default.lua");
 
@@ -334,7 +335,7 @@ impl TerminalConfig {
         let cursor_style = match cursor_style.as_str() {
             "block" | "underline" | "bar" => cursor_style,
             _ => {
-                tracing::warn!(
+                warn!(
                     "Invalid cursor_style '{}', falling back to 'block'",
                     cursor_style
                 );

@@ -2965,11 +2965,17 @@ impl Terminal {
                     let output = String::from_utf8_lossy(buf);
                     let truncated = if output.len() > 50_000 {
                         // Find the nearest valid UTF-8 char boundary at or after the cut point
+                        // In valid UTF-8, this shifts at most 3 bytes forward
                         let mut start = output.len() - 50_000;
-                        while !output.is_char_boundary(start) && start < output.len() {
+                        let max_shift = start + 4; // UTF-8 chars are at most 4 bytes
+                        while !output.is_char_boundary(start) && start < max_shift {
                             start += 1;
                         }
-                        output[start..].to_string()
+                        if start <= output.len() {
+                            output[start..].to_string()
+                        } else {
+                            output.to_string()
+                        }
                     } else {
                         output.to_string()
                     };
@@ -3913,7 +3919,7 @@ mod tests {
 
         // Should not panic, and should be valid UTF-8
         assert!(!truncated.is_empty());
-        assert!(truncated.len() <= 50_001); // may be slightly more due to boundary shift
+        assert!(truncated.len() <= 50_003); // max 3 extra bytes due to UTF-8 boundary shift (4-byte chars)
         // Verify it's valid UTF-8 by iterating chars
         assert!(truncated.chars().count() > 0);
     }
