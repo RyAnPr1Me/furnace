@@ -2964,7 +2964,12 @@ impl Terminal {
                     // Only save the last portion of output to keep sessions manageable
                     let output = String::from_utf8_lossy(buf);
                     let truncated = if output.len() > 50_000 {
-                        output[output.len() - 50_000..].to_string()
+                        // Find the nearest valid UTF-8 char boundary at or after the cut point
+                        let mut start = output.len() - 50_000;
+                        while !output.is_char_boundary(start) && start < output.len() {
+                            start += 1;
+                        }
+                        output[start..].to_string()
                     } else {
                         output.to_string()
                     };
@@ -3086,14 +3091,21 @@ impl Terminal {
                 if let Some(end) = output[start..].find('\x07') {
                     // OSC sequences: 0 = icon+title, 1 = icon, 2 = title
                     // Format: ESC ] number ; text BEL
-                    let osc_content = &output[start..start + end];
-                    if let Some(semicolon) = osc_content.find(';') {
-                        let title = &osc_content[semicolon + 1..];
-                        // Call on_title_change hook
-                        if let Some(ref executor) = self.hooks_executor {
-                            if let Some(ref script) = self.config.hooks.on_title_change {
-                                if let Err(e) = executor.on_title_change(script, title) {
-                                    warn!("on_title_change hook failed: {}", e);
+                    // end is relative to start, so start + end <= output.len()
+                    if start + end <= output.len() {
+                        let osc_content = &output[start..start + end];
+                        if let Some(semicolon) = osc_content.find(';') {
+                            if semicolon + 1 < osc_content.len() {
+                                let title = &osc_content[semicolon + 1..];
+                                // Call on_title_change hook
+                                if let Some(ref executor) = self.hooks_executor {
+                                    if let Some(ref script) = self.config.hooks.on_title_change {
+                                        if let Err(e) =
+                                            executor.on_title_change(script, title)
+                                        {
+                                            warn!("on_title_change hook failed: {}", e);
+                                        }
+                                    }
                                 }
                             }
                         }

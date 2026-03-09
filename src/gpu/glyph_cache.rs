@@ -96,31 +96,78 @@ impl GlyphCache {
         None
     }
 
-    /// Get common font file paths based on font name
+    /// Get common font file paths based on font name (platform-specific)
     fn get_font_paths(font_family: &str) -> Vec<String> {
         let mut paths = Vec::new();
 
-        // Windows
-        paths.push(format!("C:\\Windows\\Fonts\\{}.ttf", font_family));
-        paths.push(format!("C:\\Windows\\Fonts\\{}.otf", font_family));
+        #[cfg(windows)]
+        {
+            paths.push(format!("C:\\Windows\\Fonts\\{}.ttf", font_family));
+            paths.push(format!("C:\\Windows\\Fonts\\{}.otf", font_family));
 
-        // Common monospace fonts on Windows
-        if font_family.contains("Mono") || font_family.contains("Consolas") {
-            paths.push("C:\\Windows\\Fonts\\consola.ttf".to_string());
-            paths.push("C:\\Windows\\Fonts\\cour.ttf".to_string());
+            // Common monospace fonts on Windows
+            if font_family.contains("Mono") || font_family.contains("Consolas") {
+                paths.push("C:\\Windows\\Fonts\\consola.ttf".to_string());
+                paths.push("C:\\Windows\\Fonts\\cour.ttf".to_string());
+            }
+
+            // User fonts directory on Windows
+            if let Some(home) = dirs::home_dir() {
+                let local_fonts = home
+                    .join("AppData")
+                    .join("Local")
+                    .join("Microsoft")
+                    .join("Windows")
+                    .join("Fonts");
+                paths.push(format!("{}\\{}.ttf", local_fonts.display(), font_family));
+                paths.push(format!("{}\\{}.otf", local_fonts.display(), font_family));
+            }
         }
 
-        // Linux
-        paths.push(format!(
-            "/usr/share/fonts/truetype/{}/{}.ttf",
-            font_family.to_lowercase(),
-            font_family
-        ));
-        paths.push(format!("/usr/share/fonts/TTF/{}.ttf", font_family));
+        #[cfg(target_os = "linux")]
+        {
+            paths.push(format!(
+                "/usr/share/fonts/truetype/{}/{}.ttf",
+                font_family.to_lowercase(),
+                font_family
+            ));
+            paths.push(format!("/usr/share/fonts/TTF/{}.ttf", font_family));
+            paths.push(format!(
+                "/usr/share/fonts/truetype/{}.ttf",
+                font_family.to_lowercase()
+            ));
 
-        // macOS
-        paths.push(format!("/System/Library/Fonts/{}.ttf", font_family));
-        paths.push(format!("/Library/Fonts/{}.ttf", font_family));
+            // User fonts directory on Linux
+            if let Some(home) = dirs::home_dir() {
+                paths.push(format!(
+                    "{}/.local/share/fonts/{}.ttf",
+                    home.display(),
+                    font_family
+                ));
+            }
+        }
+
+        #[cfg(target_os = "macos")]
+        {
+            paths.push(format!("/System/Library/Fonts/{}.ttf", font_family));
+            paths.push(format!("/System/Library/Fonts/{}.otf", font_family));
+            paths.push(format!("/Library/Fonts/{}.ttf", font_family));
+            paths.push(format!("/Library/Fonts/{}.otf", font_family));
+
+            // User fonts directory on macOS
+            if let Some(home) = dirs::home_dir() {
+                paths.push(format!(
+                    "{}/Library/Fonts/{}.ttf",
+                    home.display(),
+                    font_family
+                ));
+                paths.push(format!(
+                    "{}/Library/Fonts/{}.otf",
+                    home.display(),
+                    font_family
+                ));
+            }
+        }
 
         paths
     }

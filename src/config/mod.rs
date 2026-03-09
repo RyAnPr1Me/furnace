@@ -311,23 +311,48 @@ impl ShellConfig {
 
 impl TerminalConfig {
     fn from_lua_table(table: &Table) -> Result<Self> {
+        let font_size = table
+            .get::<_, Option<u16>>("font_size")?
+            .unwrap_or(12)
+            .clamp(1, 200);
+
+        let max_history = table
+            .get::<_, Option<usize>>("max_history")?
+            .unwrap_or(10000)
+            .min(1_000_000);
+
+        let scrollback_lines = table
+            .get::<_, Option<usize>>("scrollback_lines")?
+            .unwrap_or(10000)
+            .clamp(1, 1_000_000);
+
+        let cursor_style = table
+            .get::<_, Option<String>>("cursor_style")?
+            .unwrap_or_else(|| "block".to_string());
+
+        // Validate cursor style, fall back to "block" for invalid values
+        let cursor_style = match cursor_style.as_str() {
+            "block" | "underline" | "bar" => cursor_style,
+            _ => {
+                tracing::warn!(
+                    "Invalid cursor_style '{}', falling back to 'block'",
+                    cursor_style
+                );
+                "block".to_string()
+            }
+        };
+
         Ok(Self {
-            max_history: table
-                .get::<_, Option<usize>>("max_history")?
-                .unwrap_or(10000),
+            max_history,
             enable_tabs: table
                 .get::<_, Option<bool>>("enable_tabs")?
                 .unwrap_or(false),
             enable_split_pane: table
                 .get::<_, Option<bool>>("enable_split_pane")?
                 .unwrap_or(false),
-            font_size: table.get::<_, Option<u16>>("font_size")?.unwrap_or(12),
-            cursor_style: table
-                .get::<_, Option<String>>("cursor_style")?
-                .unwrap_or_else(|| "block".to_string()),
-            scrollback_lines: table
-                .get::<_, Option<usize>>("scrollback_lines")?
-                .unwrap_or(10000),
+            font_size,
+            cursor_style,
+            scrollback_lines,
             hardware_acceleration: table
                 .get::<_, Option<bool>>("hardware_acceleration")?
                 .unwrap_or(true),
