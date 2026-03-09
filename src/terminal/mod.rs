@@ -3993,7 +3993,7 @@ mod tests {
 
         // Should not panic, and should be valid UTF-8
         assert!(!truncated.is_empty());
-        assert!(truncated.len() <= 50_002); // max 2 extra bytes due to UTF-8 boundary shift (3-byte chars)
+        assert!(truncated.len() <= 50_003); // max 3 extra bytes due to UTF-8 boundary shift (4-byte chars)
         // Verify it's valid UTF-8 by iterating chars
         assert!(truncated.chars().count() > 0);
     }

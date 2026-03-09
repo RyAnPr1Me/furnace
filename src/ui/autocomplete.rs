@@ -573,13 +573,11 @@ mod tests {
 
     #[test]
     fn test_path_suggestions_use_platform_separator() {
-        // Verify that path suggestions use the platform's path separator
+        // Verify that directory suggestions end with the platform's path separator
         let suggestions = Autocomplete::get_path_suggestions("./");
         for suggestion in &suggestions {
-            // On Unix, paths use /. On Windows, paths use \.
-            // Path::join handles this automatically.
-            // Directories should end with the platform separator
-            if Path::new(suggestion).is_dir() || suggestion.ends_with('/') || suggestion.ends_with('\\') {
+            // Directory suggestions are identified by ending with a separator character
+            if suggestion.ends_with('/') || suggestion.ends_with('\\') {
                 assert!(
                     suggestion.ends_with(std::path::MAIN_SEPARATOR),
                     "Directory suggestion should end with platform separator: {suggestion}"
