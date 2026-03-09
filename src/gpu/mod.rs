@@ -110,7 +110,7 @@ impl From<GpuBackend> for wgpu::Backends {
 /// Terminal cell for GPU rendering
 ///
 /// Represents a single cell in the terminal grid for GPU rendering.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 #[allow(dead_code)] // Public API - used by GPU renderer consumers
 pub struct GpuCell {
     /// Character to render (as u32 for Unicode support)
@@ -216,4 +216,53 @@ pub fn get_gpu_info() -> Option<String> {
                 )
             })
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_gpu_cell_default() {
+        let cell = GpuCell::default();
+        assert_eq!(cell.char_code, ' ' as u32);
+        assert_eq!(cell.fg_color, [1.0, 1.0, 1.0, 1.0]);
+        assert_eq!(cell.bg_color, [0.0, 0.0, 0.0, 1.0]);
+        assert_eq!(cell.style, CellStyle::empty());
+    }
+
+    #[test]
+    fn test_gpu_cell_partial_eq() {
+        let a = GpuCell::default();
+        let b = GpuCell::default();
+        assert_eq!(a, b);
+
+        let c = GpuCell {
+            char_code: 'A' as u32,
+            ..Default::default()
+        };
+        assert_ne!(a, c);
+    }
+
+    #[test]
+    fn test_cell_style_flags() {
+        let mut style = CellStyle::empty();
+        assert!(!style.contains(CellStyle::BOLD));
+
+        style.insert(CellStyle::BOLD);
+        assert!(style.contains(CellStyle::BOLD));
+        assert!(!style.contains(CellStyle::ITALIC));
+
+        style.insert(CellStyle::ITALIC);
+        assert!(style.contains(CellStyle::BOLD | CellStyle::ITALIC));
+    }
+
+    #[test]
+    fn test_gpu_config_default() {
+        let config = GpuConfig::default();
+        assert!(config.enabled);
+        assert!(config.vsync);
+        assert_eq!(config.backend, GpuBackend::Auto);
+        assert!((config.font_size - 14.0).abs() < f32::EPSILON);
+    }
 }
