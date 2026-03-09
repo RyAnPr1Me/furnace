@@ -460,7 +460,7 @@ impl Default for KeyBindings {
             close_tab: "Ctrl+W".to_string(),
             next_tab: "Ctrl+Tab".to_string(),
             prev_tab: "Ctrl+Shift+Tab".to_string(),
-            split_vertical: "Ctrl+Shift+V".to_string(),
+            split_vertical: "Ctrl+Shift+D".to_string(),
             split_horizontal: "Ctrl+Shift+H".to_string(),
             copy: "Ctrl+Shift+C".to_string(),
             paste: "Ctrl+Shift+V".to_string(),
@@ -487,7 +487,7 @@ impl KeyBindings {
                 .unwrap_or_else(|| "Ctrl+Shift+Tab".to_string()),
             split_vertical: table
                 .get::<_, Option<String>>("split_vertical")?
-                .unwrap_or_else(|| "Ctrl+Shift+V".to_string()),
+                .unwrap_or_else(|| "Ctrl+Shift+D".to_string()),
             split_horizontal: table
                 .get::<_, Option<String>>("split_horizontal")?
                 .unwrap_or_else(|| "Ctrl+Shift+H".to_string()),

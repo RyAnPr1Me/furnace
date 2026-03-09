@@ -118,7 +118,7 @@ impl KeybindingManager {
 
         // Pane management
         self.add_binding("h", &["Ctrl", "Shift"], Action::SplitHorizontal);
-        self.add_binding("v", &["Ctrl", "Shift"], Action::SplitVertical);
+        self.add_binding("d", &["Ctrl", "Shift"], Action::SplitVertical);
         self.add_binding("o", &["Ctrl"], Action::FocusNextPane);
 
         // Editing
@@ -463,6 +463,31 @@ mod tests {
             manager.get_action(KeyCode::Char('f'), KeyModifiers::CONTROL),
             Some(Action::Search)
         ));
+    }
+
+    #[test]
+    fn test_no_keybinding_conflicts() {
+        let manager = KeybindingManager::new();
+
+        // Ctrl+Shift+V should map to Paste, NOT SplitVertical
+        let paste_action = manager.get_action(
+            KeyCode::Char('v'),
+            KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+        );
+        assert!(
+            matches!(paste_action, Some(Action::Paste)),
+            "Ctrl+Shift+V should be Paste"
+        );
+
+        // Ctrl+Shift+D should map to SplitVertical (no conflict with Paste)
+        let split_action = manager.get_action(
+            KeyCode::Char('d'),
+            KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+        );
+        assert!(
+            matches!(split_action, Some(Action::SplitVertical)),
+            "Ctrl+Shift+D should be SplitVertical"
+        );
     }
 
     #[test]

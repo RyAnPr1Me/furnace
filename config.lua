@@ -145,7 +145,7 @@ config = {
         prev_tab = "Ctrl+Shift+Tab",
         
         -- Split pane management
-        split_vertical = "Ctrl+Shift+V",
+        split_vertical = "Ctrl+Shift+D",
         split_horizontal = "Ctrl+Shift+H",
         
         -- Editing

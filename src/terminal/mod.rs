@@ -2305,45 +2305,44 @@ impl Terminal {
                 let selection_bg = Color::Rgb(sel_color.r, sel_color.g, sel_color.b);
 
                 // Apply selection background to selected positions
+                // Use character-based iteration for UTF-8 safety (not byte indices)
                 for (row_idx, line) in display_lines.iter_mut().enumerate() {
                     let mut new_spans = Vec::new();
                     let mut col = 0u16;
 
                     for span in &line.spans {
-                        let span_width = span.content.len() as u16;
-                        let mut span_start = 0;
+                        let chars: Vec<char> = span.content.chars().collect();
+                        let char_count = chars.len() as u16;
+                        let mut span_char_start = 0u16;
 
-                        for char_idx in 0..span_width {
+                        for char_idx in 0..char_count {
                             let char_col = col + char_idx;
                             if self.is_position_selected(char_col, row_idx as u16) {
                                 // This character is selected
-                                if span_start < char_idx {
-                                    // Add non-selected part
-                                    new_spans.push(Span::styled(
-                                        span.content[span_start as usize..char_idx as usize]
-                                            .to_string(),
-                                        span.style,
-                                    ));
+                                if span_char_start < char_idx {
+                                    // Add non-selected part (collect chars in range)
+                                    let text: String = chars
+                                        [span_char_start as usize..char_idx as usize]
+                                        .iter()
+                                        .collect();
+                                    new_spans.push(Span::styled(text, span.style));
                                 }
                                 // Add selected character
-                                new_spans.push(Span::styled(
-                                    span.content[char_idx as usize..(char_idx + 1) as usize]
-                                        .to_string(),
-                                    span.style.bg(selection_bg),
-                                ));
-                                span_start = char_idx + 1;
+                                let ch_text: String =
+                                    chars[char_idx as usize..=char_idx as usize].iter().collect();
+                                new_spans.push(Span::styled(ch_text, span.style.bg(selection_bg)));
+                                span_char_start = char_idx + 1;
                             }
                         }
 
                         // Add remaining non-selected part
-                        if span_start < span_width {
-                            new_spans.push(Span::styled(
-                                span.content[span_start as usize..].to_string(),
-                                span.style,
-                            ));
+                        if span_char_start < char_count {
+                            let text: String =
+                                chars[span_char_start as usize..].iter().collect();
+                            new_spans.push(Span::styled(text, span.style));
                         }
 
-                        col += span_width;
+                        col += char_count;
                     }
 
                     if !new_spans.is_empty() {
