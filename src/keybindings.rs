@@ -305,6 +305,7 @@ impl KeybindingManager {
 
 /// Shell integration features (future API for OSC parsing)
 #[derive(Debug, Clone, Copy)]
+#[allow(dead_code)]
 pub enum ShellIntegrationFeature {
     OscSequences,
     PromptDetection,

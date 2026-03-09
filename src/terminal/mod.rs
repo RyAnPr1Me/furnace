@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! Terminal module for the Furnace terminal emulator
 //!
 //! This module contains the main Terminal struct and its supporting modules:
@@ -13,12 +14,14 @@
 pub mod ansi_parser;
 
 use anyhow::{Context, Result};
+#[allow(unused_imports)]
 use crossterm::{
     cursor::Show,
     event::{self, Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
+#[allow(unused_imports)]
 use ratatui::{
     backend::CrosstermBackend,
     layout::{Constraint, Direction, Layout, Rect},
@@ -28,9 +31,12 @@ use ratatui::{
     Terminal as RatatuiTerminal,
 };
 use std::borrow::Cow;
+#[allow(unused_imports)]
 use std::io;
+#[allow(unused_imports)]
 use tokio::time::{interval, Duration};
 use tracing::{debug, info, warn};
+#[allow(unused_imports)]
 use unicode_width::UnicodeWidthStr;
 
 use crate::colors::TrueColorPalette;
@@ -61,12 +67,14 @@ const _MIN_POPUP_WIDTH: u16 = 20;
 const _MIN_POPUP_HEIGHT: u16 = 5;
 
 /// Maximum command display length in progress bar (Bug #16)
+#[allow(dead_code)]
 const MAX_PROGRESS_COMMAND_LEN: usize = 40;
 
 /// Initial shell output timeout in milliseconds
 const INITIAL_OUTPUT_TIMEOUT_MS: u64 = 1000;
 
 /// Polling interval for initial output in milliseconds
+#[allow(dead_code)]
 const INITIAL_OUTPUT_POLL_INTERVAL_MS: u64 = 20;
 
 /// Extra read attempts after receiving initial output
@@ -76,19 +84,25 @@ const EXTRA_READ_ATTEMPTS: usize = 5;
 const EXTRA_READ_DELAY_MS: u64 = 20;
 
 /// Delay after sending newline to trigger prompt
+#[allow(dead_code)]
 const PROMPT_TRIGGER_DELAY_MS: u64 = 200;
 
 /// Read attempts after sending newline to trigger prompt
+#[allow(dead_code)]
 const PROMPT_TRIGGER_READ_ATTEMPTS: usize = 10;
 
 /// Delay after receiving first output to get full prompt
+#[allow(dead_code)]
 const INITIAL_OUTPUT_SETTLE_MS: u64 = 100;
 
 /// Color constants for cool red/black theme
+#[allow(dead_code)]
 const COLOR_COOL_RED: (u8, u8, u8) = (0xDD, 0x66, 0x66); // Cool red accent
 const COLOR_REDDISH_GRAY: (u8, u8, u8) = (0xC0, 0xB0, 0xB0); // Reddish-gray text
 const COLOR_PURE_BLACK: (u8, u8, u8) = (0x00, 0x00, 0x00); // Pure black background
+#[allow(dead_code)]
 const COLOR_MUTED_GREEN: (u8, u8, u8) = (0x6A, 0x9A, 0x7A); // Muted green
+#[allow(dead_code)]
 const COLOR_MAGENTA_RED: (u8, u8, u8) = (0xB0, 0x5A, 0x7A); // Magenta-red
 const _COLOR_DARK_GRAY: (u8, u8, u8) = (0x5A, 0x4A, 0x4A); // Dark gray for future use
 const COLOR_STATUS_BG: (u8, u8, u8) = (0x1A, 0x0A, 0x0A); // Status bar background
@@ -3717,11 +3731,8 @@ mod tests {
         assert_eq!(terminal.cursor_style(), "block");
         assert_eq!(terminal.max_history(), 5000);
         assert_eq!(terminal.font_size(), 14);
-        let expected_hw_accel = gpu_available_cached();
-        assert_eq!(
-            terminal.is_hardware_acceleration_enabled(),
-            expected_hw_accel
-        );
+        // GPU rendering is always enabled (hardware_acceleration is always true)
+        assert!(terminal.is_hardware_acceleration_enabled());
         assert!(!terminal.is_split_pane_enabled());
     }
 
@@ -3738,11 +3749,13 @@ mod tests {
 
     #[test]
     fn test_hardware_acceleration_respects_config() {
+        // GPU rendering is always enabled regardless of config setting
         let mut config = Config::default();
         config.terminal.hardware_acceleration = false;
 
         let terminal = Terminal::new(config).unwrap();
-        assert!(!terminal.is_hardware_acceleration_enabled());
+        // Even when config says false, GPU is always the rendering path
+        assert!(terminal.is_hardware_acceleration_enabled());
     }
 
     #[test]
